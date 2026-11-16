@@ -1,38 +1,59 @@
-// Minimal app-shell service worker for OCC Duty Log.
-// Enables "Install app" / Add to Home Screen and basic offline resilience.
-// It intentionally does NOT try to cache every build asset (hashes change
-// on every build) — it caches the shell on first load and falls back to
-// network-first for everything else.
-
-const CACHE_NAME = "occ-duty-log-v1";
-const SHELL_ASSETS = ["/", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
+// OCC Duty Log service worker.
+//  - Hashed build files (/build/assets/*) are cache-first: they never change.
+//  - Page navigations are network-first, falling back to the cached app shell
+//    and then offline.html, so an installed app still opens with no signal.
+//  - /api/* is NEVER cached (private, per-user data); the app keeps its own
+//    offline copy of the logbook and syncs when the connection returns.
+const VERSION = "occ-v1";
+const SHELL = `${VERSION}-shell`;
+const ASSETS = `${VERSION}-assets`;
+const PRECACHE = ["/offline.html", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_ASSETS)).catch(() => {})
-  );
-  self.skipWaiting();
+  event.waitUntil(caches.open(SHELL).then((c) => c.addAll(PRECACHE)).catch(() => {}));
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    )
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((k) => !k.startsWith(VERSION)).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
-  self.clients.claim();
+});
+
+// The page asks for the update once the user taps "Update".
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
 });
 
 self.addEventListener("fetch", (event) => {
-  if (event.request.method !== "GET") return;
+  const req = event.request;
+  if (req.method !== "GET") return;
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;       // Google sign-in, fonts, etc.
+  if (url.pathname.startsWith("/api/")) return;          // private data: always network
 
-  event.respondWith(
-    fetch(event.request)
-      .then((res) => {
-        const copy = res.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy)).catch(() => {});
+  if (url.pathname.startsWith("/build/assets/") || url.pathname.startsWith("/icons/")) {
+    event.respondWith(
+      caches.open(ASSETS).then(async (cache) => {
+        const hit = await cache.match(req);
+        if (hit) return hit;
+        const res = await fetch(req);
+        if (res.ok) cache.put(req, res.clone());
         return res;
       })
-      .catch(() => caches.match(event.request).then((cached) => cached || caches.match("/")))
-  );
+    );
+    return;
+  }
+
+  if (req.mode === "navigate") {
+    event.respondWith(
+      fetch(req)
+        .then((res) => {
+          if (res.ok) caches.open(SHELL).then((c) => c.put("/app-shell", res.clone()));
+          return res;
+        })
+        .catch(async () => (await caches.match("/app-shell")) || (await caches.match("/offline.html")))
+    );
+  }
 });

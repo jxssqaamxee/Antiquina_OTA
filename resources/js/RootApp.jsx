@@ -1,0 +1,36 @@
+import React, { Suspense } from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import ProtectedRoute, { GuestRoute } from "./Components/shared/ProtectedRoute";
+import { NotificationProvider } from "./context/NotificationContext";
+import { AuthProvider } from "./context/AuthContext";
+import Splash from "./Components/shared/Splash";
+import OfflineNotice from "./Components/shared/OfflineNotice";
+import UpdateNotice from "./Components/shared/UpdateNotice";
+import InstallPrompt from "./Components/shared/InstallPrompt";
+import { publicRoutes, guestRoutes, protectedRoutes } from "./routes/index";
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <NotificationProvider>
+          <OfflineNotice />
+          <UpdateNotice />
+          <Suspense fallback={<Splash />}>
+            <Routes>
+              {publicRoutes.map(({ path, component: C }) => <Route key={path} path={path} element={<C />} />)}
+              {guestRoutes.map(({ path, component: C }) => (
+                <Route key={path} path={path} element={<GuestRoute><C /></GuestRoute>} />
+              ))}
+              {protectedRoutes.map(({ path, component: C }) => (
+                <Route key={path} path={path} element={<ProtectedRoute><C /></ProtectedRoute>} />
+              ))}
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
+          <InstallPrompt />
+        </NotificationProvider>
+      </AuthProvider>
+    </BrowserRouter>
+  );
+}
