@@ -87,7 +87,7 @@ export default function RegisterPage() {
   const isLast = stepIndex >= total - 1;
   const courses = useMemo(() => config?.courses || [], [config]);
 
-  useEffect(() => { document.title = "Create account | OCC Duty Log"; }, []);
+  useEffect(() => { document.title = "Create account | OCCDL"; }, []);
 
   // Each step starts in view.
   useEffect(() => { topRef.current?.scrollIntoView?.({ block: "start" }); }, [stepIndex]);

@@ -6,7 +6,7 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
 
-/** "Verify your OCC Duty Log account" email (same shape as PasswordResetMail / sclf_APP's VerifyEmailMail). */
+/** "Verify your OCCDL account" email (same shape as PasswordResetMail / sclf_APP's VerifyEmailMail). */
 class VerifyEmailMail extends Mailable
 {
     use Queueable, SerializesModels;
@@ -21,7 +21,7 @@ class VerifyEmailMail extends Mailable
     public function build()
     {
         return $this->to($this->userEmail)
-            ->subject('Verify your OCC Duty Log account - OCC Duty Log | Opol Community College')
+            ->subject('Verify your OCCDL account - OCCDL | Opol Community College')
             ->view('emails.verify-email')
             ->with([
                 'fullName' => $this->fullName,

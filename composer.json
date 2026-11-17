@@ -2,7 +2,7 @@
     "$schema": "https://getcomposer.org/schema.json",
     "name": "opol/occ-duty-log",
     "type": "project",
-    "description": "OCC Duty Log - OJT duty logbook for Opol Community College (Laravel 12 + Vite + React PWA)",
+    "description": "OCCDL - OJT duty logbook for Opol Community College (Laravel 12 + Vite + React PWA)",
     "keywords": [
         "laravel",
         "framework"

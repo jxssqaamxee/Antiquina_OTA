@@ -23,7 +23,7 @@ export default function InstallPrompt() {
       <div className="ip-card">
         <img className="ip-logo" src={logo} alt="" width="44" height="44" />
         <div className="ip-text">
-          <b>Install OCC Duty Log</b>
+          <b>Install OCCDL</b>
           <small>
             {iosHelp
               ? <>Tap <Share size={13} className="ip-inline" /> <b>Share</b>, then <b>Add to Home Screen</b>.</>

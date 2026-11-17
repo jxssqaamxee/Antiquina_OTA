@@ -3,6 +3,13 @@
 // it before first paint so there is no flash of the wrong theme.
 
 const KEY = "occ_theme";
+const COOKIE = "occ-theme"; // lets the server (app.blade.php + the manifest) know the theme, like sclf-theme
+
+// Browser toolbar / status bar / installed-app title bar colour, same rule as sclf_APP:
+// NAVY on the light themes, WHITE on the dark theme. (The page background is the theme's own colour.)
+export const BAR_NAVY = "#01215f";
+export const BAR_WHITE = "#ffffff";
+export const barColorFor = (id) => (id === "black" ? BAR_WHITE : BAR_NAVY);
 
 export const THEMES = [
   { id: "white", label: "Light", bg: "#ffffff", accent: "#4f46e5", color: "#ffffff" },
@@ -25,7 +32,8 @@ export function applyTheme(id = getTheme()) {
   document.documentElement.setAttribute("data-theme", t.id);
   let meta = document.querySelector('meta[name="theme-color"]');
   if (!meta) { meta = document.createElement("meta"); meta.name = "theme-color"; document.head.appendChild(meta); }
-  meta.setAttribute("content", t.color);
+  meta.setAttribute("content", barColorFor(t.id));
+  try { document.cookie = `${COOKIE}=${t.id}; path=/; max-age=31536000; SameSite=Lax`; } catch { /* cookies blocked */ }
   // Keep what app.blade.php painted before first paint in step with the choice,
   // otherwise the old theme's colour stays behind the page (overscroll, rotation).
   const dark = t.id === "black";

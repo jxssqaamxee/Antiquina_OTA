@@ -1018,7 +1018,7 @@ export default function LogbookPage() {
       doc.setFontSize(8);
       doc.setTextColor(120, 130, 122);
       doc.text(
-        `OCC Duty Log · Page ${doc.internal.getCurrentPageInfo().pageNumber} of ${pageCount}`,
+        `OCCDL · Page ${doc.internal.getCurrentPageInfo().pageNumber} of ${pageCount}`,
         margin,
         pageH - 24
       );

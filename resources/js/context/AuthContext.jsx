@@ -88,6 +88,25 @@ export function AuthProvider({ children }) {
     await establish(session.user);
   }, [establish]);
 
+  /**
+   * "Refresh": asks the server again who is signed in and pulls the account's latest documents
+   * into the local cache. Used by the loading screen that the logo opens. A network failure keeps
+   * the current (cached) session; a real "signed out" answer ends it like an expired session.
+   */
+  const refresh = useCallback(async () => {
+    try {
+      const me = await probeSession();
+      if (me) { setSignedIn(true); await establish(me); }
+      else if (userRef.current) {
+        stopSync(); setSignedIn(false); setUser(null); writeMe(null); clearPhotoCache();
+      }
+    } catch (e) {
+      if (e.response && userRef.current) {
+        stopSync(); setSignedIn(false); setUser(null); writeMe(null); clearPhotoCache();
+      }
+    }
+  }, [establish]);
+
   const logout = useCallback(async () => {
     const current = user;
     // Push pending edits FIRST, while the session is still valid. Done after it ends
@@ -110,8 +129,8 @@ export function AuthProvider({ children }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, loading, isAuthenticated: !!user, signIn, logout, updateUser }),
-    [user, loading, signIn, logout, updateUser]
+    () => ({ user, loading, isAuthenticated: !!user, signIn, logout, updateUser, refresh }),
+    [user, loading, signIn, logout, updateUser, refresh]
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

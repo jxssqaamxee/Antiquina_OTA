@@ -738,9 +738,7 @@
     .lg-wrap .lg-or { margin: 10px 0 8px; }
 }
 @media (max-width: 767px) and (max-height: 860px) {
-    .lg-wrap .lg-appbar { padding-top: calc(env(safe-area-inset-top, 0px) + 6px); padding-bottom: 6px; }
-    .lg-wrap .lg-appbar .lg-mobile-brand img { width: 34px; height: 34px; }
-    .lg-wrap .lg-theme-toggle { width: 38px; height: 38px; }
+    /* Header (logo 42px, toggle 42px, college name) is NOT shrunk here: it matches sclf_APP. */
     .lg-wrap .lg-card-tab-strip { padding: 10px 0 4px; }
     .lg-wrap .lg-card-head { padding: 2px 0 0; }
     .lg-wrap .lg-title { font-size: 25px; margin-bottom: 4px; }
@@ -777,7 +775,6 @@
 }
 @media (max-width: 767px) and (max-height: 620px) {
     .lg-wrap .lg-subtitle { display: none; }
-    .lg-wrap .lg-appbar .lg-mobile-brand > span > span { display: none; }
     .lg-wrap .lg-row { padding: 3px 0; }
     .lg-wrap .lg-checklist { display: none; }
 }

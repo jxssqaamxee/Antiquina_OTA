@@ -45,7 +45,7 @@ export default function VerifyEmailPage() {
   const [showPw, setShowPw] = useState(false);
   const [savingEmail, setSavingEmail] = useState(false);
 
-  useEffect(() => { document.title = "Verify your email | OCC Duty Log"; }, []);
+  useEffect(() => { document.title = "Verify your email | OCCDL"; }, []);
 
   useEffect(() => {
     if (cooldown <= 0) return undefined;

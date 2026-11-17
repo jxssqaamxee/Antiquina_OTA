@@ -1,13 +1,13 @@
-// OCC Duty Log service worker.
+// OCCDL service worker.
 //  - Hashed build files (/build/assets/*) are cache-first: they never change.
 //  - Page navigations are network-first, falling back to the cached app shell
 //    and then offline.html, so an installed app still opens with no signal.
 //  - /api/* is NEVER cached (private, per-user data); the app keeps its own
 //    offline copy of the logbook and syncs when the connection returns.
-const VERSION = "occ-v3";
+const VERSION = "occ-v4"; // bumped: the app icons and name changed, so old cached icons are dropped
 const SHELL = `${VERSION}-shell`;
 const ASSETS = `${VERSION}-assets`;
-const PRECACHE = ["/offline.html", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
+const PRECACHE = ["/offline.html", "/icons/icon-180.png?v=2", "/icons/icon-192.png?v=2", "/icons/icon-512.png?v=2"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(SHELL).then((c) => c.addAll(PRECACHE)).catch(() => {}));
@@ -24,6 +24,18 @@ self.addEventListener("activate", (event) => {
 // The page asks for the update once the user taps "Update".
 self.addEventListener("message", (event) => {
   if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
+});
+
+// Tapping a notification opens (or focuses) the app.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = (event.notification.data && event.notification.data.url) || "/logbook";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((wins) => {
+      for (const w of wins) { if ("focus" in w) return w.focus(); }
+      return self.clients.openWindow(target);
+    })
+  );
 });
 
 self.addEventListener("fetch", (event) => {

@@ -21,7 +21,7 @@ export default function ForgotPasswordPage() {
   const [wait, setWait] = useState(0);
   const timer = useRef(null);
 
-  useEffect(() => { document.title = "Forgot password | OCC Duty Log"; }, []);
+  useEffect(() => { document.title = "Forgot password | OCCDL"; }, []);
   useEffect(() => () => clearInterval(timer.current), []);
 
   function startCountdown() {

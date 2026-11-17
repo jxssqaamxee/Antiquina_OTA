@@ -3,20 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Password Reset - OCC Duty Log</title>
+    <title>Password Reset - OCCDL</title>
 </head>
 <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #ffffff;">
     <div style="background-color: #ffffff; border-radius: 10px; padding: 30px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);">
         <div style="text-align: center; border-bottom: 3px solid #2563eb; padding-bottom: 20px; margin-bottom: 30px;">
             <img src="{{ $message->embed(resource_path('js/assets/images/site-logo.png')) }}" alt="OCC Logo" style="max-width: 120px; height: auto; margin-bottom: 15px;">
             <h1 style="color: #0f2a5c; margin: 0; font-size: 24px;">Password Reset Request</h1>
-            <p style="color: #666; margin: 5px 0 0;">OCC Duty Log &middot; Opol Community College</p>
+            <p style="color: #666; margin: 5px 0 0;">OCCDL &middot; Opol Community College</p>
         </div>
 
         <div style="margin-bottom: 30px;">
             <h2 style="color: #0f2a5c; font-size: 20px; margin-bottom: 15px;">Hello {{ $fullName }},</h2>
 
-            <p>We received a request to reset the password on your OCC Duty Log account. Click the button below to set up a new password.</p>
+            <p>We received a request to reset the password on your OCCDL account. Click the button below to set up a new password.</p>
 
             <div style="text-align: center; margin: 30px 0;">
                 <a href="{{ $resetUrl }}" style="display: inline-block; background-color: #2563eb; color: #ffffff; padding: 15px 40px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">Reset Password</a>
@@ -42,7 +42,7 @@
         </div>
 
         <div style="text-align: center; border-top: 1px solid #dee2e6; padding-top: 20px; color: #666; font-size: 14px;">
-            <p style="margin: 5px 0;"><strong>OCC Duty Log &middot; Opol Community College</strong></p>
+            <p style="margin: 5px 0;"><strong>OCCDL &middot; Opol Community College</strong></p>
             <p style="margin: 5px 0;">This is an automated message sent to {{ $email }}. Please do not reply directly to this email.</p>
         </div>
     </div>

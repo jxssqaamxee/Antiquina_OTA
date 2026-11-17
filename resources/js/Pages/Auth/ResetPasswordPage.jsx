@@ -46,7 +46,7 @@ export default function ResetPasswordPage() {
   const isSuccessRoute = !token;
   const resetJustDone = isSuccessRoute && !!location.state?.passwordReset;
 
-  useEffect(() => { document.title = "Reset password | OCC Duty Log"; }, []);
+  useEffect(() => { document.title = "Reset password | OCCDL"; }, []);
 
   // Is the emailed link still usable? Runs on open and when the browser restores the page from its cache.
   useEffect(() => {

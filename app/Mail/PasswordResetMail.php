@@ -19,7 +19,7 @@ class PasswordResetMail extends Mailable
 
     public function build()
     {
-        return $this->subject('Password Reset Request - OCC Duty Log | Opol Community College')
+        return $this->subject('Password Reset Request - OCCDL | Opol Community College')
             ->view('emails.password-reset')
             ->with([
                 'fullName' => $this->fullName,

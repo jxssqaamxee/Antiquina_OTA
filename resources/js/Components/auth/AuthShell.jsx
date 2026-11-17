@@ -120,7 +120,7 @@ export default function AuthShell({
         <div className="lg-rail-top">
           <Link to="/" className="lg-brand">
             <span className="lg-brand-mark"><img src={logo} alt="OCC" /></span>
-            <span className="lg-brand-text">OCC Duty Log<span>Opol Community College</span></span>
+            <span className="lg-brand-text">OCCDL<span>Opol Community College</span></span>
           </Link>
         </div>
 
@@ -156,7 +156,7 @@ export default function AuthShell({
         <header className="lg-appbar">
           <Link to="/" className="lg-mobile-brand">
             <img src={logo} alt="OCC" />
-            <span>OCC Duty Log<span>Opol Community College</span></span>
+            <span>OCCDL<span>Opol Community College</span></span>
           </Link>
           <div className="lg-toggle-group">
             <button

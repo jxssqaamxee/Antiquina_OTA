@@ -1,6 +1,6 @@
 // ============================================================
 // devtoolsGuard.js
-// OCC Duty Log - hide the whole app while browser DevTools is open.
+// OCCDL - hide the whole app while browser DevTools is open.
 //
 // Ported from sclf_APP, adapted for a PHONE-ONLY app.
 //
@@ -51,9 +51,9 @@ export function isInspectProtectionEnabled() {
 }
 
 const COVER_HTML =
-    '<h1>OCC Duty Log - Opol Community College</h1>' +
+    '<h1>OCCDL - Opol Community College</h1>' +
     '<p>On-the-job training duty log and hours tracker for Opol Community College trainees.</p>' +
-    '<p>JavaScript is required to use OCC Duty Log. Please enable JavaScript in your ' +
+    '<p>JavaScript is required to use OCCDL. Please enable JavaScript in your ' +
     'browser, then reload this page.</p>';
 
 const CHECK_MS = 1000;

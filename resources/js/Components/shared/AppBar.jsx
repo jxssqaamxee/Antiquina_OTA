@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { EVENTS } from "../../config/constant";
 import { ArrowLeft } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { NotificationBell } from "./NotificationCenter";
@@ -24,7 +25,12 @@ export default function AppBar({ title, subtitle, back }) {
         {back ? (
           <Link to={back} className="icon-btn appbar-back" aria-label="Back"><ArrowLeft size={20} /></Link>
         ) : (
-          <Link to="/logbook" className="appbar-brand" aria-label="OCC Duty Log">
+          <Link
+            to="/"
+            className="appbar-brand"
+            aria-label="OCCDL: refresh"
+            onClick={() => window.dispatchEvent(new CustomEvent(EVENTS.flush))} // save any edit still waiting
+          >
             <img src={logo} alt="" />
           </Link>
         )}

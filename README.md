@@ -1,4 +1,4 @@
-# OCC Duty Log (Laravel + Vite + React PWA)
+# OCCDL (Laravel + Vite + React PWA)
 
 OJT duty log and hours tracker for Opol Community College trainees (formerly "Antiquina OTA").
 Built in the same structure as **sclf_APP**: a Laravel API (HttpOnly cookie sessions stored in the database) + a React single-page app,
@@ -22,7 +22,7 @@ After changing it run `php artisan config:clear` — **no rebuild needed** (the 
 
 - A device counts as a phone when its primary pointer is touch **and** its physical screen's short side is ≤ 600 px (`PHONE_MAX_SHORT_SIDE` in `resources/js/config/constant.js`).
   A desktop/laptop browser dragged narrow, responsive mode, tablets and touch laptops are all blocked.
-- Blocked devices see only the "OCC Duty Log is for phones" screen: no router, API call, service worker or install prompt runs, and the web-app manifest is removed so desktop browsers never offer to install it.
+- Blocked devices see only the "OCCDL is for phones" screen: no router, API call, service worker or install prompt runs, and the web-app manifest is removed so desktop browsers never offer to install it.
 - Anything other than `true / 1 / on / yes` means off, so a typo can never lock everyone out.
 - Development only (`npm run dev`): add `?mobile_only=false` (or `true`) to any URL to override.
 - This is a screen gate, not a security boundary: browser DevTools device mode pretends to be a phone and is let through while `OCC_INSPECT_PROTECTION=false` (handy for testing); with `OCC_INSPECT_PROTECTION=true` it is covered (see below).

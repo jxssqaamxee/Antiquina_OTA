@@ -3,20 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Verify your account - OCC Duty Log</title>
+    <title>Verify your account - OCCDL</title>
 </head>
 <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #ffffff;">
     <div style="background-color: #ffffff; border-radius: 10px; padding: 30px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);">
         <div style="text-align: center; border-bottom: 3px solid #2563eb; padding-bottom: 20px; margin-bottom: 30px;">
             <img src="{{ $message->embed(resource_path('js/assets/images/site-logo.png')) }}" alt="OCC Logo" style="max-width: 120px; height: auto; margin-bottom: 15px;">
             <h1 style="color: #0f2a5c; margin: 0; font-size: 24px;">Verify Your Account</h1>
-            <p style="color: #666; margin: 5px 0 0;">OCC Duty Log &middot; Opol Community College</p>
+            <p style="color: #666; margin: 5px 0 0;">OCCDL &middot; Opol Community College</p>
         </div>
 
         <div style="margin-bottom: 30px;">
             <h2 style="color: #0f2a5c; font-size: 20px; margin-bottom: 15px;">Hello {{ $fullName }},</h2>
 
-            <p>Thanks for registering with OCC Duty Log. Please confirm that this email address is yours by clicking the button below, or by typing the 6-digit code into the app.</p>
+            <p>Thanks for registering with OCCDL. Please confirm that this email address is yours by clicking the button below, or by typing the 6-digit code into the app.</p>
 
             @if (!empty($code))
             <div style="text-align: center; margin: 25px 0 5px;">
@@ -36,7 +36,7 @@
 
             <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; padding: 15px; margin: 20px 0; border-radius: 12px;">
                 <strong>Security notice</strong>
-                <p style="margin: 10px 0 0; font-size: 14px;">If you did not create an OCC Duty Log account, you can safely ignore this email. No account will be activated.</p>
+                <p style="margin: 10px 0 0; font-size: 14px;">If you did not create an OCCDL account, you can safely ignore this email. No account will be activated.</p>
             </div>
 
             <div style="background-color: #f5f9ff; border-radius: 8px; padding: 20px; margin: 20px 0;">
@@ -49,7 +49,7 @@
         </div>
 
         <div style="text-align: center; border-top: 1px solid #dee2e6; padding-top: 20px; color: #666; font-size: 14px;">
-            <p style="margin: 5px 0;"><strong>OCC Duty Log &middot; Opol Community College</strong></p>
+            <p style="margin: 5px 0;"><strong>OCCDL &middot; Opol Community College</strong></p>
             <p style="margin: 5px 0;">This is an automated message. Please do not reply directly to this email.</p>
             <p style="margin: 5px 0;">&copy; {{ date('Y') }} Opol Community College. All rights reserved.</p>
         </div>

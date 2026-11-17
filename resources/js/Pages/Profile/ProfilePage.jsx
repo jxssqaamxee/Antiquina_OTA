@@ -42,7 +42,7 @@ export default function ProfilePage() {
   const [showPw, setShowPw] = useState(false);
   const [showCur, setShowCur] = useState(false);
 
-  useEffect(() => { document.title = "Profile | OCC Duty Log"; }, []);
+  useEffect(() => { document.title = "Profile | OCCDL"; }, []);
   useEffect(() => subscribe(() => force((n) => n + 1)), []);
 
   const setF = (k) => (e) => {

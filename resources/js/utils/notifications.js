@@ -20,17 +20,30 @@ export async function requestPermission() {
   }
 }
 
-export function fireSystemNotification(title, body, tag) {
+// Android Chrome (and every installed PWA) forbids `new Notification()`: it throws "Illegal
+// constructor", so the old code silently showed nothing on phones. A notification must be
+// shown through the service worker registration. `new Notification` stays as the fallback
+// for desktop browsers without a service worker.
+export async function fireSystemNotification(title, body, tag) {
   if (!notificationsSupported()) return;
   if (Notification.permission !== "granted") return;
+  const options = {
+    body,
+    tag,
+    icon: "/icons/icon-192.png?v=2",
+    badge: "/icons/icon-96.png?v=2",
+    data: { url: "/logbook" },
+  };
   try {
-    new Notification(title, {
-      body,
-      tag,
-      icon: undefined,
-    });
+    if ("serviceWorker" in navigator) {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg && reg.showNotification) {
+        await reg.showNotification(title, options);
+        return;
+      }
+    }
+    new Notification(title, options);
   } catch (e) {
-    // Some browsers (mostly mobile) throw on direct construction — safe to ignore,
-    // the in-app toast still carries the message.
+    // The in-app toast and the bell history still carry the message.
   }
 }

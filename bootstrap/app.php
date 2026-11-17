@@ -15,6 +15,10 @@ return Application::configure(basePath: dirname(__DIR__))
         // Behind a reverse proxy / Cloudflare / Hostinger: trust forwarded headers.
         $middleware->trustProxies(at: '*');
 
+        // The colour-theme cookie is written by JavaScript, so it is not encrypted. The server reads it
+        // to colour the browser bar / installed-app title bar before the page even loads.
+        $middleware->encryptCookies(except: ['occ-theme']);
+
         // Blocks the API until the account's email is verified (see EnsureEmailVerified).
         $middleware->alias([
             'email.verified' => \App\Http\Middleware\EnsureEmailVerified::class,

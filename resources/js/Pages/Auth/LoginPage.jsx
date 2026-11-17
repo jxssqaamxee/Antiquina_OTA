@@ -35,7 +35,7 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [errors, setErrors] = useState({});
 
-  useEffect(() => { document.title = "Sign in | OCC Duty Log"; }, []);
+  useEffect(() => { document.title = "Sign in | OCCDL"; }, []);
 
   // Prefill from anything remembered on a prior sign-in in this tab (only written when
   // "Keep this session open" was ticked). Survives logout, like sclf_APP.

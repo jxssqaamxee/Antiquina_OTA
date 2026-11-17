@@ -1,7 +1,7 @@
 // App-wide constants. One place for names and storage keys so nothing is
 // hard-coded across the app (mirrors sclf_APP's config/constant.js).
 
-export const APP_NAME = "OCC Duty Log";
+export const APP_NAME = "OCCDL";
 export const APP_ORG = "Opol Community College";
 
 // Storage keys (localStorage / sessionStorage).
