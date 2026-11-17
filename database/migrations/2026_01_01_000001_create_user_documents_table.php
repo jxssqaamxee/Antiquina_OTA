@@ -12,14 +12,16 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('user_documents', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->string('key', 64);
-            $table->longText('value');
-            $table->timestamps();
-            $table->unique(['user_id', 'key']);
-        });
+        if (! Schema::hasTable('user_documents')) {
+            Schema::create('user_documents', function (Blueprint $table) {
+                $table->id();
+                $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+                $table->string('key', 64);
+                $table->longText('value');
+                $table->timestamps();
+                $table->unique(['user_id', 'key']);
+            });
+        }
     }
 
     public function down(): void
