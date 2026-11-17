@@ -28,11 +28,11 @@ export default function AppBar({ title, subtitle, back }) {
             <img src={logo} alt="" />
           </Link>
         )}
-        <div className="appbar-title" style={{ flex: 1, minWidth: 0 }}>
+        <div className="appbar-title">
           <b>{title}</b>
           {subtitle && <small>{subtitle}</small>}
         </div>
-        <div className="appbar-actions">
+        <div className="appbar-actions" style={{ flex: "none" }}>
           <HelpButton />
           <NotificationBell />
           <Link to="/profile" className="avatar-btn" aria-label="Open your profile">

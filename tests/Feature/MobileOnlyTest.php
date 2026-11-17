@@ -2,11 +2,14 @@
 
 namespace Tests\Feature;
 
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /** OCC_MOBILE_ONLY reaches the page as <html data-mobile-only="…"> (read by utils/mobileOnly.js). */
 class MobileOnlyTest extends TestCase
 {
+    use RefreshDatabase;
+
     protected function setUp(): void
     {
         parent::setUp();

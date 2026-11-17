@@ -35,11 +35,15 @@ export function queueSync(base, userId) {
 }
 
 export function flush(userId = activeUser) {
-  if (!userId) return Promise.resolve(true);
+  // Only ever push the account that is signed in RIGHT NOW. Every request carries the
+  // current session cookie, so pushing another account's cache would write that
+  // person's logbook into the wrong account (shared phone, expired session).
+  if (!userId || userId !== activeUser) return Promise.resolve(true);
   if (flushing) return flushing.then(() => flush(userId));
   flushing = (async () => {
     let allOk = true;
     for (const base of readDirty(userId)) {
+      if (userId !== activeUser) { allOk = false; break; } // account changed mid-flush
       const value = getStorage(getUserKey(base, userId));
       try {
         // Another write may land while the request is in flight: only clear the
@@ -51,9 +55,20 @@ export function flush(userId = activeUser) {
         }
       } catch (e) {
         allOk = false;
-        if (e.response?.status === 404 || e.response?.status === 413) {
-          // The server will never accept this key/size: stop retrying it.
+        const status = e.response?.status;
+        if (status === 404 || status === 413 || status === 422) {
+          // The server will never accept this key/size/content: stop retrying it (a 422 would
+          // otherwise be re-sent every 30 s forever) and tell the app so it can warn the person.
           writeDirty(userId, readDirty(userId).filter((k) => k !== base));
+          if (status === 422) {
+            const errs = e.response?.data?.errors;
+            const first = errs ? Object.values(errs).flat()[0] : null;
+            try {
+              window.dispatchEvent(new CustomEvent("occ-sync-rejected", {
+                detail: { key: base, message: first || e.response?.data?.message || "The server could not accept this data." },
+              }));
+            } catch { /* ignore */ }
+          }
         }
       }
     }
@@ -65,7 +80,7 @@ export function flush(userId = activeUser) {
 
 function scheduleRetry(userId) {
   clearTimeout(retryTimer);
-  if (readDirty(userId).length) retryTimer = setTimeout(() => flush(userId), RETRY_MS);
+  if (userId === activeUser && readDirty(userId).length) retryTimer = setTimeout(() => flush(userId), RETRY_MS);
 }
 
 /**
@@ -74,6 +89,7 @@ function scheduleRetry(userId) {
  * server is unreachable the existing local copy is used as-is.
  */
 export async function hydrate(userId) {
+  if (activeUser !== userId) stopSync(); // a different account: drop the old one's timers
   activeUser = userId;
   const dirty = readDirty(userId);
   try {
@@ -90,6 +106,19 @@ export async function hydrate(userId) {
     }
   } catch { /* offline or server error: continue with the local cache */ }
   flush(userId);
+}
+
+/**
+ * Forget the current account: cancel pending/retry pushes. Called when the session dies
+ * (401) so a leftover timer can never fire under the next person's token. The unsynced
+ * data stays in this account's local cache and is pushed after their next sign-in.
+ */
+export function stopSync() {
+  clearTimeout(timer);
+  clearTimeout(retryTimer);
+  timer = null;
+  retryTimer = null;
+  activeUser = null;
 }
 
 /** Sign-out: push anything pending, then wipe this account's local copy (shared phones). */

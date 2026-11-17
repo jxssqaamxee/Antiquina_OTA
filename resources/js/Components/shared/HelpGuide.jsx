@@ -98,7 +98,7 @@ function GuideContent() {
       <section className="help-section">
         <h3><ShieldCheck size={14} /> 6. Your data &amp; privacy</h3>
         <ul>
-          <li>Your logbook is tied to your signed-in Google account and stored securely (encrypted) in <strong>this browser only</strong> — it is not uploaded to a server.</li>
+          <li>Your logbook is tied to your signed-in account and stored securely (encrypted) in <strong>this browser only</strong> — it is not uploaded to a server.</li>
           <li>Using a different device or browser starts a fresh, empty logbook for that device. Export a PDF regularly so you always have a backup copy of your official record.</li>
         </ul>
       </section>

@@ -1,0 +1,235 @@
+<?php
+
+namespace App\Support\Logbook;
+
+use App\Models\DutyEntry;
+use App\Models\HostClient;
+use App\Models\User;
+use App\Models\UserNotification;
+use App\Models\UserSetting;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
+
+/**
+ * Reads and writes each synced document in real tables. The app keeps talking JSON
+ * (/api/sync) in the same shapes as before; this class maps them to rows.
+ */
+class LogbookStore
+{
+    public function __construct(private LogbookValidator $validator = new LogbookValidator()) {}
+
+    /** All documents the user has saved, keyed like the old user_documents rows. */
+    public function all(User $user): array
+    {
+        $this->importLegacyOnce($user);
+        $s = UserSetting::where('user_id', $user->id)->first();
+        if (! $s) {
+            return [];
+        }
+
+        $docs = [];
+        if ($s->logbook_saved_at) {
+            $docs['logbook-v2'] = $this->readLogbook($user, $s);
+        }
+        if ($s->milestones !== null) {
+            $docs['milestones-v1'] = array_values($s->milestones);
+        }
+        if ($s->shift_reminder_date) {
+            $docs['shift-reminder-v1'] = $s->shift_reminder_date->format('Y-m-d');
+        }
+        if ($s->onboarding_seen !== null) {
+            $docs['onboarding-seen-v1'] = (bool) $s->onboarding_seen;
+        }
+        if ($s->notifications_saved_at) {
+            $docs['notifications-v1'] = $this->readNotifications($user);
+        }
+
+        return $docs;
+    }
+
+    /** Validate + save one document. Throws ValidationException (422) on bad input. */
+    public function put(User $user, string $key, mixed $value): void
+    {
+        $this->importLegacyOnce($user);
+        $this->putValidated($user, $key, $value);
+    }
+
+    /** Same as put() without the legacy import (the importer itself writes through this). */
+    public function putValidated(User $user, string $key, mixed $value): void
+    {
+        $clean = $this->validator->validate($key, $value);
+
+        DB::transaction(function () use ($user, $key, $clean) {
+            $s = $this->lockedSettings($user);
+            match ($key) {
+                'logbook-v2' => $this->writeLogbook($user, $s, $clean),
+                'milestones-v1' => $s->update(['milestones' => $clean]),
+                'shift-reminder-v1' => $s->update(['shift_reminder_date' => $clean]),
+                'onboarding-seen-v1' => $s->update(['onboarding_seen' => $clean]),
+                'notifications-v1' => $this->writeNotifications($user, $s, $clean),
+            };
+        });
+    }
+
+    public function forget(User $user, string $key): void
+    {
+        DB::transaction(function () use ($user, $key) {
+            $s = $this->lockedSettings($user);
+            match ($key) {
+                'logbook-v2' => $this->clearLogbook($user, $s),
+                'milestones-v1' => $s->update(['milestones' => null]),
+                'shift-reminder-v1' => $s->update(['shift_reminder_date' => null]),
+                'onboarding-seen-v1' => $s->update(['onboarding_seen' => null]),
+                'notifications-v1' => $this->clearNotifications($user, $s),
+            };
+        });
+    }
+
+    public function saveTheme(User $user, string $theme): void
+    {
+        DB::transaction(fn () => $this->lockedSettings($user)->update(['theme' => $theme]));
+    }
+
+    // ------------------------------------------------------------------ logbook
+
+    private function readLogbook(User $user, UserSetting $s): array
+    {
+        $clients = HostClient::where('user_id', $user->id)->orderBy('position')->orderBy('id')->get();
+        $uidById = $clients->pluck('client_uid', 'id');
+
+        $entries = DutyEntry::where('user_id', $user->id)->orderBy('duty_date')->orderBy('id')->get()
+            ->map(fn (DutyEntry $e) => [
+                'id' => $e->entry_uid,
+                'date' => $e->duty_date->format('Y-m-d'),
+                'client' => $e->host_client_id ? ($uidById[$e->host_client_id] ?? null) : null,
+                'category' => $e->category,
+                'amIn' => $e->am_in ?? '', 'amOut' => $e->am_out ?? '',
+                'pmIn' => $e->pm_in ?? '', 'pmOut' => $e->pm_out ?? '',
+                'evIn' => $e->ev_in ?? '', 'evOut' => $e->ev_out ?? '',
+                'hours' => $e->hours,
+                'task' => $e->task,
+            ])->all();
+
+        return [
+            'studentName' => $s->student_name ?? '',
+            'targetHours' => (int) $s->target_hours,
+            'clients' => $clients->map(fn (HostClient $c) => [
+                'id' => $c->client_uid, 'name' => $c->name, 'type' => $c->type,
+                'days' => array_values($c->days ?? []), 'timeIn' => $c->time_in, 'timeOut' => $c->time_out,
+            ])->all(),
+            'entries' => $entries,
+            'lastClientId' => $s->last_client_uid,
+        ];
+    }
+
+    private function writeLogbook(User $user, UserSetting $s, array $doc): void
+    {
+        $now = now();
+        $s->update([
+            'student_name' => $doc['studentName'],
+            'target_hours' => $doc['targetHours'],
+            'last_client_uid' => $doc['lastClientId'],
+            'logbook_saved_at' => $now,
+        ]);
+
+        // Host clients. Free the unique name first so a rename/swap can't collide mid-write.
+        $keepUids = array_column($doc['clients'], 'id');
+        HostClient::where('user_id', $user->id)->whereNotIn('client_uid', $keepUids)->delete();
+        foreach ($doc['clients'] as $pos => $c) {
+            HostClient::where('user_id', $user->id)->where('client_uid', $c['id'])->update(['name_key' => 'tmp-'.$c['id']]);
+        }
+        foreach ($doc['clients'] as $pos => $c) {
+            HostClient::updateOrCreate(
+                ['user_id' => $user->id, 'client_uid' => $c['id']],
+                [
+                    'name' => $c['name'], 'name_key' => mb_strtolower($c['name']), 'type' => $c['type'],
+                    'days' => $c['days'], 'time_in' => $c['timeIn'], 'time_out' => $c['timeOut'], 'position' => $pos,
+                ],
+            );
+        }
+        $idByUid = HostClient::where('user_id', $user->id)->pluck('id', 'client_uid');
+
+        // Duty entries.
+        DutyEntry::where('user_id', $user->id)->whereNotIn('entry_uid', array_column($doc['entries'], 'id'))->delete();
+        foreach ($doc['entries'] as $e) {
+            DutyEntry::updateOrCreate(
+                ['user_id' => $user->id, 'entry_uid' => $e['id']],
+                [
+                    'duty_date' => $e['date'],
+                    'host_client_id' => $e['client'] ? ($idByUid[$e['client']] ?? null) : null,
+                    'category' => $e['category'], 'coverage' => $e['coverage'],
+                    'am_in' => $e['amIn'], 'am_out' => $e['amOut'],
+                    'pm_in' => $e['pmIn'], 'pm_out' => $e['pmOut'],
+                    'ev_in' => $e['evIn'], 'ev_out' => $e['evOut'],
+                    'hours' => $e['hours'], 'task' => $e['task'],
+                ],
+            );
+        }
+    }
+
+    private function clearLogbook(User $user, UserSetting $s): void
+    {
+        DutyEntry::where('user_id', $user->id)->delete();
+        HostClient::where('user_id', $user->id)->delete();
+        $s->update(['student_name' => null, 'target_hours' => LogbookRules::DEFAULT_TARGET_HOURS, 'last_client_uid' => null, 'logbook_saved_at' => null]);
+    }
+
+    // ------------------------------------------------------------ notifications
+
+    private function readNotifications(User $user): array
+    {
+        return UserNotification::where('user_id', $user->id)->orderBy('position')->orderBy('id')->get()
+            ->map(fn (UserNotification $n) => [
+                'id' => $n->notif_uid, 'type' => $n->type, 'title' => $n->title, 'message' => $n->message,
+                'time' => ($n->notified_at ?? $n->created_at)->utc()->format('Y-m-d\TH:i:s.v\Z'),
+                'read' => (bool) $n->is_read,
+            ])->all();
+    }
+
+    private function writeNotifications(User $user, UserSetting $s, array $list): void
+    {
+        UserNotification::where('user_id', $user->id)->whereNotIn('notif_uid', array_column($list, 'id'))->delete();
+        foreach ($list as $pos => $n) {
+            UserNotification::updateOrCreate(
+                ['user_id' => $user->id, 'notif_uid' => $n['id']],
+                [
+                    'type' => $n['type'], 'title' => $n['title'], 'message' => $n['message'],
+                    'is_read' => $n['read'], 'notified_at' => Carbon::parse($n['time'])->utc(), 'position' => $pos,
+                ],
+            );
+        }
+        $s->update(['notifications_saved_at' => now()]);
+    }
+
+    private function clearNotifications(User $user, UserSetting $s): void
+    {
+        UserNotification::where('user_id', $user->id)->delete();
+        $s->update(['notifications_saved_at' => null]);
+    }
+
+    // ----------------------------------------------------------------- plumbing
+
+    /** The user's settings row, created if missing, locked for the rest of the transaction. */
+    private function lockedSettings(User $user): UserSetting
+    {
+        UserSetting::firstOrCreate(['user_id' => $user->id]);
+
+        return UserSetting::where('user_id', $user->id)->lockForUpdate()->firstOrFail();
+    }
+
+    /** Copy this user's old user_documents blobs into the tables, once. The old rows are never modified. */
+    public function importLegacyOnce(User $user): void
+    {
+        $s = UserSetting::where('user_id', $user->id)->first();
+        if ($s?->legacy_imported_at) {
+            return;
+        }
+        (new LegacyImporter($this, $this->validator))->import($user);
+    }
+
+    /** @internal used by LegacyImporter */
+    public function markLegacyImported(User $user): void
+    {
+        $this->lockedSettings($user)->update(['legacy_imported_at' => now()]);
+    }
+}

@@ -3,39 +3,31 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\GoogleCredentialRequest;
 use App\Http\Requests\LoginRequest;
 use App\Http\Requests\RegisterRequest;
 use App\Models\User;
-use App\Services\Auth\GoogleTokenVerifier;
-use App\Services\Auth\SessionTokenService;
+use App\Services\Auth\SessionLogin;
 use App\Support\Formats;
 use App\Support\ProfilePhotoStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
-    public function __construct(
-        private GoogleTokenVerifier $google,
-        private SessionTokenService $tokens,
-    ) {}
+    public function __construct(private SessionLogin $sessions) {}
 
-    /** Public: course list + whether Google sign-in is configured. */
+    /** Public: the course list for the register form. (Also hands out the CSRF cookie.) */
     public function config(): JsonResponse
     {
-        return response()->json([
-            'google_client_id' => config('occ.google_client_id'),
-            'courses' => config('occ.courses'),
-        ]);
+        return response()->json(['courses' => config('occ.courses')]);
     }
 
     public function register(RegisterRequest $request): JsonResponse
     {
         $data = $request->validated();
-        $profile = $request->googleProfile();
 
         $user = User::create([
             'student_id' => $data['student_id'],
@@ -44,64 +36,61 @@ class AuthController extends Controller
             'last_name' => Formats::titleCase($data['last_name']),
             'email' => $data['email'],
             'course' => $data['course'],
-            'password' => $profile ? null : $data['password'],
-            'google_id' => $profile['sub'] ?? null,
-            'avatar' => $profile['picture'] ?? null,
+            'password' => $data['password'],
             // Already validated by RegisterRequest (required image, max 5 MB).
             'profile_photo' => ProfilePhotoStorage::store($request->file('profile_photo')),
-            'email_verified_at' => $profile ? now() : null,
+            // The email must be verified before the app opens (code or link).
+            'email_verified_at' => null,
         ]);
 
+        // Sends the 6-digit code + link. Never fails registration if the mail server is down:
+        // the verify screen has a "Resend email" button.
+        EmailVerificationController::send($user);
+
         // Registering has no checkbox; it has always meant a persistent session.
-        return response()->json($this->tokens->issue($user, true), 201);
+        return response()->json($this->sessions->start($request, $user, true), 201);
     }
 
     public function login(LoginRequest $request): JsonResponse
     {
         $data = $request->validated();
 
+        // Per Student ID + IP: the route throttle only counts requests per IP, so one
+        // account could still be guessed slowly. 5 wrong passwords lock it for 5 minutes.
+        $limiterKey = 'login|'.strtolower((string) $data['student_id']).'|'.$request->ip();
+        if (RateLimiter::tooManyAttempts($limiterKey, 5)) {
+            $minutes = max(1, (int) ceil(RateLimiter::availableIn($limiterKey) / 60));
+            throw ValidationException::withMessages([
+                'student_id' => "Too many sign-in attempts. Try again in {$minutes} minute".($minutes === 1 ? '' : 's').'.',
+            ]);
+        }
+
         $user = User::where('student_id', $data['student_id'])->first();
 
         // Same message for "no such ID", "no password set" and "wrong password"
         // so the form never reveals which Student IDs exist.
         if (! $user || ! $user->password || ! Hash::check($data['password'], $user->password)) {
+            RateLimiter::hit($limiterKey, 300);
             throw ValidationException::withMessages(['student_id' => 'Student ID or password is incorrect.']);
         }
 
-        return response()->json($this->tokens->issue($user, (bool) ($data['remember'] ?? false)));
+        RateLimiter::clear($limiterKey);
+
+        return response()->json($this->sessions->start($request, $user, (bool) ($data['remember'] ?? false)));
     }
 
-    public function google(GoogleCredentialRequest $request): JsonResponse
+    /**
+     * Public "who is signed in?" probe used when the app opens. Always answers 200:
+     * { user: null } for a visitor, { user: {...} } when signed in. A visitor opening the
+     * login page is normal, so it must not show up as a red 401 in the browser console.
+     * (It also hands out the session + XSRF cookies, so the first POST is never a 419.)
+     */
+    public function session(Request $request): JsonResponse
     {
-        $profile = $this->google->verify($request->validated('credential'));
-        if (! $profile) {
-            throw ValidationException::withMessages(['credential' => 'Google sign-in could not be verified. Please try again.']);
-        }
+        $user = $request->user();
 
-        $user = User::where('google_id', $profile['sub'])->first()
-            ?? User::where('email', $profile['email'])->first();
-
-        if (! $user) {
-            // First time with this Google account: the app finishes sign-up
-            // (Student ID, names, course) and calls /register with the credential.
-            return response()->json([
-                'status' => 'needs_registration',
-                'profile' => [
-                    'email' => $profile['email'],
-                    'first_name' => $profile['first_name'],
-                    'last_name' => $profile['last_name'],
-                    'picture' => $profile['picture'],
-                ],
-            ], 202);
-        }
-
-        $user->forceFill([
-            'google_id' => $user->google_id ?: $profile['sub'],
-            'avatar' => $user->avatar ?: $profile['picture'],
-            'email_verified_at' => $user->email_verified_at ?: now(),
-        ])->save();
-
-        return response()->json($this->tokens->issue($user, true));
+        return response()->json(['user' => $user?->toClient()])
+            ->header('Cache-Control', 'no-store');
     }
 
     public function me(Request $request): JsonResponse
@@ -111,7 +100,7 @@ class AuthController extends Controller
 
     public function logout(Request $request): JsonResponse
     {
-        $request->user()->currentAccessToken()?->delete();
+        $this->sessions->end($request);
 
         return response()->json(['ok' => true]);
     }

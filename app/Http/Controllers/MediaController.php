@@ -3,25 +3,25 @@
 namespace App\Http\Controllers;
 
 use App\Support\PrivateMedia;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
 /**
- * Serves profile pictures from the private disk.
- *
- * No login is needed here because an <img> tag cannot send the bearer token;
- * the `signed:relative` middleware on the route is the access check (see
- * PrivateMedia for how links are made and how long they last).
+ * Serves the signed-in person's OWN profile picture from the private disk
+ * (GET /api/me/photo). Access is the session cookie: there is no link to share, and
+ * nobody can ask for another account's file because no filename is taken from the URL.
  */
 class MediaController extends Controller
 {
     private const IMAGE_MIME = ['image/jpeg', 'image/png', 'image/webp'];
 
-    public function show(string $dir, string $file)
+    public function mine(Request $request)
     {
-        abort_unless(PrivateMedia::isServable($dir, $file), 404);
+        $parts = PrivateMedia::split($request->user()->profile_photo);
+        abort_unless($parts, 404);
 
         $disk = Storage::disk(PrivateMedia::DISK);
-        $path = "{$dir}/{$file}";
+        $path = "{$parts[0]}/{$parts[1]}";
 
         if (! $disk->exists($path)) {
             return $this->notFound('missing-file');
@@ -42,12 +42,14 @@ class MediaController extends Controller
             return $this->notFound('not-an-image');
         }
 
-        return $disk->response($path, $file, [
+        return $disk->response($path, $parts[1], [
             'Content-Type' => $mime,
             'Content-Disposition' => 'inline',
             'X-Content-Type-Options' => 'nosniff',
-            // Per-browser cache only; the URL changes when the signature bucket rolls over.
-            'Cache-Control' => 'private, max-age='.min(PrivateMedia::bucketSeconds(), 86400),
+            // Private: never stored by a shared cache / proxy. The ?v= value changes with every
+            // new upload (the stored filename is random), so the browser may keep it for a year.
+            'Cache-Control' => 'private, max-age=31536000, immutable',
+            'Vary' => 'Cookie',
         ]);
     }
 

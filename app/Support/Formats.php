@@ -20,7 +20,7 @@ final class Formats
     /** Institutional e-mail: occ.lastname.firstname@gmail.com (digits after the first name optional). */
     public const SCHOOL_EMAIL = '/^occ\.[a-z]+\.[a-z]+\d{0,6}@gmail\.com$/i';
 
-    /** Any Gmail address (used for Google sign-up, where Google supplies the address). */
+    /** Any Gmail address (loose check used where the exact school format is not needed). */
     public const GMAIL = '/^[A-Za-z0-9._%+\-]+@gmail\.com$/i';
 
     /** "De la Cruz" -> "delacruz", "Peña-Reyes" -> "penareyes": a name as it appears inside the e-mail. */

@@ -9,7 +9,9 @@ import {
 import { uid } from "../utils/time";
 
 const HISTORY_KEY = "notifications-v1";
-const MAX_HISTORY = 40;
+const MAX_HISTORY = 200; // same cap as the server (LogbookRules::MAX_NOTIFICATIONS)
+
+const EMPTY = [];
 
 const NotificationContext = createContext(null);
 
@@ -19,19 +21,26 @@ export function NotificationProvider({ children }) {
   // in would see Trainee A's notification history (and vice versa).
   const userId = user?.sub || user?.email || null;
 
-  const [history, setHistory] = useState([]);
+  // The list is stored together with the account it belongs to, so a render that still
+  // holds the previous account's list can never be written into the new account's storage.
+  const [store, setStore] = useState({ owner: null, items: EMPTY });
+  const history = store.owner === userId ? store.items : EMPTY;
+  const setHistory = useCallback(
+    (next) => setStore((prev) => ({ ...prev, items: typeof next === "function" ? next(prev.items) : next })),
+    []
+  );
   const [permission, setPermission] = useState(() => getPermission());
 
   // Load (and reload, if a different account signs in) this account's
   // notification history.
   useEffect(() => {
-    setHistory(userId ? getUserStorage(HISTORY_KEY, userId) || [] : []);
+    setStore({ owner: userId, items: userId ? getUserStorage(HISTORY_KEY, userId) || [] : EMPTY });
   }, [userId]);
 
   useEffect(() => {
-    if (!userId) return;
-    setUserStorage(HISTORY_KEY, userId, history.slice(0, MAX_HISTORY));
-  }, [history, userId]);
+    if (!userId || store.owner !== userId) return;
+    setUserStorage(HISTORY_KEY, userId, store.items.slice(0, MAX_HISTORY));
+  }, [store, userId]);
 
   const markAllRead = useCallback(() => {
     setHistory((prev) => prev.map((n) => ({ ...n, read: true })));

@@ -1,7 +1,9 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import api, { clearToken, getToken, storeToken } from "../config/axiosConfig";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import api, { setSignedIn } from "../config/axiosConfig";
 import { KEYS, EVENTS } from "../config/constant";
-import { hydrate, releaseUser } from "../utils/sync";
+import { hydrate, releaseUser, stopSync } from "../utils/sync";
+import { setTheme } from "../utils/theme";
+import { clearPhotoCache, preloadPhoto } from "../utils/imageCache";
 
 const AuthContext = createContext(null);
 
@@ -11,29 +13,61 @@ const ME_CACHE = KEYS.me;
 const readMe = () => { try { return JSON.parse(localStorage.getItem(ME_CACHE)); } catch { return null; } };
 const writeMe = (u) => { try { u ? localStorage.setItem(ME_CACHE, JSON.stringify(u)) : localStorage.removeItem(ME_CACHE); } catch { /* ignore */ } };
 
+// "Who is signed in?" asked ONCE per page load. React StrictMode (dev) mounts the provider twice;
+// sharing one request avoids two parallel calls racing to set different session / XSRF cookies
+// (the cause of a random 419 on the first sign-in).
+let sessionProbe = null;
+function probeSession() {
+  if (!sessionProbe) {
+    sessionProbe = api.get("/session")
+      .then(({ data }) => data.user || null)
+      .finally(() => { sessionProbe = null; });
+  }
+  return sessionProbe;
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const userRef = useRef(null);
+  userRef.current = user;
 
   // `user` is only set AFTER the account's documents are in the local cache,
   // so no screen ever renders an empty logbook that is about to be filled.
+  // An account whose email is not verified yet cannot reach /sync (the API is closed
+  // for it), so its documents are pulled the moment it becomes verified (updateUser).
   const establish = useCallback(async (u) => {
-    await hydrate(u.sub);
+    if (u.email_verified !== false) await hydrate(u.sub);
+    if (u.theme) setTheme(u.theme); // colour theme saved on the account wins over this device's
     writeMe(u);
+    preloadPhoto(u.picture); // warm the avatar cache so every screen shows it at once (no await)
     setUser(u);
   }, []);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (!getToken()) { setLoading(false); return; }
+      // The sign-in is an HttpOnly cookie we cannot see, so ask the server who is signed in.
       try {
-        const { data } = await api.get("/me");
-        if (!cancelled) await establish(data.user);
+        const me = await probeSession();
+        if (me) {
+          setSignedIn(true);
+          if (!cancelled) await establish(me);
+        } else {
+          // A visitor: nothing to restore. Drop whatever a previous account left behind.
+          setSignedIn(false);
+          writeMe(null);
+          clearPhotoCache();
+        }
       } catch (e) {
         const cached = readMe();
-        // Offline (no response at all): trust the cached profile. A real 401 already cleared the token.
-        if (!e.response && cached && getToken() && !cancelled) setUser(cached);
+        // Offline (no response at all): trust the cached profile so the installed app still opens.
+        // Any real answer from the server (401 = session ended) means the cache is stale.
+        if (!e.response && cached && !cancelled) {
+          setSignedIn(true);
+          preloadPhoto(cached.picture); // served from Cache Storage when offline
+          setUser(cached);
+        } else if (e.response) { writeMe(null); clearPhotoCache(); }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -41,29 +75,39 @@ export function AuthProvider({ children }) {
     return () => { cancelled = true; };
   }, [establish]);
 
-  // Token expired / revoked while the app was open.
+  // Session expired / ended on the server while the app was open.
   useEffect(() => {
-    const onUnauthorized = () => { setUser(null); writeMe(null); };
+    const onUnauthorized = () => { stopSync(); setUser(null); writeMe(null); clearPhotoCache(); };
     window.addEventListener(EVENTS.unauthorized, onUnauthorized);
     return () => window.removeEventListener(EVENTS.unauthorized, onUnauthorized);
   }, []);
 
-  /** Accepts the API's { token, expires_at, user } session payload. */
-  const signIn = useCallback(async (session, remember = true) => {
-    storeToken(session.token, session.expires_at, remember);
+  /** Accepts the API's { expires_at, user } payload. The session cookie was already set by the server. */
+  const signIn = useCallback(async (session) => {
+    setSignedIn(true);
     await establish(session.user);
   }, [establish]);
 
   const logout = useCallback(async () => {
     const current = user;
-    try { await api.post("/auth/logout"); } catch { /* token may already be dead */ }
-    clearToken();
-    writeMe(null);
-    setUser(null);
+    // Push pending edits FIRST, while the session is still valid. Done after it ends
+    // every push would be rejected and the cache could never be wiped.
+    window.dispatchEvent(new CustomEvent(EVENTS.flush)); // screens save their last edit first
     if (current) await releaseUser(current.sub);
+    try { await api.post("/auth/logout"); } catch { /* session may already be dead */ }
+    setSignedIn(false);
+    writeMe(null);
+    clearPhotoCache();
+    setUser(null);
   }, [user]);
 
-  const updateUser = useCallback((u) => { writeMe(u); setUser(u); }, []);
+  const updateUser = useCallback(async (u) => {
+    const justVerified = userRef.current?.email_verified === false && u.email_verified !== false;
+    if (justVerified) await hydrate(u.sub);
+    writeMe(u);
+    preloadPhoto(u.picture); // a new upload gets a new address: load it before the avatar asks
+    setUser(u);
+  }, []);
 
   const value = useMemo(
     () => ({ user, loading, isAuthenticated: !!user, signIn, logout, updateUser }),

@@ -20,15 +20,31 @@ return [
     */
     'mobile_only' => env('OCC_MOBILE_ONLY', 'true'),
 
-    // Google Identity Services "Web client ID" (same value as VITE_GOOGLE_CLIENT_ID).
-    'google_client_id' => env('GOOGLE_CLIENT_ID', env('VITE_GOOGLE_CLIENT_ID')),
+    /*
+    |--------------------------------------------------------------------------
+    | DevTools / inspect protection  (OCC_INSPECT_PROTECTION)
+    |--------------------------------------------------------------------------
+    |
+    | true  -> ON.  The app hides itself while browser DevTools is open
+    |          (including DevTools "device mode" phone emulation) and blocks
+    |          F12 / Ctrl+Shift+I / Ctrl+U / right-click / long-press menus.
+    | false -> OFF. Use this while developing and debugging.
+    |
+    | Runtime setting, same as OCC_MOBILE_ONLY: after changing .env run
+    | `php artisan config:clear` (no rebuild). Anything unrecognised is treated
+    | as false so a typo can never lock everyone out. It is a deterrent only;
+    | real security stays on the server. See resources/js/utils/devtoolsGuard.js.
+    |
+    */
+    'inspect_protection' => env('OCC_INSPECT_PROTECTION', 'true'),
 
     // Registration is limited to Gmail addresses.
     'email_domain' => 'gmail.com',
 
-    // How long a sign-in lasts. "Keep me signed in" uses the long value.
-    'token_hours' => (int) env('OCC_TOKEN_HOURS', 12),
-    'token_remember_days' => (int) env('OCC_TOKEN_REMEMBER_DAYS', 30),
+    // Hard limit on how long a sign-in lasts (enforced on the server, see
+    // App\Http\Middleware\EnforceSessionLifetime). "Keep me signed in" uses the long value.
+    'session_hours' => (int) env('OCC_SESSION_HOURS', 12),
+    'session_remember_days' => (int) env('OCC_SESSION_REMEMBER_DAYS', 30),
 
     // Colleges / courses (same list as sclf_APP's registration dropdown).
     'courses' => [
@@ -47,5 +63,5 @@ return [
 
     // Keys of the per-user documents the logbook is allowed to sync.
     'document_keys' => ['logbook-v2', 'milestones-v1', 'shift-reminder-v1', 'onboarding-seen-v1', 'notifications-v1'],
-    'document_max_bytes' => 2 * 1024 * 1024,
+    'document_max_bytes' => 4 * 1024 * 1024,
 ];

@@ -5,7 +5,7 @@ function createBus() {
   return {
     emit(payload) {
       listeners.forEach((fn) => {
-        try { fn(payload); } catch (e) { console.error(e); }
+        try { fn(payload); } catch { /* a failing listener must not break the others, or spam the console */ }
       });
     },
     subscribe(fn) {

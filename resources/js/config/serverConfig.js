@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import api from "./axiosConfig";
 import { KEYS } from "./constant";
 
-// Public app config from the server: course list + Google client id.
+// Public app config from the server: the course list.
 // Cached in memory and localStorage so the register form still has its course
 // list when the installed app is opened with a weak connection.
 let cache = null;
@@ -22,7 +22,7 @@ export function loadConfig() {
         return data;
       })
       .catch(() => {
-        cache = fromStorage() || { google_client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID || null, courses: [] };
+        cache = fromStorage() || { courses: [] };
         return cache;
       })
       .finally(() => { inflight = null; });

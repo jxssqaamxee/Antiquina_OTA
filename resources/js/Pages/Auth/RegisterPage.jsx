@@ -1,11 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Camera, Check, GraduationCap, IdCard, Lock, Mail, User } from "lucide-react";
 import AuthShell, {
-  Divider, LedgerBanner, LedgerButton, LedgerGhostButton, LedgerInput, LedgerPasswordInput, LedgerRow,
+  LedgerBanner, LedgerButton, LedgerGhostButton, LedgerInput, LedgerPasswordInput, LedgerRow,
   LedgerRowPair, LedgerSelect, PasswordMatchNote, RequirementChecklist, StrengthTicks,
 } from "../../Components/auth/AuthShell";
-import GoogleSignInButton from "../../Components/auth/GoogleSignInButton";
 import PhotoUploadModal from "../../Components/shared/PhotoUploadModal";
 import api, { errorMessage, fieldErrors } from "../../config/axiosConfig";
 import { useConfig } from "../../config/serverConfig";
@@ -33,21 +32,25 @@ const STEPS = [
     key: "identity", label: "Identity", fields: ["profile_photo", "first_name", "last_name"],
     title: <>Let’s start with <span className="accent">you</span></>,
     subtitle: "A clear photo and your name, so your coordinator knows who is logging hours.",
+    railHeadline: "Let's open your file.", railNote: "A clear photo and your name so your coordinator knows who is logging hours.",
   },
   {
-    key: "account", label: "Account", fields: ["email", "student_id", "google_credential"],
+    key: "account", label: "Account", fields: ["email", "student_id"],
     title: <>Your <span className="accent">account</span> details</>,
-    subtitle: "Your Gmail and Student ID are how you sign in.",
+    subtitle: "Your Student ID is how you sign in. We email a code to your Gmail to verify it.",
+    railHeadline: "Your sign-in details.", railNote: "Use your school Gmail (you will verify it with a code) and your Student ID — they identify your record.",
   },
   {
     key: "course", label: "Course", fields: ["course", "middle_name"],
     title: <>Your <span className="accent">course</span></>,
     subtitle: "Pick the program you are doing your duty hours for.",
+    railHeadline: "Which program are you in?", railNote: "Your course is printed on your Duty Time Record.",
   },
   {
     key: "security", label: "Security", fields: ["password", "password_confirmation"],
     title: <>Secure your <span className="accent">account</span></>,
     subtitle: "Last entry. Set a strong password and your file is complete.",
+    railHeadline: "Last entry.", railNote: "A strong password keeps your duty records safe.",
   },
 ];
 
@@ -61,13 +64,11 @@ export default function RegisterPage() {
   const { signIn } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
-  const location = useLocation();
   const config = useConfig();
 
-  const [google, setGoogle] = useState(location.state?.google || null); // { credential, profile }
   const [form, setForm] = useState(() => ({
-    student_id: "", first_name: google?.profile?.first_name || "", middle_name: "", last_name: google?.profile?.last_name || "",
-    email: google?.profile?.email || "", course: "", password: "", password_confirmation: "",
+    student_id: "", first_name: "", middle_name: "", last_name: "",
+    email: "", course: "", password: "", password_confirmation: "",
   }));
   const [photo, setPhoto] = useState(null);        // the File, sent with the form
   const [photoUrl, setPhotoUrl] = useState("");    // local preview
@@ -80,9 +81,7 @@ export default function RegisterPage() {
   const [busy, setBusy] = useState(false);
   const topRef = useRef(null);
 
-  const viaGoogle = !!google;
-  // Google accounts have no password, so the Security step does not exist for them.
-  const steps = useMemo(() => (viaGoogle ? STEPS.filter((s) => s.key !== "security") : STEPS), [viaGoogle]);
+  const steps = STEPS;
   const total = steps.length;
   const step = steps[Math.min(stepIndex, total - 1)];
   const isLast = stepIndex >= total - 1;
@@ -119,7 +118,7 @@ export default function RegisterPage() {
 
   // Errors for the fields owned by one step (client-side rules, same as the server's).
   function stepErrors(s) {
-    const all = validateRegister(form, viaGoogle);
+    const all = validateRegister(form);
     if (!photo) all.profile_photo = "Profile photo is required so your coordinator can verify you.";
     return Object.fromEntries(s.fields.filter((f) => all[f]).map((f) => [f, all[f]]));
   }
@@ -151,7 +150,7 @@ export default function RegisterPage() {
     if (!isLast) { setStepIndex((i) => i + 1); return; }
 
     // Final step: everything must be valid, even if an earlier step was somehow skipped.
-    const everything = validateRegister(form, viaGoogle);
+    const everything = validateRegister(form);
     if (!photo) everything.profile_photo = "Profile photo is required so your coordinator can verify you.";
     const bad = Object.keys(everything);
     if (bad.length) {
@@ -172,12 +171,13 @@ export default function RegisterPage() {
       body.append("email", normalizeEmailInput(form.email));
       body.append("course", form.course);
       body.append("profile_photo", photo);
-      if (viaGoogle) body.append("google_credential", google.credential);
-      else { body.append("password", form.password); body.append("password_confirmation", form.password_confirmation); }
+      body.append("password", form.password);
+      body.append("password_confirmation", form.password_confirmation);
 
       const { data } = await api.post("/auth/register", body);
       await signIn(data, true);
-      navigate("/logbook", { replace: true });
+      // The new account's email still has to be verified (code + link were just emailed).
+      navigate("/verify-email", { replace: true });
     } catch (err) {
       const fe = fieldErrors(err);
       setErrors((x) => ({ ...x, ...fe }));
@@ -187,24 +187,6 @@ export default function RegisterPage() {
       // Go back to the first step that owns a failing field instead of leaving the person stuck here.
       const owner = steps.findIndex((s) => s.fields.some((f) => fe[f]));
       if (owner >= 0) setStepIndex(owner);
-      setBusy(false);
-    }
-  }
-
-  async function onGoogle(credential) {
-    setBusy(true); setError("");
-    try {
-      const { data, status } = await api.post("/auth/google", { credential });
-      if (status === 202 || data.status === "needs_registration") {
-        setGoogle({ credential, profile: data.profile });
-        setForm((f) => ({ ...f, email: data.profile.email, first_name: f.first_name || data.profile.first_name, last_name: f.last_name || data.profile.last_name }));
-        setBusy(false);
-        return;
-      }
-      await signIn(data, true); // this Google account already has an account
-      navigate("/logbook", { replace: true });
-    } catch (err) {
-      setError(errorMessage(err, "Google sign-in failed. Please try again."));
       setBusy(false);
     }
   }
@@ -231,14 +213,17 @@ export default function RegisterPage() {
   return (
     <AuthShell
       wide
+      fit
+      docType="NEW CASE FILE"
       caseSeed="REG"
+      railHeadline={step.railHeadline}
+      railNote={step.railNote}
       tabs={tabs}
       title={step.title}
-      subtitle={viaGoogle && stepIndex === 0 ? "Signed in with Google. Add your photo and name to continue." : step.subtitle}
+      subtitle={step.subtitle}
       footer={<>Already registered? <Link to="/login">Sign in</Link></>}
     >
       <div ref={topRef} />
-      {viaGoogle && <LedgerBanner tone="notice">Signed in with Google as <b>{google.profile.email}</b>. No password needed.</LedgerBanner>}
       <LedgerBanner>{error}</LedgerBanner>
 
       <form onSubmit={submit} noValidate>
@@ -272,7 +257,7 @@ export default function RegisterPage() {
                   <label className="lg-row-label" htmlFor="first_name"><User size={12} strokeWidth={2.5} /> First name {req}</label>
                   <LedgerInput
                     id="first_name" value={form.first_name} onChange={set("first_name")} maxLength={80}
-                    autoComplete="given-name" placeholder="Juan" enterKeyHint="next" autoFocus={canAutoFocus && !viaGoogle}
+                    autoComplete="given-name" placeholder="Juan" enterKeyHint="next" autoFocus={canAutoFocus}
                     aria-required="true" aria-invalid={!!errors.first_name}
                   />
                   {errors.first_name && <span className="lg-row-hint lg-row-error" role="alert">{errors.first_name}</span>}
@@ -295,14 +280,13 @@ export default function RegisterPage() {
               <LedgerRow
                 index={1} icon={Mail} htmlFor="email" error={errors.email}
                 label={<>Gmail {req}</>}
-                hint={viaGoogle ? FORMAT_HINTS.gmail : `Format: occ.${lastNameSeg}.firstname@gmail.com (all lowercase). The lastname must match your Last name.`}
+                hint={`Format: occ.${lastNameSeg}.firstname@gmail.com (all lowercase). The lastname must match your Last name. We will email you a code to verify it.`}
               >
                 <LedgerInput
                   id="email" type="email" inputMode="email" value={form.email} onChange={set("email")}
                   autoComplete="email" autoCapitalize="none" autoCorrect="off" spellCheck={false} enterKeyHint="next"
-                  placeholder={viaGoogle ? "name@gmail.com" : `occ.${lastNameSeg}.juan@gmail.com`}
-                  readOnly={viaGoogle} autoFocus={canAutoFocus && !viaGoogle}
-                  aria-required={viaGoogle ? undefined : "true"} aria-invalid={!!errors.email}
+                  placeholder={`occ.${lastNameSeg}.juan@gmail.com`} autoFocus={canAutoFocus}
+                  aria-required="true" aria-invalid={!!errors.email}
                 />
               </LedgerRow>
               <LedgerRow
@@ -312,7 +296,7 @@ export default function RegisterPage() {
                 <LedgerInput
                   id="student_id" value={form.student_id} onChange={set("student_id")} maxLength={12}
                   autoComplete="username" inputMode="numeric" autoCorrect="off" spellCheck={false} enterKeyHint="next"
-                  placeholder="2021-2-04062" autoFocus={canAutoFocus && viaGoogle}
+                  placeholder="2021-2-04062"
                   aria-required="true" aria-invalid={!!errors.student_id}
                 />
               </LedgerRow>
@@ -367,7 +351,7 @@ export default function RegisterPage() {
           )}
         </div>
 
-        <div className="lg-actions-row">
+        <div className="lg-actions-row" style={{ marginTop: 14 }}>
           {stepIndex > 0 && <LedgerGhostButton onClick={goBack} disabled={busy}>Back</LedgerGhostButton>}
           <LedgerButton disabled={busy}>
             {busy
@@ -376,13 +360,6 @@ export default function RegisterPage() {
           </LedgerButton>
         </div>
       </form>
-
-      {!viaGoogle && stepIndex === 0 && (
-        <>
-          <Divider>or</Divider>
-          <GoogleSignInButton onCredential={onGoogle} text="signup_with" disabled={busy} />
-        </>
-      )}
 
       <PhotoUploadModal open={photoOpen} onClose={() => setPhotoOpen(false)} onAccept={pickPhoto} title="Profile photo" />
     </AuthShell>

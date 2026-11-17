@@ -4,7 +4,7 @@
 //    and then offline.html, so an installed app still opens with no signal.
 //  - /api/* is NEVER cached (private, per-user data); the app keeps its own
 //    offline copy of the logbook and syncs when the connection returns.
-const VERSION = "occ-v2";
+const VERSION = "occ-v3";
 const SHELL = `${VERSION}-shell`;
 const ASSETS = `${VERSION}-assets`;
 const PRECACHE = ["/offline.html", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
@@ -30,7 +30,7 @@ self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
   const url = new URL(req.url);
-  if (url.origin !== self.location.origin) return;       // Google sign-in, fonts, etc.
+  if (url.origin !== self.location.origin) return;       // fonts, etc.
   if (url.pathname.startsWith("/api/")) return;          // private data: always network
 
   if (url.pathname.startsWith("/build/assets/") || url.pathname.startsWith("/icons/")) {

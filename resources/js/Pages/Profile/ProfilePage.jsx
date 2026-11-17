@@ -17,7 +17,7 @@ import {
 } from "../../utils/validators";
 import MobileTabBar from "../../Components/shared/MobileTabBar";
 import AppBar from "../../Components/shared/AppBar";
-import { THEMES, getTheme, setTheme } from "../../utils/theme";
+import { THEMES, getTheme, setTheme, saveThemeToAccount } from "../../utils/theme";
 import logo from "../../assets/images/site-logo.png";
 import Footer from "../../Components/shared/Footer";
 import { canNativePrompt, isInstalled, promptInstall, subscribe } from "../../utils/pwaInstall";
@@ -83,7 +83,7 @@ export default function ProfilePage() {
   async function savePassword(e) {
     e.preventDefault();
     setMsg((m) => ({ ...m, password: null }));
-    const v = validatePasswordChange(pw, user.has_password);
+    const v = validatePasswordChange(pw);
     if (Object.keys(v).length) {
       setErrs(v);
       setMsg((m) => ({ ...m, password: { tone: "error", text: "Please fix the highlighted fields." } }));
@@ -94,7 +94,7 @@ export default function ProfilePage() {
       const { data } = await api.put("/profile/password", pw);
       updateUser(data.user);
       setPw({ current_password: "", password: "", password_confirmation: "" });
-      setMsg((m) => ({ ...m, password: { tone: "notice", text: user.has_password ? "Password changed." : "Password set. You can now sign in with your Student ID." } }));
+      setMsg((m) => ({ ...m, password: { tone: "notice", text: "Password changed." } }));
     } catch (err) {
       setErrs(fieldErrors(err));
       setMsg((m) => ({ ...m, password: { tone: "error", text: errorMessage(err) } }));
@@ -158,13 +158,13 @@ export default function ProfilePage() {
         <div className="pf-stack">
           <section className="card">
             <h3 className="card-title">Appearance</h3>
-            <p className="pf-muted">Pick a colour theme. It is saved on this device.</p>
+            <p className="pf-muted">Pick a colour theme. It is saved on your account and follows you to any device.</p>
             <div className="theme-grid" role="radiogroup" aria-label="Colour theme">
               {THEMES.map((t) => (
                 <button
                   key={t.id} type="button" role="radio" aria-checked={theme === t.id}
                   className={`theme-opt${theme === t.id ? " is-active" : ""}`}
-                  onClick={() => setThemeState(setTheme(t.id))}
+                  onClick={() => { setThemeState(setTheme(t.id)); saveThemeToAccount(t.id); }}
                 >
                   <span className="theme-swatch" style={{ background: t.bg, "--sw-accent": t.accent }} />
                   {t.label}
@@ -176,7 +176,7 @@ export default function ProfilePage() {
           {user.has_profile_photo && (
             <section className="card">
               <h3 className="card-title">Profile photo</h3>
-              <p className="pf-muted" style={{ marginBottom: 0 }}>Tap the camera on your picture to replace it. Removing it shows your Google picture, or your initials.</p>
+              <p className="pf-muted" style={{ marginBottom: 0 }}>Tap the camera on your picture to replace it. Removing it shows your initials instead.</p>
               <div className="pf-photo-actions">
                 <button type="button" className="btn" onClick={() => setPhotoOpen(true)}><Camera size={16} /> Replace photo</button>
                 <button type="button" className="btn btn-danger" onClick={() => setConfirmRemove(true)} disabled={busy === "photo"}><Trash2 size={16} /> Remove photo</button>
@@ -221,26 +221,22 @@ export default function ProfilePage() {
           </form>
 
           <form className="card pf-form" onSubmit={savePassword} noValidate>
-            <h3 className="card-title pf-form-title">{user.has_password ? "Change password" : "Set a password"}</h3>
-            <p className="pf-muted" style={{ margin: "0 0 4px" }}>{user.has_password
-              ? "Use at least 8 characters with upper and lower case letters and a number."
-              : "You signed up with Google. Set a password to also sign in with your Student ID."}</p>
+            <h3 className="card-title pf-form-title">Change password</h3>
+            <p className="pf-muted" style={{ margin: "0 0 4px" }}>Use at least 8 characters with upper and lower case letters and a number.</p>
             <LedgerBanner tone={msg.password?.tone}>{msg.password?.text}</LedgerBanner>
-            {user.has_password && (
-              <LedgerRow index={1} icon={Lock} htmlFor="pf_cur" error={errs.current_password} label={<>Current password {req}</>}>
-                <LedgerPasswordInput id="pf_cur" show={showCur} onToggle={() => setShowCur((v) => !v)} autoComplete="current-password" value={pw.current_password} aria-invalid={!!errs.current_password} onChange={setP("current_password")} />
-              </LedgerRow>
-            )}
-            <LedgerRow index={user.has_password ? 2 : 1} icon={Lock} htmlFor="pf_new" error={errs.password} label={<>New password {req}</>}>
+            <LedgerRow index={1} icon={Lock} htmlFor="pf_cur" error={errs.current_password} label={<>Current password {req}</>}>
+              <LedgerPasswordInput id="pf_cur" show={showCur} onToggle={() => setShowCur((v) => !v)} autoComplete="current-password" maxLength={100} value={pw.current_password} aria-invalid={!!errs.current_password} onChange={setP("current_password")} />
+            </LedgerRow>
+            <LedgerRow index={2} icon={Lock} htmlFor="pf_new" error={errs.password} label={<>New password {req}</>}>
               <LedgerPasswordInput id="pf_new" show={showPw} onToggle={() => setShowPw((v) => !v)} autoComplete="new-password" maxLength={100} value={pw.password} aria-invalid={!!errs.password} onChange={setP("password")} />
               <StrengthTicks password={pw.password} />
             </LedgerRow>
-            <LedgerRow index={user.has_password ? 3 : 2} icon={Lock} htmlFor="pf_conf" error={errs.password_confirmation} label={<>Confirm new password {req}</>}>
+            <LedgerRow index={3} icon={Lock} htmlFor="pf_conf" error={errs.password_confirmation} label={<>Confirm new password {req}</>}>
               <LedgerPasswordInput id="pf_conf" show={showPw} onToggle={() => setShowPw((v) => !v)} autoComplete="new-password" maxLength={100} value={pw.password_confirmation} aria-invalid={!!errs.password_confirmation} onChange={setP("password_confirmation")} />
               <PasswordMatchNote password={pw.password} confirm={pw.password_confirmation} />
             </LedgerRow>
             {!!pw.password && <RequirementChecklist password={pw.password} />}
-            <button className="lg-submit" disabled={busy === "password" || !pw.password}>{busy === "password" ? "Saving…" : user.has_password ? "Change password" : "Set password"}</button>
+            <button className="lg-submit" disabled={busy === "password" || !pw.password}>{busy === "password" ? "Saving…" : "Change password"}</button>
           </form>
 
           <section className="card pf-actions">
@@ -253,7 +249,7 @@ export default function ProfilePage() {
       <PhotoUploadModal open={photoOpen} onClose={() => setPhotoOpen(false)} onAccept={uploadPhoto} title="Profile photo" />
       <ConfirmSheet
         open={confirmRemove} title="Remove your photo?"
-        message="Your picture will go back to your Google photo, or your initials if you have none."
+        message="Your picture will be removed and your initials will show instead."
         yes="Remove photo" no="Keep it" onYes={removePhoto} onNo={() => setConfirmRemove(false)}
       />
       <MobileTabBar />

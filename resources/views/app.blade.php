@@ -6,9 +6,15 @@
         'true', '1', 'on', 'yes' => 'true',
         default => 'false',
     };
+
+    // DevTools / inspect protection: OCC_INSPECT_PROTECTION = true | false (same rules).
+    $occInspect = match (strtolower(trim((string) config('occ.inspect_protection', 'true')))) {
+        'true', '1', 'on', 'yes' => 'true',
+        default => 'false',
+    };
 @endphp
 <!DOCTYPE html>
-<html lang="en" data-mobile-only="{{ $occMobileOnly }}" style="background:#ffffff; overscroll-behavior-y: none; -webkit-text-size-adjust: 100%;">
+<html lang="en" data-mobile-only="{{ $occMobileOnly }}" data-inspect-protection="{{ $occInspect }}" style="background:#ffffff; overscroll-behavior-y: none; -webkit-text-size-adjust: 100%;">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">

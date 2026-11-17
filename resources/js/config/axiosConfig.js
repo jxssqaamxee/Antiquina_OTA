@@ -1,55 +1,54 @@
 import axios from "axios";
-import { KEYS, EVENTS } from "./constant";
+import { EVENTS, LEGACY_TOKEN_KEYS } from "./constant";
 
-const TOKEN_KEY = KEYS.token;
-const EXPIRY_KEY = KEYS.tokenExp;
+// Sign-in is an HttpOnly session cookie set by the server. JavaScript never sees or stores a
+// token: the browser sends the cookie by itself, and axios copies the XSRF-TOKEN cookie into the
+// X-XSRF-TOKEN header on every write (CSRF protection).
 
-// The access token lives in localStorage ("Keep me signed in") or
-// sessionStorage (this tab only), mirroring how sclf_APP handles sessions.
-function stores() {
-  const out = [];
-  try { out.push(window.localStorage); } catch { /* blocked */ }
-  try { out.push(window.sessionStorage); } catch { /* blocked */ }
-  return out;
-}
-
-export function getToken() {
-  for (const s of stores()) {
+/** Removes any sign-in token an older version of the app left in this browser. */
+export function purgeLegacyTokens() {
+  for (const get of [() => window.localStorage, () => window.sessionStorage]) {
     try {
-      const t = s.getItem(TOKEN_KEY);
-      if (!t) continue;
-      const exp = Number(s.getItem(EXPIRY_KEY) || 0);
-      if (exp && Date.now() > exp) { s.removeItem(TOKEN_KEY); s.removeItem(EXPIRY_KEY); continue; }
-      return t;
-    } catch { /* ignore */ }
-  }
-  return null;
-}
-
-export function storeToken(token, expiresAt, remember) {
-  clearToken();
-  try {
-    const s = remember ? window.localStorage : window.sessionStorage;
-    s.setItem(TOKEN_KEY, token);
-    s.setItem(EXPIRY_KEY, String(new Date(expiresAt).getTime()));
-  } catch { /* storage blocked: session lasts until reload */ }
-}
-
-export function clearToken() {
-  for (const s of stores()) {
-    try { s.removeItem(TOKEN_KEY); s.removeItem(EXPIRY_KEY); } catch { /* ignore */ }
+      const s = get();
+      LEGACY_TOKEN_KEYS.forEach((k) => s.removeItem(k));
+    } catch { /* storage blocked */ }
   }
 }
+purgeLegacyTokens();
+
+// Was this tab signed in? Only used to tell "the session just ended" (401) apart from
+// "nobody is signed in" (a normal 401 on the first /me call).
+let signedIn = false;
+export const setSignedIn = (v) => { signedIn = !!v; };
 
 const api = axios.create({
   baseURL: "/api",
   headers: { Accept: "application/json", "X-Requested-With": "XMLHttpRequest" },
   timeout: 20000,
+  withCredentials: true,
+  xsrfCookieName: "XSRF-TOKEN",
+  xsrfHeaderName: "X-XSRF-TOKEN",
 });
 
-api.interceptors.request.use((config) => {
-  const t = getToken();
-  if (t) config.headers.Authorization = `Bearer ${t}`;
+// Laravel hands out the XSRF-TOKEN cookie on any GET to /api. If it is missing (first visit,
+// cleared cookies, the app shell came from the offline cache) the first write would be a 419.
+// So before ANY write the token is fetched once (shared by concurrent writes) and only then sent.
+const hasXsrfCookie = () => typeof document !== "undefined" && /(?:^|;\s*)XSRF-TOKEN=/.test(document.cookie);
+let priming = null;
+export function ensureCsrf() {
+  if (hasXsrfCookie()) return Promise.resolve();
+  if (!priming) {
+    priming = axios.get("/api/config", { withCredentials: true, timeout: 10000, headers: { Accept: "application/json" } })
+      .catch(() => { /* offline: the write fails with a clear network error right after */ })
+      .finally(() => { priming = null; });
+  }
+  return priming;
+}
+
+api.interceptors.request.use(async (config) => {
+  const method = String(config.method || "get").toLowerCase();
+  if (method !== "get" && method !== "head" && method !== "options") await ensureCsrf();
+
   // A FormData body (photo upload) must NOT be sent as application/json: drop any
   // Content-Type so the browser writes multipart/form-data with its own boundary.
   if (typeof FormData !== "undefined" && config.data instanceof FormData) {
@@ -60,12 +59,25 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// A 401 on an authenticated call means the token expired or was revoked.
 api.interceptors.response.use(
   (r) => r,
-  (err) => {
-    if (err.response?.status === 401 && getToken()) {
-      clearToken();
+  async (err) => {
+    const status = err.response?.status;
+    const config = err.config;
+
+    // 419 = the CSRF cookie was missing or stale (e.g. the app shell came from the offline cache).
+    // GET /config always hands out a fresh one; then the request is repeated once.
+    if (status === 419 && config && !config._csrfRetried) {
+      config._csrfRetried = true;
+      try {
+        await api.get("/config");
+        return api.request(config);
+      } catch { /* fall through to the original error */ }
+    }
+
+    // 401 while signed in = the session expired or was ended on the server.
+    if (status === 401 && signedIn) {
+      signedIn = false;
       window.dispatchEvent(new CustomEvent(EVENTS.unauthorized));
     }
     return Promise.reject(err);

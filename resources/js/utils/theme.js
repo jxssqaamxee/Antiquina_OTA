@@ -44,3 +44,12 @@ export function setTheme(id) {
   try { window.dispatchEvent(new Event("occ-theme-change")); } catch { /* ignore */ }
   return applied;
 }
+
+// Saves the choice on the account (so it follows the person to any device). Fire-and-forget:
+// the device keeps the theme either way, and a failed save just means this device only.
+export async function saveThemeToAccount(id) {
+  try {
+    const { default: api } = await import("../config/axiosConfig");
+    await api.put("/profile/preferences", { theme: id });
+  } catch { /* offline or signed out: stays on this device */ }
+}

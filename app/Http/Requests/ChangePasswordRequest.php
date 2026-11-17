@@ -5,7 +5,7 @@ namespace App\Http\Requests;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rules\Password;
 
-/** Set a first password (Google sign-ups) or change the existing one. */
+/** Change the password: current password + a new, different one. */
 class ChangePasswordRequest extends FormRequest
 {
     public function authorize(): bool
@@ -15,14 +15,9 @@ class ChangePasswordRequest extends FormRequest
 
     public function rules(): array
     {
-        $hasPassword = $this->user()?->password !== null;
-
         return [
-            'current_password' => [$hasPassword ? 'required' : 'nullable', 'string'],
-            'password' => array_values(array_filter([
-                'required', 'string', 'max:100', 'confirmed', Password::defaults(),
-                $hasPassword ? 'different:current_password' : null,
-            ])),
+            'current_password' => ['required', 'string'],
+            'password' => ['required', 'string', 'max:100', 'confirmed', Password::defaults(), 'different:current_password'],
         ];
     }
 

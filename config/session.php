@@ -32,7 +32,9 @@ return [
     |
     */
 
-    'lifetime' => (int) env('SESSION_LIFETIME', 120),
+    // Idle minutes a session row is kept. Never lower than the "keep me signed in" window:
+    // the hard sign-in limit is enforced separately (EnforceSessionLifetime).
+    'lifetime' => max((int) env('SESSION_LIFETIME', 43200), ((int) env('OCC_SESSION_REMEMBER_DAYS', 30)) * 1440),
 
     'expire_on_close' => env('SESSION_EXPIRE_ON_CLOSE', false),
 
@@ -47,7 +49,7 @@ return [
     |
     */
 
-    'encrypt' => env('SESSION_ENCRYPT', false),
+    'encrypt' => env('SESSION_ENCRYPT', true),
 
     /*
     |--------------------------------------------------------------------------
@@ -127,9 +129,12 @@ return [
     |
     */
 
+    // Over HTTPS the cookie gets the __Host- prefix: the browser then refuses it unless it is
+    // Secure, has Path=/ and no Domain, so a sibling sub-domain cannot plant or overwrite it.
     'cookie' => env(
         'SESSION_COOKIE',
-        Str::slug((string) env('APP_NAME', 'laravel')).'-session'
+        (env('SESSION_SECURE_COOKIE', ! in_array(env('APP_ENV', 'production'), ['local', 'testing'], true)) ? '__Host-' : '')
+            .Str::slug((string) env('APP_NAME', 'laravel')).'-session'
     ),
 
     /*
@@ -169,7 +174,8 @@ return [
     |
     */
 
-    'secure' => env('SESSION_SECURE_COOKIE'),
+    // Secure by default everywhere except local development / tests.
+    'secure' => (bool) env('SESSION_SECURE_COOKIE', ! in_array(env('APP_ENV', 'production'), ['local', 'testing'], true)),
 
     /*
     |--------------------------------------------------------------------------
@@ -199,7 +205,7 @@ return [
     |
     */
 
-    'same_site' => env('SESSION_SAME_SITE', 'lax'),
+    'same_site' => env('SESSION_SAME_SITE', 'strict'),
 
     /*
     |--------------------------------------------------------------------------

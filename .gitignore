@@ -1,27 +1,163 @@
-*.log
-.DS_Store
+# =====================================================================
+# OCC Duty Log - .gitignore
+# Goal: nothing secret, personal or machine-generated is ever pushed.
+# NOTE: .gitignore only affects files Git is NOT tracking yet. If a file below
+# was committed before, untrack it once with:  git rm -r --cached <path>
+# =====================================================================
+
+# ---------------------------------------------------------------------
+# Secrets & environment  (.env holds APP_KEY, DB + mail passwords)
+# ---------------------------------------------------------------------
 .env
-.env.backup
-.env.production
-.phpactor.json
-.phpunit.result.cache
-/.codex
-/.cursor/
-/.idea
-/.nova
-/.phpunit.cache
-/.vscode
-/.zed
+.env.*
+!.env.example
+*.env
+.envrc
 /auth.json
+/.npmrc.local
+.htpasswd
+
+# Keys, certificates, tokens, service-account files
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.csr
+*.der
+*.jks
+*.keystore
+*.ppk
+id_rsa*
+id_ed25519*
+*.gpg
+.rnd
+openssl.cnf
+credentials.json
+service-account*.json
+*-service-account*.json
+firebase-adminsdk*.json
+google-services.json
+GoogleService-Info.plist
+client_secret*.json
+secrets.json
+secrets.*.json
+*.secret
+*.secrets
+/storage/*.key
+/storage/oauth-*.key
+
+# ---------------------------------------------------------------------
+# Databases, dumps and backups  (real trainee data lives here)
+# ---------------------------------------------------------------------
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+*.db
+*.sql
+*.sql.gz
+*.dump
+*.bak
+*.backup
+*.old
+*.orig
+*.rej
+*.tmp
+*.swp
+*.swo
+*~
+/backups/
+/backup/
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+*.rar
+
+# ---------------------------------------------------------------------
+# Laravel runtime data  (sessions, cache, logs, uploads, compiled views)
+# ---------------------------------------------------------------------
+/storage/app/private/*
+!/storage/app/private/.gitignore
+/storage/app/public/*
+!/storage/app/public/.gitignore
+/storage/framework/cache/*
+/storage/framework/sessions/*
+/storage/framework/views/*
+/storage/framework/testing/*
+!/storage/framework/**/.gitignore
+/storage/logs/*
+!/storage/logs/.gitignore
+/storage/pail
+/storage/debugbar
+/bootstrap/cache/*
+!/bootstrap/cache/.gitignore
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+/public/storage
+
+# ---------------------------------------------------------------------
+# Dependencies & build output (rebuilt with composer install / npm ci / npm run build)
+# ---------------------------------------------------------------------
+/vendor
 /node_modules
 /public/build
-/public/fonts-manifest.dev.json
 /public/hot
-/public/storage
-/storage/*.key
-/storage/pail
-/vendor
+/public/fonts-manifest.dev.json
+/.vite
+/dist
+
+# ---------------------------------------------------------------------
+# Tests, coverage, tooling caches
+# ---------------------------------------------------------------------
+.phpunit.result.cache
+/.phpunit.cache
+.phpunit.cache/
+/coverage
+/.nyc_output
+.php-cs-fixer.cache
+.phpcs-cache
+.phpstan.cache
+.eslintcache
+.stylelintcache
+*.tsbuildinfo
+/test-results
+/playwright-report
+/playwright/.cache
+
+# ---------------------------------------------------------------------
+# GitHub Actions / Dependabot - this project does not push any .github files
+# ---------------------------------------------------------------------
+/.github/
+
+# ---------------------------------------------------------------------
+# Editors, AI assistants, OS junk
+# ---------------------------------------------------------------------
+/.idea
+/.vscode
+/.nova
+/.zed
+/.fleet
+/.cursor/
+/.codex
+/.claude/
+/.aider*
+/.continue/
+.phpactor.json
 _ide_helper.php
+_ide_helper_models.php
+.phpstorm.meta.php
 Homestead.json
 Homestead.yaml
+.DS_Store
+.AppleDouble
+.LSOverride
 Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/

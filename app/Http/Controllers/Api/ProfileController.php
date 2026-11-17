@@ -5,11 +5,15 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ChangePasswordRequest;
 use App\Http\Requests\UpdateProfileRequest;
+use App\Services\Auth\SessionLogin;
 use App\Support\Formats;
+use App\Support\Logbook\LogbookRules;
+use App\Support\Logbook\LogbookStore;
 use App\Support\ProfilePhotoStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class ProfileController extends Controller
@@ -29,17 +33,32 @@ class ProfileController extends Controller
         return response()->json(['user' => $user->fresh()->toClient()]);
     }
 
-    /** Set or change the password used for Student ID login. */
-    public function password(ChangePasswordRequest $request): JsonResponse
+    /** Account preferences saved on the server (colour theme), so they follow the person to any device. */
+    public function preferences(Request $request, LogbookStore $store): JsonResponse
+    {
+        $data = $request->validate(['theme' => ['required', 'string', Rule::in(LogbookRules::THEMES)]]);
+
+        $user = $request->user();
+        $store->saveTheme($user, $data['theme']);
+
+        return response()->json(['user' => $user->fresh()->toClient()]);
+    }
+
+    /** Change the password used for Student ID login. */
+    public function password(ChangePasswordRequest $request, SessionLogin $sessions): JsonResponse
     {
         $user = $request->user();
         $data = $request->validated();
 
-        if ($user->password && ! Hash::check($data['current_password'] ?? '', $user->password)) {
+        if (! $user->password || ! Hash::check($data['current_password'] ?? '', $user->password)) {
             throw ValidationException::withMessages(['current_password' => 'Your current password is incorrect.']);
         }
 
         $user->update(['password' => $data['password']]);
+
+        // Sign out every OTHER device: whoever had the old password (or a stolen session)
+        // loses access. The device making this request stays signed in.
+        $sessions->revokeOthers($user, $request->session()->getId());
 
         return response()->json(['user' => $user->fresh()->toClient()]);
     }
@@ -66,7 +85,7 @@ class ProfileController extends Controller
         return response()->json(['user' => $user->fresh()->toClient()]);
     }
 
-    /** Remove the profile photo; the picture falls back to the Google avatar, then initials. */
+    /** Remove the profile photo; the app falls back to the person's initials. */
     public function destroyPhoto(Request $request): JsonResponse
     {
         $user = $request->user();

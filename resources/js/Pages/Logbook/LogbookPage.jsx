@@ -5,6 +5,7 @@ import MobileTabBar from "../../Components/shared/MobileTabBar";
 import AppBar from "../../Components/shared/AppBar";
 import Sheet, { ConfirmSheet } from "../../Components/shared/Sheet";
 import EntryCard from "../../Components/logbook/EntryCard";
+import { EVENTS } from "../../config/constant";
 import { useAuth } from "../../context/AuthContext";
 import { useNotifications } from "../../context/NotificationContext";
 import { useLiveClock } from "../../hooks/useLiveClock";
@@ -38,7 +39,7 @@ import {
 } from "../../utils/time";
 import { completionFor } from "../../utils/dutyStatus";
 import { liveEntryProgress } from "../../utils/liveProgress";
-import { clientProblem, traineeNameProblem, targetHoursProblem, MAX_TARGET_HOURS, CLIENT_NAME_MAX, clean } from "../../utils/validators";
+import { clientProblem, traineeNameProblem, targetHoursProblem, filterTraineeNameInput, MAX_TARGET_HOURS, CLIENT_NAME_MAX, clean } from "../../utils/validators";
 import { COMPANY_TYPES, WEEKDAYS, normalizeClient, isWorkDay, dailyHoursFor, scheduleDaysLabel, defaultsForType, clientCoverage } from "../../utils/schedule";
 import "./logbook.css";
 
@@ -157,13 +158,22 @@ export default function LogbookPage() {
   const { notify } = useNotifications(); // bell history only (milestones + shift reminders)
   const toast = useToast();               // results: entry added, report exported…
   const popup = usePopup();               // things that must be read once or that block an action
+
+  // The server refused something we tried to save (HTTP 422). The local copy is kept, but the
+  // person must know it did not reach the account.
+  useEffect(() => {
+    const onRejected = (e) => toast.error(e.detail?.message || "Some changes could not be saved to your account.", { title: "Not saved to server", key: "sync-rejected" });
+    window.addEventListener("occ-sync-rejected", onRejected);
+    return () => window.removeEventListener("occ-sync-rejected", onRejected);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const liveNow = useLiveClock(1000);
 
   // Stable per-account id — every piece of duty-log data below is scoped to
-  // this, so two different Google accounts signed in on the same browser
-  // never see or overwrite each other's hours. `sub` is Google's permanent
-  // account id; email is only a fallback for older sessions that predate it
-  // being stored.
+  // this, so two different accounts signed in on the same browser
+  // never see or overwrite each other's hours. `sub` is the account's
+  // permanent id; email is only a fallback for older sessions that predate
+  // it being stored.
   const userId = user?.sub || user?.email || null;
 
   const [loaded, setLoaded] = useState(false);
@@ -257,7 +267,7 @@ export default function LogbookPage() {
   }, [location.state]);
 
   // Load persisted logbook state — scoped to the signed-in account, and
-  // re-run whenever the account changes (e.g. signing out of one Google
+  // re-run whenever the account changes (e.g. signing out of one
   // account and into another) so the new account never inherits data left
   // in state from the previous one.
   useEffect(() => {
@@ -289,7 +299,7 @@ export default function LogbookPage() {
       setLoaded(true);
     }
 
-    // First time this Google account has ever signed in here (or simply
+    // First time this account has ever signed in here (or simply
     // hasn't completed the walkthrough yet) — show the onboarding guide
     // automatically. Checked per-account, not just "is this a fresh
     // browser", so it still shows for a new account even on a browser
@@ -311,13 +321,32 @@ export default function LogbookPage() {
     setSaveState(ok ? "saved" : "error");
   }, [userId]);
 
+  // Debounced save. `pendingRef` holds an edit that is not written yet, so closing the app
+  // or leaving the page within the 400 ms window can no longer drop the last change.
+  const pendingRef = useRef(null);
   useEffect(() => {
     if (!loaded) return;
+    pendingRef.current = { studentName, targetHours, clients, entries, lastClientId };
     const t = setTimeout(() => {
-      persist({ studentName, targetHours, clients, entries, lastClientId });
+      if (pendingRef.current) { persist(pendingRef.current); pendingRef.current = null; }
     }, 400);
     return () => clearTimeout(t);
   }, [loaded, studentName, targetHours, clients, entries, lastClientId, persist]);
+
+  useEffect(() => {
+    const writeNow = () => {
+      if (pendingRef.current) { persist(pendingRef.current); pendingRef.current = null; }
+    };
+    window.addEventListener("pagehide", writeNow);
+    window.addEventListener(EVENTS.flush, writeNow); // sent right before sign-out
+    document.addEventListener("visibilitychange", writeNow);
+    return () => {
+      window.removeEventListener("pagehide", writeNow);
+      window.removeEventListener(EVENTS.flush, writeNow);
+      document.removeEventListener("visibilitychange", writeNow);
+      writeNow(); // leaving the page (or switching account): save with THIS account's persist
+    };
+  }, [persist]);
 
   // The wall clock this render is anchored to — recomputed every tick of
   // useLiveClock() so every live-progress calculation below stays in sync
@@ -1450,7 +1479,7 @@ export default function LogbookPage() {
 
         <div className="fld">
           <label htmlFor="d-task">Task / remarks <em>(optional)</em></label>
-          <input id="d-task" type="text" placeholder="What are you working on?" value={draft.task} onChange={(e) => setDraft((d) => ({ ...d, task: e.target.value }))} />
+          <input id="d-task" type="text" maxLength={500} placeholder="What are you working on?" value={draft.task} onChange={(e) => setDraft((d) => ({ ...d, task: e.target.value }))} />
         </div>
       </Sheet>
 
@@ -1518,7 +1547,7 @@ export default function LogbookPage() {
           <label htmlFor="s-name">Trainee name <span className="req">*</span></label>
           <input
             id="s-name" value={studentName} maxLength={80} aria-required="true" aria-invalid={!!setupErrors.name} placeholder="Juan Dela Cruz"
-            onChange={(e) => { setStudentName(e.target.value); setSetupErrors((x) => ({ ...x, name: undefined })); }}
+            onChange={(e) => { setStudentName(filterTraineeNameInput(e.target.value)); setSetupErrors((x) => ({ ...x, name: undefined })); }}
             onBlur={() => setSetupErrors((x) => ({ ...x, name: traineeNameProblem(studentName) || undefined }))}
           />
           {setupErrors.name ? <span className="fld-error" role="alert">{setupErrors.name}</span> : <span className="fld-hint">Printed on your PDF report.</span>}

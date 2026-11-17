@@ -1,3 +1,6 @@
+// FIRST import: hides the UI while browser DevTools is open (OCC_INSPECT_PROTECTION).
+// It must run before anything else so it also covers the phone-only screen and DevTools device mode.
+import "./utils/devtoolsGuard";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import MobileOnlyScreen from "./Components/shared/MobileOnlyScreen";

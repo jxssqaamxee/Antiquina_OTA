@@ -2,52 +2,49 @@
 
 namespace App\Support;
 
-use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\URL;
-
 /**
- * Profile photos live on the PRIVATE disk (storage/app/private), not the public
- * one, so they cannot be opened by guessing a /storage/... address.
+ * Profile photos live on the PRIVATE disk (storage/app/private), not the public one,
+ * so they cannot be opened by guessing a /storage/... address.
  *
- * The API returns a plain `picture` URL so <img src> keeps working. That URL is a
- * SIGNED, relative link to GET /media/{dir}/{file}: it only works while the
- * signature is valid and any edit to it is rejected.
- *
- * The expiry is rounded to a time bucket (occ.media.url_ttl_hours, default 24 h),
- * so the same photo gets the SAME URL for hours and the browser can cache it.
- * A URL is valid for between one and two buckets; /api/me always hands out a fresh one.
+ * They are served only by GET /api/me/photo, and only to the signed-in owner's session.
+ * There are no signed / shareable links: a copied URL is useless without the session cookie.
+ * The `v` query value only changes when the photo changes, so the browser can cache it.
  */
 class PrivateMedia
 {
     /** Private disk (storage/app/private). */
     public const DISK = 'local';
 
-    /** Only these folders can ever be served through /media. */
+    /** Only these folders can ever be served. */
     public const DIRECTORIES = ['profile-pictures'];
 
-    public static function bucketSeconds(): int
+    /** URL the app puts in <img src> for the OWNER's stored path, or null. */
+    public static function url(?string $path): ?string
     {
-        return max(1, (int) config('occ.media.url_ttl_hours', 24)) * 3600;
+        return self::split($path) ? '/api/me/photo?v='.substr(sha1((string) $path), 0, 16) : null;
     }
 
-    /** Signed relative URL for a stored path such as "profile-pictures/x.jpg", or null. */
-    public static function url(?string $path): ?string
+    /**
+     * URL for the OWNER's photo, or null when there is none OR the file is gone from disk
+     * (e.g. storage/ was not copied with the database). A dead URL would make every avatar
+     * request 404 on every screen; null makes the app show initials straight away.
+     */
+    public static function urlIfExists(?string $path): ?string
     {
         $parts = self::split($path);
         if (! $parts) {
             return null;
         }
 
-        $bucket = self::bucketSeconds();
-        $expires = (intdiv(now()->getTimestamp(), $bucket) + 2) * $bucket;
+        try {
+            if (! \Illuminate\Support\Facades\Storage::disk(self::DISK)->exists($parts[0].'/'.$parts[1])) {
+                return null;
+            }
+        } catch (\Throwable) {
+            return null;
+        }
 
-        // Must be a date object: a bare int would be read as "seconds from now".
-        return URL::temporarySignedRoute(
-            'media.show',
-            Carbon::createFromTimestamp($expires),
-            ['dir' => $parts[0], 'file' => $parts[1]],
-            absolute: false,
-        );
+        return self::url($path);
     }
 
     /** @return array{0:string,1:string}|null [directory, filename] when servable */

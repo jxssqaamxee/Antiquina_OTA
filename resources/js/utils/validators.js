@@ -14,13 +14,12 @@ export const NAME_REGEX = /^[\p{L}][\p{L}\s'-]*$/u;
 // Institutional e-mail: occ.lastname.firstname@gmail.com (digits after the first name optional).
 export const SCHOOL_EMAIL_REGEX = /^occ\.([a-z]+)\.([a-z]+)(\d{0,6})@gmail\.com$/;
 
-// Any Gmail address (Google sign-up: Google supplies the address).
+// Any Gmail address (loose check, e.g. on the forgot-password form).
 export const GMAIL_REGEX = /^[A-Za-z0-9._%+-]+@gmail\.com$/i;
 
 export const FORMAT_HINTS = {
   studentId: "Format: YYYY-N-NNNNN, e.g. 2021-2-04062.",
   email: "Format: occ.lastname.firstname@gmail.com (all lowercase). The lastname must match your Last name.",
-  gmail: "Taken from your Google account.",
   name: "Letters, spaces, hyphens and apostrophes only.",
   password: "At least 8 characters, with an uppercase letter, a lowercase letter and a number.",
 };
@@ -57,6 +56,12 @@ export const filterStudentIdInput = (v) => {
 
 export const normalizeEmailInput = (v) => String(v || "").replace(/\s/g, "").toLowerCase();
 
+// 6-digit email verification code: numbers only, nothing else can be typed or pasted in.
+export const filterCodeInput = (v) => String(v || "").replace(/\D/g, "").slice(0, 6);
+
+// Trainee name on the logbook header: letters, spaces, dots, hyphens and apostrophes only.
+export const filterTraineeNameInput = (v) => String(v || "").replace(/[^\p{L}\s.'-]/gu, "");
+
 // ---------------------------------------------------------------------------
 // Validators: return { field: "message" } — empty object means valid.
 // ---------------------------------------------------------------------------
@@ -78,12 +83,14 @@ function nameErrors(e, key, label, value, required) {
 
 export function validateLogin(f) {
   const e = {};
-  if (!clean(f.student_id)) e.student_id = "Student ID is required.";
+  const sid = clean(f.student_id);
+  if (!sid) e.student_id = "Student ID is required.";
+  else if (!STUDENT_ID_REGEX.test(sid)) e.student_id = FORMAT_ERRORS.studentId;
   if (!f.password) e.password = "Password is required.";
   return e;
 }
 
-export function validateRegister(f, viaGoogle = false) {
+export function validateRegister(f) {
   const e = {};
   const sid = clean(f.student_id);
   if (!sid) e.student_id = "Student ID is required.";
@@ -95,18 +102,15 @@ export function validateRegister(f, viaGoogle = false) {
 
   const email = normalizeEmailInput(f.email);
   if (!email) e.email = "Gmail address is required.";
-  else if (viaGoogle) { if (!GMAIL_REGEX.test(email)) e.email = FORMAT_ERRORS.gmail; }
   else if (!SCHOOL_EMAIL_REGEX.test(email)) e.email = FORMAT_ERRORS.email;
   else if (!e.last_name && SCHOOL_EMAIL_REGEX.exec(email)[1] !== emailNameSegment(f.last_name)) e.email = FORMAT_ERRORS.emailLastName(f.last_name);
 
   if (!f.course) e.course = "Please choose your course.";
 
-  if (!viaGoogle) {
-    const p = passwordProblem(f.password);
-    if (p) e.password = p;
-    if (!f.password_confirmation) e.password_confirmation = "Please confirm your password.";
-    else if (f.password !== f.password_confirmation) e.password_confirmation = "Passwords do not match.";
-  }
+  const p = passwordProblem(f.password);
+  if (p) e.password = p;
+  if (!f.password_confirmation) e.password_confirmation = "Please confirm your password.";
+  else if (f.password !== f.password_confirmation) e.password_confirmation = "Passwords do not match.";
   return e;
 }
 
@@ -119,15 +123,22 @@ export function validateProfile(f) {
   return e;
 }
 
-export function validatePasswordChange(pw, hasPassword) {
+export function validatePasswordChange(pw) {
   const e = {};
-  if (hasPassword && !pw.current_password) e.current_password = "Enter your current password.";
+  if (!pw.current_password) e.current_password = "Enter your current password.";
   const p = passwordProblem(pw.password);
   if (p) e.password = p;
-  else if (hasPassword && pw.password === pw.current_password) e.password = "Your new password must be different from your current one.";
+  else if (pw.password === pw.current_password) e.password = "Your new password must be different from your current one.";
   if (!pw.password_confirmation) e.password_confirmation = "Please confirm your new password.";
   else if (pw.password !== pw.password_confirmation) e.password_confirmation = "Passwords do not match.";
   return e;
+}
+
+/** The 6-digit email verification code. */
+export function codeProblem(code) {
+  if (!code) return "Enter the 6-digit code from your email.";
+  if (!/^\d{6}$/.test(code)) return "The code is 6 digits, numbers only.";
+  return null;
 }
 
 // ---- Logbook ---------------------------------------------------------------

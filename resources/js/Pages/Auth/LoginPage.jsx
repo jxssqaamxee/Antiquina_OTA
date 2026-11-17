@@ -1,14 +1,14 @@
-import React, { useEffect, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import React, { useEffect, useRef, useState } from "react";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { IdCard, Lock } from "lucide-react";
 import AuthShell, {
-  Divider, LedgerBanner, LedgerButton, LedgerInput, LedgerPasswordInput, LedgerRow,
+  LedgerBanner, LedgerButton, LedgerInput, LedgerPasswordInput, LedgerRow,
 } from "../../Components/auth/AuthShell";
-import GoogleSignInButton from "../../Components/auth/GoogleSignInButton";
+import { loadRememberedCredentials, saveRememberedCredentials, clearRememberedCredentials } from "../../hooks/useRememberedCredentials";
 import api, { errorMessage, fieldErrors } from "../../config/axiosConfig";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
-import { validateLogin, focusFirstInvalid, clean, FORMAT_HINTS } from "../../utils/validators";
+import { validateLogin, focusFirstInvalid, clean, filterStudentIdInput, FORMAT_HINTS } from "../../utils/validators";
 
 // iOS opens the keyboard only for a field focused by a tap, so only auto-focus
 // with a real mouse. (utils/touchFocusGuard.js enforces the same on touch.)
@@ -23,15 +23,40 @@ export default function LoginPage() {
   const toast = useToast();
   const navigate = useNavigate();
   const location = useLocation();
+  const [params] = useSearchParams();
+  // /login?verify=ok|invalid: where the link in the verification email lands.
+  const verify = params.get("verify");
   const [studentId, setStudentId] = useState("");
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
-  const [remember, setRemember] = useState(true);
+  const [remember, setRemember] = useState(false);
+  const userTyped = useRef(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [errors, setErrors] = useState({});
 
   useEffect(() => { document.title = "Sign in | OCC Duty Log"; }, []);
+
+  // Prefill from anything remembered on a prior sign-in in this tab (only written when
+  // "Keep this session open" was ticked). Survives logout, like sclf_APP.
+  useEffect(() => {
+    const remembered = loadRememberedCredentials();
+    if (remembered) {
+      setStudentId(remembered.studentId || "");
+      setPassword(remembered.password || "");
+      setRemember(true);
+      return undefined;
+    }
+    // Nothing remembered: the form must start empty. A browser's autofill may fill it a
+    // moment after load, so wipe anything the person did not type.
+    const wipe = () => {
+      if (userTyped.current) return;
+      setStudentId("");
+      setPassword("");
+    };
+    const timers = [50, 250, 700, 1500].map((ms) => window.setTimeout(wipe, ms));
+    return () => timers.forEach(window.clearTimeout);
+  }, []);
 
   const goHome = () => {
     flagWelcome();
@@ -58,6 +83,9 @@ export default function LoginPage() {
     try {
       const { data } = await api.post("/auth/login", { student_id: clean(studentId), password, remember });
       await signIn(data, remember);
+      // Ticked: keep the ID + password for the next visit to this form. Unticked: leave nothing behind.
+      if (remember) saveRememberedCredentials(clean(studentId), password);
+      else clearRememberedCredentials();
       goHome();
     } catch (err) {
       setErrors(fieldErrors(err));
@@ -66,31 +94,24 @@ export default function LoginPage() {
     }
   }
 
-  async function google(credential) {
-    setError(""); setBusy(true);
-    try {
-      const { data, status } = await api.post("/auth/google", { credential });
-      if (status === 202 || data.status === "needs_registration") {
-        // First time with this Google account: finish sign-up (Student ID, name, course).
-        navigate("/register", { replace: true, state: { google: { credential, profile: data.profile } } });
-        return;
-      }
-      await signIn(data, true);
-      goHome();
-    } catch (err) {
-      fail(errorMessage(err, "Google sign-in failed. Please try again."));
-      setBusy(false);
-    }
-  }
-
   return (
     <AuthShell
+      docType="ACCESS LOG"
       caseSeed="LOG"
       title={<>Open your <span className="accent">session</span></>}
       subtitle="Sign in with your Student ID to open your duty logbook."
-      footer={<>No record on file? <Link to="/register">Open a new case file</Link></>}
+      railHeadline="Welcome back to your duty log."
+      railNote="One record, one login — your hours, host clients and daily entries live under a single account."
+      gate
+      gateName="Opol Community College"
+      gateLabel="Login"
+      gateDefaultOpen={!!location.state?.registered || !!location.state?.passwordReset || !!verify}
+      footer={<>No record on file? <Link to="/register">Sign up here</Link></>}
     >
       {location.state?.registered && <LedgerBanner tone="notice">Account created. Sign in to continue.</LedgerBanner>}
+      {location.state?.passwordReset && <LedgerBanner tone="notice">Your password was reset. Sign in with the new one.</LedgerBanner>}
+      {verify === "ok" && <LedgerBanner tone="notice">Your email is verified. Sign in to continue.</LedgerBanner>}
+      {verify === "invalid" && <LedgerBanner>That verification link is no longer valid. Sign in and press “Resend email” to get a new one.</LedgerBanner>}
       <LedgerBanner>{error}</LedgerBanner>
 
       <form onSubmit={submit} noValidate>
@@ -100,11 +121,11 @@ export default function LoginPage() {
           hint={FORMAT_HINTS.studentId}
         >
           <LedgerInput
-            id="student_id" value={studentId} autoComplete="username"
-            autoCapitalize="characters" autoCorrect="off" spellCheck={false} inputMode="text"
+            id="student_id" value={studentId} autoComplete="off" onKeyDown={() => { userTyped.current = true; }} onPaste={() => { userTyped.current = true; }} maxLength={12}
+            autoCapitalize="none" autoCorrect="off" spellCheck={false} inputMode="numeric"
             enterKeyHint="next" placeholder="2021-2-04062" autoFocus={canAutoFocus}
             aria-required="true" aria-invalid={!!errors.student_id}
-            onChange={(e) => { setStudentId(e.target.value); setError(""); setErrors((x) => ({ ...x, student_id: undefined })); }}
+            onChange={(e) => { setStudentId(filterStudentIdInput(e.target.value)); setError(""); setErrors((x) => ({ ...x, student_id: undefined })); }}
           />
         </LedgerRow>
 
@@ -114,26 +135,24 @@ export default function LoginPage() {
         >
           <LedgerPasswordInput
             id="password" show={show} onToggle={() => setShow((v) => !v)} value={password}
-            autoComplete="current-password" enterKeyHint="go" placeholder="Your password"
+            autoComplete="new-password" onKeyDown={() => { userTyped.current = true; }} onPaste={() => { userTyped.current = true; }} enterKeyHint="go" placeholder="Your password" maxLength={100}
             aria-required="true" aria-invalid={!!errors.password}
             onChange={(e) => { setPassword(e.target.value); setError(""); setErrors((x) => ({ ...x, password: undefined })); }}
           />
         </LedgerRow>
 
-        <div className="lg-remember-row">
-          <label className="lg-remember">
-            <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+        <div className="lg-row-checkbox" style={{ margin: "10px 0 12px" }}>
+          <label className="lg-remember" htmlFor="remember">
+            <input id="remember" type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
             Keep this session open
           </label>
+          <Link to="/forgot-password" className="lg-forgot">Forgot password?</Link>
         </div>
 
         <LedgerButton disabled={busy}>
           {busy ? <><span className="au-spin" /> Signing in…</> : "Sign in"}
         </LedgerButton>
       </form>
-
-      <Divider>or</Divider>
-      <GoogleSignInButton onCredential={google} disabled={busy} />
     </AuthShell>
   );
 }
