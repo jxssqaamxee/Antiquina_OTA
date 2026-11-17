@@ -30,8 +30,8 @@ export async function fireSystemNotification(title, body, tag) {
   const options = {
     body,
     tag,
-    icon: "/icons/icon-192.png?v=3",
-    badge: "/icons/icon-96.png?v=3",
+    icon: "/icons/icon-192.png?v=4",
+    badge: "/icons/icon-96.png?v=4",
     data: { url: "/logbook" },
   };
   try {

@@ -4,10 +4,10 @@
 //    and then offline.html, so an installed app still opens with no signal.
 //  - /api/* is NEVER cached (private, per-user data); the app keeps its own
 //    offline copy of the logbook and syncs when the connection returns.
-const VERSION = "occ-v6"; // bumped: new icon URLs + stateless manifest
+const VERSION = "occ-v7"; // bumped: v=4 icons (icons re-synced with SCLF)
 const SHELL = `${VERSION}-shell`;
 const ASSETS = `${VERSION}-assets`;
-const PRECACHE = ["/offline.html", "/icons/icon-192.png?v=3", "/icons/icon-512.png?v=3"];
+const PRECACHE = ["/offline.html", "/icons/icon-192.png?v=4", "/icons/icon-512.png?v=4"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(SHELL).then((c) => c.addAll(PRECACHE)).catch(() => {}));
@@ -36,8 +36,8 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(p.title || "OCCDL", {
       body: p.body || "",
-      icon: p.icon || "/icons/icon-192.png?v=3",
-      badge: "/icons/icon-96.png?v=3",
+      icon: p.icon || "/icons/icon-192.png?v=4",
+      badge: "/icons/icon-96.png?v=4",
       // Same tag as the in-app reminder, so one reminder never shows twice.
       tag: p.tag || "occ-notification",
       renotify: false,
