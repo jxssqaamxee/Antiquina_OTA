@@ -467,10 +467,6 @@ html { overscroll-behavior-y: none; }
 .theme-opt.is-active { border-color: var(--accent-text); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), .18); }
 .theme-swatch { width: 34px; height: 34px; border-radius: 12px; border: 1.5px solid rgba(100, 116, 139, .4); position: relative; overflow: hidden; }
 .theme-swatch::after { content: ""; position: absolute; right: 0; bottom: 0; width: 55%; height: 55%; border-radius: 12px 0 0 0; background: var(--sw-accent); }
-.pf-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 22px; padding: 4px 0; }
-.pf-link { display: inline-flex; align-items: center; gap: 7px; min-height: 40px; padding: 0 6px; background: none; border: 0; font: inherit; font-size: 14px; font-weight: 750; color: var(--ink-soft); -webkit-tap-highlight-color: transparent; }
-.pf-link:active { opacity: .6; }
-.pf-link-danger { color: var(--bad); }
 
 /* Profile photo: avatar with a camera button (Phase 3) */
 .pf-avatar-wrap { position: relative; flex: none; width: 64px; height: 64px; }
@@ -483,3 +479,21 @@ html { overscroll-behavior-y: none; }
 }
 .pf-cam:active { transform: scale(.94); }
 .pf-cam:disabled { opacity: .6; }
+
+/* Profile: read-only facts (Gmail, Student ID) shown as plain locked lines, so only the fields you can type in look like inputs. */
+.pf-form .pf-locked {
+  display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 4px 2px; font-size: 15px; font-weight: 650;
+  color: var(--ink-soft); overflow-wrap: anywhere;
+}
+.pf-form .pf-locked svg { flex: none; opacity: .7; }
+
+/* Profile: Personal details and Change password stay closed until tapped, so nothing is typed by accident. */
+.pf-form .pf-toggle {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 44px; padding: 0;
+  background: none; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.pf-form .pf-toggle .pf-form-title { margin: 0; }
+.pf-form .pf-chev { flex: none; opacity: .7; transition: transform .18s ease; }
+.pf-form .pf-toggle[aria-expanded="true"] .pf-chev { transform: rotate(180deg); }
+.pf-form .pf-body { padding-top: 8px; }
+.pf-form .pf-body[hidden] { display: none; }

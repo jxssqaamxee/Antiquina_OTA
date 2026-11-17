@@ -24,7 +24,7 @@ final class LogbookRules
 
     public const CLIENT_TYPES = ['public', 'private', 'custom'];
     public const CATEGORIES = ['regular', 'evening', 'overtime'];
-    public const THEMES = ['white', 'black', 'blue', 'yellow', 'maroon'];
+    public const THEMES = ['white', 'black', 'blue', 'yellow', 'maroon', 'dark-white', 'dark-blue', 'dark-yellow', 'dark-maroon'];
 
     /** The ids the browser generates (Math.random().toString(36)) — letters, digits, dash, underscore. */
     public const ID_PATTERN = '/^[A-Za-z0-9_-]{1,32}$/';

@@ -2,7 +2,7 @@ import React, { Children, cloneElement, isValidElement, useEffect, useId, useSta
 import { Link } from "react-router-dom";
 import { Sun, Moon, ShieldCheck, Eye, EyeOff, CheckCircle2, XCircle } from "lucide-react";
 import { useAppTheme } from "../../hooks/useAppTheme";
-import { setTheme } from "../../utils/theme";
+import { setTheme, isDarkId } from "../../utils/theme";
 import logo from "../../assets/images/site-logo.png";
 import occBg from "../../assets/images/occ.webp";
 import "../../styles/ledger.css"; // sclf_APP "Intake Ledger" design (ported 1:1)
@@ -38,7 +38,7 @@ let gateOpenMemory = false;
 // Light <-> dark toggle. Remembers which light theme you were on.
 let lastLight = "white";
 function toggleDark(theme) {
-  if (theme === "black") return setTheme(lastLight || "white");
+  if (isDarkId(theme)) return setTheme(lastLight || "white");
   lastLight = theme;
   return setTheme("black");
 }

@@ -140,8 +140,7 @@ export default function VerifyEmailPage() {
   }
 
   async function signOut() {
-    await logout();
-    navigate("/login", { replace: true });
+    try { await logout(); } finally { navigate("/login", { replace: true }); }
   }
 
   const lastNameSeg = emailNameSegment(user?.last_name) || "lastname";

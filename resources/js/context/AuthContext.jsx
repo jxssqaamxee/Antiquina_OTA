@@ -109,19 +109,34 @@ export function AuthProvider({ children }) {
   }, [establish]);
 
   const logout = useCallback(async () => {
-    const current = user;
+    const current = userRef.current;
+    // Every step below is best-effort and time-limited: signing out must ALWAYS finish. Before, one
+    // step that never answered (the push worker, a slow sync) left the button "doing nothing" and the
+    // person still signed in.
+    const attempt = (fn, ms) => Promise.race([
+      Promise.resolve().then(fn).catch(() => {}),
+      new Promise((resolve) => setTimeout(resolve, ms)),
+    ]);
+
     // Push pending edits FIRST, while the session is still valid. Done after it ends
     // every push would be rejected and the cache could never be wiped.
-    window.dispatchEvent(new CustomEvent(EVENTS.flush)); // screens save their last edit first
-    if (current) await releaseUser(current.sub);
+    try { window.dispatchEvent(new CustomEvent(EVENTS.flush)); } catch { /* ignore */ } // screens save their last edit first
+    if (current) await attempt(() => releaseUser(current.sub), 6000);
     // Stop this phone getting the next person's reminders (needs the session, so before logout).
-    try { await forgetThisDevice(); } catch { /* best effort */ }
-    try { await api.post("/auth/logout"); } catch { /* session may already be dead */ }
+    await attempt(() => forgetThisDevice(), 6000);
+    // The server session itself. If this fails the person would still be signed in after a reload,
+    // so try once more before giving up.
+    let ended = false;
+    for (let i = 0; i < 2 && !ended; i += 1) {
+      try { await api.post("/auth/logout", null, { timeout: 8000 }); ended = true; }
+      catch (e) { if (e.response && (e.response.status === 401 || e.response.status === 419)) ended = true; /* already gone */ }
+    }
+    stopSync();
     setSignedIn(false);
     writeMe(null);
     clearPhotoCache();
     setUser(null);
-  }, [user]);
+  }, []);
 
   const updateUser = useCallback(async (u) => {
     const justVerified = userRef.current?.email_verified === false && u.email_verified !== false;

@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Camera, Download, GraduationCap, IdCard, Lock, LogOut, Mail, User } from "lucide-react";
+import { Camera, ChevronDown, GraduationCap, IdCard, Lock, Mail, User } from "lucide-react";
 import api, { errorMessage, fieldErrors } from "../../config/axiosConfig";
 import { useAuth } from "../../context/AuthContext";
 import { useConfig } from "../../config/serverConfig";
@@ -17,30 +16,28 @@ import {
 } from "../../utils/validators";
 import MobileTabBar from "../../Components/shared/MobileTabBar";
 import AppBar from "../../Components/shared/AppBar";
-import { THEMES, getTheme, setTheme, saveThemeToAccount } from "../../utils/theme";
 import logo from "../../assets/images/site-logo.png";
 import Footer from "../../Components/shared/Footer";
-import { canNativePrompt, isInstalled, promptInstall, subscribe } from "../../utils/pwaInstall";
+import { subscribe } from "../../utils/pwaInstall";
 import "../../styles/auth.css";
 
 const req = <span className="lg-required" aria-hidden="true">*</span>;
 
 export default function ProfilePage() {
-  const { user, updateUser, logout } = useAuth();
+  const { user, updateUser } = useAuth();
   const toast = useToast();
   const config = useConfig();
-  const navigate = useNavigate();
   const [form, setForm] = useState({ first_name: user.first_name, middle_name: user.middle_name || "", last_name: user.last_name, course: user.course });
   const [pw, setPw] = useState({ current_password: "", password: "", password_confirmation: "" });
   const [msg, setMsg] = useState({ profile: null, password: null });
   const [errs, setErrs] = useState({});
   const [busy, setBusy] = useState("");
   const [, force] = useState(0);
-  const [theme, setThemeState] = useState(getTheme);
   const [photoOpen, setPhotoOpen] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [showPw, setShowPw] = useState(false);
   const [showCur, setShowCur] = useState(false);
+  const [openSec, setOpenSec] = useState(null); // "details" | "password" | null: closed until tapped, so nothing is typed by accident
 
   useEffect(() => { document.title = "Profile | OCCDL"; }, []);
   useEffect(() => subscribe(() => force((n) => n + 1)), []);
@@ -126,17 +123,11 @@ export default function ProfilePage() {
     } finally { setBusy(""); }
   }
 
-  async function signOut() {
-    await logout();
-    navigate("/login", { replace: true });
-  }
-
   const courses = config?.courses || [];
-  const showInstall = !isInstalled() && canNativePrompt();
 
   return (
     <div className="app">
-      <AppBar title="Profile" subtitle="Account & appearance" back="/logbook" />
+      <AppBar title="Profile settings" subtitle="Your account" back="/logbook" />
 
       <main className="app-main">
         <section className="pf-hero" style={{ "--pf-logo": `url("${logo}")` }}>
@@ -156,25 +147,13 @@ export default function ProfilePage() {
         </section>
 
         <div className="pf-stack">
-          <section className="card">
-            <h3 className="card-title">Appearance</h3>
-            <p className="pf-muted">Pick a colour theme. It is saved on your account and follows you to any device.</p>
-            <div className="theme-grid" role="radiogroup" aria-label="Colour theme">
-              {THEMES.map((t) => (
-                <button
-                  key={t.id} type="button" role="radio" aria-checked={theme === t.id}
-                  className={`theme-opt${theme === t.id ? " is-active" : ""}`}
-                  onClick={() => { setThemeState(setTheme(t.id)); saveThemeToAccount(t.id); }}
-                >
-                  <span className="theme-swatch" style={{ background: t.bg, "--sw-accent": t.accent }} />
-                  {t.label}
-                </button>
-              ))}
-            </div>
-          </section>
-
           <form className="card pf-form" onSubmit={saveProfile} noValidate>
-            <h3 className="card-title pf-form-title">Personal details</h3>
+            <button type="button" className="pf-toggle" aria-expanded={openSec === "details"} onClick={() => setOpenSec(openSec === "details" ? null : "details")}>
+              <span className="card-title pf-form-title">Personal details</span>
+              <ChevronDown size={18} className="pf-chev" />
+            </button>
+            <div className="pf-body" hidden={openSec !== "details"}>
+            <p className="pf-muted" style={{ margin: "0 0 4px" }}>Tap a field and type to change it, then press Save changes.</p>
             <LedgerBanner tone={msg.profile?.tone}>{msg.profile?.text}</LedgerBanner>
 
             <LedgerRowPair index={1}>
@@ -201,16 +180,21 @@ export default function ProfilePage() {
               </LedgerSelect>
             </LedgerRow>
             <LedgerRow index={4} icon={Mail} htmlFor="pf_email" label="Gmail" hint="Your Gmail and Student ID can’t be changed here.">
-              <LedgerInput id="pf_email" value={user.email} readOnly />
+              <div id="pf_email" className="pf-locked"><Lock size={13} aria-hidden="true" />{user.email}</div>
             </LedgerRow>
             <LedgerRow index={5} icon={IdCard} htmlFor="pf_sid" label="Student ID">
-              <LedgerInput id="pf_sid" value={user.student_id} readOnly />
+              <div id="pf_sid" className="pf-locked"><Lock size={13} aria-hidden="true" />{user.student_id}</div>
             </LedgerRow>
             <button className="lg-submit" disabled={busy === "profile"}>{busy === "profile" ? "Saving…" : "Save changes"}</button>
+          </div>
           </form>
 
           <form className="card pf-form" onSubmit={savePassword} noValidate>
-            <h3 className="card-title pf-form-title">Change password</h3>
+            <button type="button" className="pf-toggle" aria-expanded={openSec === "password"} onClick={() => setOpenSec(openSec === "password" ? null : "password")}>
+              <span className="card-title pf-form-title">Change password</span>
+              <ChevronDown size={18} className="pf-chev" />
+            </button>
+            <div className="pf-body" hidden={openSec !== "password"}>
             <p className="pf-muted" style={{ margin: "0 0 4px" }}>Use at least 8 characters with upper and lower case letters and a number.</p>
             <LedgerBanner tone={msg.password?.tone}>{msg.password?.text}</LedgerBanner>
             <LedgerRow index={1} icon={Lock} htmlFor="pf_cur" error={errs.current_password} label={<>Current password {req}</>}>
@@ -226,12 +210,9 @@ export default function ProfilePage() {
             </LedgerRow>
             {!!pw.password && <RequirementChecklist password={pw.password} />}
             <button className="lg-submit" disabled={busy === "password" || !pw.password}>{busy === "password" ? "Saving…" : "Change password"}</button>
+          </div>
           </form>
 
-          <div className="pf-links">
-            {showInstall && <button type="button" className="pf-link" onClick={promptInstall}><Download size={16} /> Install app</button>}
-            <button type="button" className="pf-link pf-link-danger" onClick={signOut}><LogOut size={16} /> Sign out</button>
-          </div>
         </div>
         <Footer />
       </main>
