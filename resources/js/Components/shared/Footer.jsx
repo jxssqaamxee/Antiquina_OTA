@@ -8,7 +8,7 @@ export default function Footer() {
       <span className="app-footer__text">
         Developed by{" "}
         <a
-          href="https://antiquina-folio.vercel.app"
+          href="https://www.facebook.com/EphemeralKun"
           target="_blank"
           rel="noopener noreferrer"
         >

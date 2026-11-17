@@ -16,6 +16,7 @@ use Illuminate\Validation\ValidationException;
  *                (Google sign-up: the verified Gmail from Google is used as is)
  *  - Names       letters, spaces, hyphens, apostrophes
  *  - Password    8+ characters with upper-case, lower-case and a number
+ *  - Photo       required JPG/PNG/WebP, max 5 MB (plain upload, no content checks)
  */
 class RegisterRequest extends FormRequest
 {
@@ -78,6 +79,8 @@ class RegisterRequest extends FormRequest
                     },
                 ],
             'course' => ['required', 'string', Rule::in(Formats::courses())],
+            // Required for everyone (Google sign-up included) so staff can verify who you are.
+            'profile_photo' => ['required', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
             'password' => $viaGoogle ? ['nullable'] : ['required', 'string', 'max:100', 'confirmed', Password::defaults()],
         ];
     }
@@ -100,6 +103,11 @@ class RegisterRequest extends FormRequest
             'email.unique' => 'That email address is already registered. Sign in instead, or use a different email.',
             'course.required' => 'Please choose your course.',
             'course.in' => 'Please choose your course from the list.',
+            'profile_photo.required' => 'Profile photo is required so your coordinator can verify you.',
+            'profile_photo.image' => 'That file is not a picture. Use a JPG, PNG or WebP photo.',
+            'profile_photo.mimes' => 'Use a JPG, PNG or WebP photo.',
+            'profile_photo.max' => 'The photo must be smaller than 5 MB.',
+            'profile_photo.uploaded' => 'The photo could not be uploaded. It must be smaller than 5 MB.',
             'password.required' => 'Password is required.',
             'password.confirmed' => 'Passwords do not match.',
         ];

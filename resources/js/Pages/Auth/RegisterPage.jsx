@@ -1,13 +1,19 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Eye, EyeOff } from "lucide-react";
-import AuthShell, { Banner, Divider, Field } from "../../Components/auth/AuthShell";
+import { Camera, Check, GraduationCap, IdCard, Lock, Mail, User } from "lucide-react";
+import AuthShell, {
+  Divider, LedgerBanner, LedgerButton, LedgerGhostButton, LedgerInput, LedgerPasswordInput, LedgerRow,
+  LedgerRowPair, LedgerSelect, PasswordMatchNote, RequirementChecklist, StrengthTicks,
+} from "../../Components/auth/AuthShell";
 import GoogleSignInButton from "../../Components/auth/GoogleSignInButton";
+import PhotoUploadModal from "../../Components/shared/PhotoUploadModal";
 import api, { errorMessage, fieldErrors } from "../../config/axiosConfig";
 import { useConfig } from "../../config/serverConfig";
 import { useAuth } from "../../context/AuthContext";
+import { useToast } from "../../context/ToastContext";
+import { photoProblem } from "../../utils/photoFile";
 import {
-  FORMAT_HINTS, validateRegister, focusFirstInvalid, clean,
+  FORMAT_HINTS, validateRegister, clean, emailNameSegment,
   filterNameInput, filterStudentIdInput, normalizeEmailInput,
 } from "../../utils/validators";
 
@@ -19,10 +25,41 @@ const FILTERS = {
   last_name: filterNameInput,
   email: normalizeEmailInput,
 };
-const FIELD_ORDER = ["email", "student_id", "first_name", "middle_name", "last_name", "course", "password", "password_confirmation"];
+
+// One "folder tab" per step. `fields` decides which step owns an error, both for
+// the per-step check and for jumping back after the server answers 422.
+const STEPS = [
+  {
+    key: "identity", label: "Identity", fields: ["profile_photo", "first_name", "last_name"],
+    title: <>Let’s start with <span className="accent">you</span></>,
+    subtitle: "A clear photo and your name, so your coordinator knows who is logging hours.",
+  },
+  {
+    key: "account", label: "Account", fields: ["email", "student_id", "google_credential"],
+    title: <>Your <span className="accent">account</span> details</>,
+    subtitle: "Your Gmail and Student ID are how you sign in.",
+  },
+  {
+    key: "course", label: "Course", fields: ["course", "middle_name"],
+    title: <>Your <span className="accent">course</span></>,
+    subtitle: "Pick the program you are doing your duty hours for.",
+  },
+  {
+    key: "security", label: "Security", fields: ["password", "password_confirmation"],
+    title: <>Secure your <span className="accent">account</span></>,
+    subtitle: "Last entry. Set a strong password and your file is complete.",
+  },
+];
+
+// iOS opens the keyboard only for a field focused by a tap, so only auto-focus with a real mouse.
+const canAutoFocus = typeof window === "undefined" || !window.matchMedia
+  || window.matchMedia("(pointer: fine)").matches;
+
+const req = <span className="lg-required" aria-hidden="true">*</span>;
 
 export default function RegisterPage() {
   const { signIn } = useAuth();
+  const toast = useToast();
   const navigate = useNavigate();
   const location = useLocation();
   const config = useConfig();
@@ -32,14 +69,38 @@ export default function RegisterPage() {
     student_id: "", first_name: google?.profile?.first_name || "", middle_name: "", last_name: google?.profile?.last_name || "",
     email: google?.profile?.email || "", course: "", password: "", password_confirmation: "",
   }));
+  const [photo, setPhoto] = useState(null);        // the File, sent with the form
+  const [photoUrl, setPhotoUrl] = useState("");    // local preview
+  const [photoOpen, setPhotoOpen] = useState(false);
+  const [stepIndex, setStepIndex] = useState(0);
   const [show, setShow] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [errors, setErrors] = useState({});
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const topRef = useRef(null);
+
+  const viaGoogle = !!google;
+  // Google accounts have no password, so the Security step does not exist for them.
+  const steps = useMemo(() => (viaGoogle ? STEPS.filter((s) => s.key !== "security") : STEPS), [viaGoogle]);
+  const total = steps.length;
+  const step = steps[Math.min(stepIndex, total - 1)];
+  const isLast = stepIndex >= total - 1;
+  const courses = useMemo(() => config?.courses || [], [config]);
 
   useEffect(() => { document.title = "Create account | OCC Duty Log"; }, []);
 
-  const viaGoogle = !!google;
+  // Each step starts in view.
+  useEffect(() => { topRef.current?.scrollIntoView?.({ block: "start" }); }, [stepIndex]);
+
+  // Preview URL for the chosen photo, released when replaced or on leave.
+  useEffect(() => {
+    if (!photo) { setPhotoUrl(""); return undefined; }
+    const url = URL.createObjectURL(photo);
+    setPhotoUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [photo]);
+
   const set = (k) => (e) => {
     const v = FILTERS[k] ? FILTERS[k](e.target.value) : e.target.value;
     setForm((f) => ({ ...f, [k]: v }));
@@ -47,33 +108,85 @@ export default function RegisterPage() {
     setErrors((x) => ({ ...x, [k]: undefined, ...(k === "last_name" ? { email: undefined } : {}) }));
     setError("");
   };
-  const courses = useMemo(() => config?.courses || [], [config]);
+
+  const pickPhoto = async (file) => {
+    const problem = photoProblem(file);
+    if (problem) throw new Error(problem);
+    setPhoto(file);
+    setErrors((x) => ({ ...x, profile_photo: undefined }));
+    setError("");
+  };
+
+  // Errors for the fields owned by one step (client-side rules, same as the server's).
+  function stepErrors(s) {
+    const all = validateRegister(form, viaGoogle);
+    if (!photo) all.profile_photo = "Profile photo is required so your coordinator can verify you.";
+    return Object.fromEntries(s.fields.filter((f) => all[f]).map((f) => [f, all[f]]));
+  }
+
+  function focusFirst(errs, s) {
+    const id = s.fields.find((f) => errs[f]);
+    if (!id) return;
+    if (id === "profile_photo") document.getElementById("photo-pick")?.focus();
+    else document.getElementById(id)?.focus();
+  }
+
+  const goBack = () => { setError(""); setErrors({}); setStepIndex((i) => Math.max(0, i - 1)); };
+  // Only finished steps can be re-opened; never skip ahead.
+  const jumpTo = (i) => { if (i < stepIndex) { setError(""); setErrors({}); setStepIndex(i); } };
 
   async function submit(e) {
     e.preventDefault();
-    const v = validateRegister(form, viaGoogle);
-    setErrors(v);
-    if (Object.keys(v).length) {
+    if (busy) return;
+
+    const errs = stepErrors(step);
+    setErrors(errs);
+    if (Object.keys(errs).length) {
+      setError(errs.profile_photo && Object.keys(errs).length === 1 ? "Please add a profile photo to continue." : "Please fix the highlighted fields.");
+      focusFirst(errs, step);
+      return;
+    }
+    setError("");
+
+    if (!isLast) { setStepIndex((i) => i + 1); return; }
+
+    // Final step: everything must be valid, even if an earlier step was somehow skipped.
+    const everything = validateRegister(form, viaGoogle);
+    if (!photo) everything.profile_photo = "Profile photo is required so your coordinator can verify you.";
+    const bad = Object.keys(everything);
+    if (bad.length) {
+      setErrors(everything);
+      const owner = steps.findIndex((s) => s.fields.some((f) => everything[f]));
+      if (owner >= 0) setStepIndex(owner);
       setError("Please fix the highlighted fields.");
-      focusFirstInvalid(v, FIELD_ORDER);
       return;
     }
 
-    setBusy(true); setError("");
+    setBusy(true);
     try {
-      const body = {
-        student_id: clean(form.student_id), first_name: clean(form.first_name), middle_name: clean(form.middle_name) || null,
-        last_name: clean(form.last_name), email: normalizeEmailInput(form.email), course: form.course,
-      };
-      if (viaGoogle) body.google_credential = google.credential;
-      else { body.password = form.password; body.password_confirmation = form.password_confirmation; }
+      const body = new FormData();
+      body.append("student_id", clean(form.student_id));
+      body.append("first_name", clean(form.first_name));
+      if (clean(form.middle_name)) body.append("middle_name", clean(form.middle_name));
+      body.append("last_name", clean(form.last_name));
+      body.append("email", normalizeEmailInput(form.email));
+      body.append("course", form.course);
+      body.append("profile_photo", photo);
+      if (viaGoogle) body.append("google_credential", google.credential);
+      else { body.append("password", form.password); body.append("password_confirmation", form.password_confirmation); }
 
       const { data } = await api.post("/auth/register", body);
       await signIn(data, true);
       navigate("/logbook", { replace: true });
     } catch (err) {
-      setErrors((x) => ({ ...x, ...fieldErrors(err) }));
-      setError(errorMessage(err));
+      const fe = fieldErrors(err);
+      setErrors((x) => ({ ...x, ...fe }));
+      const message = errorMessage(err);
+      setError(message);
+      toast.error(message, { title: "Couldn’t create account", key: "register-error" });
+      // Go back to the first step that owns a failing field instead of leaving the person stuck here.
+      const owner = steps.findIndex((s) => s.fields.some((f) => fe[f]));
+      if (owner >= 0) setStepIndex(owner);
       setBusy(false);
     }
   }
@@ -96,82 +209,182 @@ export default function RegisterPage() {
     }
   }
 
-  const input = (id, props = {}) => (
-    <input id={id} className="au-input" value={form[id]} onChange={set(id)} aria-invalid={!!errors[id]} aria-required={props.readOnly ? undefined : "true"} {...props} />
-  );
+  const tabs = steps.map((s, i) => {
+    const done = i < stepIndex;
+    const active = i === stepIndex;
+    return (
+      <button
+        type="button" key={s.key} role="listitem"
+        className={`lg-folder-tab${active ? " is-active" : ""}${done ? " is-done" : ""}`}
+        onClick={() => jumpTo(i)} disabled={i >= stepIndex}
+        aria-current={active ? "step" : undefined}
+        aria-label={`Step ${i + 1} of ${total}: ${s.label}${done ? " (done)" : ""}`}
+      >
+        <span className="n">{done ? <Check size={12} strokeWidth={3} /> : String(i + 1).padStart(2, "0")}</span>
+        {s.label}
+      </button>
+    );
+  });
+
+  const lastNameSeg = emailNameSegment(form.last_name) || "lastname";
 
   return (
     <AuthShell
       wide
-      title="Create your account"
-      subtitle={viaGoogle ? "Almost done — add your Student ID and course." : "Register with your Gmail and Student ID."}
-      railHeadline="Start logging your OJT in minutes."
-      railNote="One account keeps your logbook safe and in sync across your phone and laptop."
+      caseSeed="REG"
+      tabs={tabs}
+      title={step.title}
+      subtitle={viaGoogle && stepIndex === 0 ? "Signed in with Google. Add your photo and name to continue." : step.subtitle}
       footer={<>Already registered? <Link to="/login">Sign in</Link></>}
     >
-      {viaGoogle && <Banner tone="notice">Signed in with Google as <b>{google.profile.email}</b>. No password needed.</Banner>}
-      <Banner>{error}</Banner>
+      <div ref={topRef} />
+      {viaGoogle && <LedgerBanner tone="notice">Signed in with Google as <b>{google.profile.email}</b>. No password needed.</LedgerBanner>}
+      <LedgerBanner>{error}</LedgerBanner>
 
-      <form className="au-form" onSubmit={submit} noValidate>
-        <div className="au-grid">
-          <Field className="span-2" label="Gmail" htmlFor="email" error={errors.email} required hint={viaGoogle ? FORMAT_HINTS.gmail : FORMAT_HINTS.email}>
-            {input("email", { type: "email", inputMode: "email", autoComplete: "email", placeholder: viaGoogle ? "name@gmail.com" : "occ.cruz.juan@gmail.com", readOnly: viaGoogle, autoCapitalize: "none", autoCorrect: "off" })}
-          </Field>
-          <Field className="span-2" label="Student ID" htmlFor="student_id" error={errors.student_id} required hint={FORMAT_HINTS.studentId}>
-            {input("student_id", { autoComplete: "username", inputMode: "numeric", autoCorrect: "off", placeholder: "2021-2-04062", maxLength: 12 })}
-          </Field>
-
-          <Field label="First name" htmlFor="first_name" error={errors.first_name} required>
-            {input("first_name", { autoComplete: "given-name", placeholder: "Juan", maxLength: 80 })}
-          </Field>
-          <Field label="Middle name" htmlFor="middle_name" error={errors.middle_name} optional>
-            {input("middle_name", { autoComplete: "additional-name", placeholder: "Dela", maxLength: 80 })}
-          </Field>
-          <Field className="span-2" label="Last name" htmlFor="last_name" error={errors.last_name} required>
-            {input("last_name", { autoComplete: "family-name", placeholder: "Cruz", maxLength: 80 })}
-          </Field>
-
-          <div className="span-2">
-            <Field label="Course" htmlFor="course" error={errors.course} required>
-              <select id="course" className="au-select" value={form.course} onChange={set("course")} aria-invalid={!!errors.course}>
-                <option value="">{courses.length ? "Select your course" : "Loading courses…"}</option>
-                {courses.map((g) => (
-                  <optgroup key={g.college} label={g.college}>
-                    {g.courses.map((c) => <option key={c} value={c}>{c}</option>)}
-                  </optgroup>
-                ))}
-              </select>
-            </Field>
-          </div>
-
-          {!viaGoogle && (
+      <form onSubmit={submit} noValidate>
+        <div key={step.key} className="lg-step">
+          {step.key === "identity" && (
             <>
-              <Field label="Password" htmlFor="password" error={errors.password} required hint={FORMAT_HINTS.password}>
-                <div className="au-pass">
-                  {input("password", { type: show ? "text" : "password", autoComplete: "new-password", placeholder: "Create a password", maxLength: 100 })}
-                  <button type="button" onClick={() => setShow((v) => !v)} aria-label={show ? "Hide password" : "Show password"}>
-                    {show ? <EyeOff size={18} /> : <Eye size={18} />}
+              <LedgerRow
+                index={1} icon={Camera} htmlFor="photo-pick" error={errors.profile_photo}
+                label={<>Profile photo {req}</>}
+                hint={errors.profile_photo ? undefined : `Required so your coordinator can verify you. JPG, PNG or WebP, up to 5 MB.`}
+              >
+                <div className="lg-avatar-row">
+                  <button
+                    type="button" id="photo-pick" className={`lg-avatar-frame${photoUrl ? " has-photo" : ""}`}
+                    onClick={() => setPhotoOpen(true)} aria-label={photoUrl ? "Change profile photo" : "Add profile photo"}
+                    aria-required="true" aria-invalid={!!errors.profile_photo}
+                  >
+                    {photoUrl ? <img src={photoUrl} alt="Your profile photo preview" /> : <Camera size={26} strokeWidth={1.6} style={{ opacity: .55 }} />}
                   </button>
+                  <div className="lg-avatar-actions">
+                    <div className="lg-avatar-btns">
+                      <button type="button" className="lg-avatar-btn" onClick={() => setPhotoOpen(true)}>{photoUrl ? "Change photo" : "Add photo"}</button>
+                      {photoUrl && <button type="button" className="lg-avatar-btn danger" onClick={() => setPhoto(null)}>Remove</button>}
+                    </div>
+                  </div>
                 </div>
-              </Field>
-              <Field label="Confirm password" htmlFor="password_confirmation" error={errors.password_confirmation} required>
-                {input("password_confirmation", { type: show ? "text" : "password", autoComplete: "new-password", placeholder: "Repeat password", maxLength: 100 })}
-              </Field>
+              </LedgerRow>
+
+              <LedgerRowPair index={2}>
+                <div>
+                  <label className="lg-row-label" htmlFor="first_name"><User size={12} strokeWidth={2.5} /> First name {req}</label>
+                  <LedgerInput
+                    id="first_name" value={form.first_name} onChange={set("first_name")} maxLength={80}
+                    autoComplete="given-name" placeholder="Juan" enterKeyHint="next" autoFocus={canAutoFocus && !viaGoogle}
+                    aria-required="true" aria-invalid={!!errors.first_name}
+                  />
+                  {errors.first_name && <span className="lg-row-hint lg-row-error" role="alert">{errors.first_name}</span>}
+                </div>
+                <div>
+                  <label className="lg-row-label" htmlFor="last_name"><User size={12} strokeWidth={2.5} /> Last name {req}</label>
+                  <LedgerInput
+                    id="last_name" value={form.last_name} onChange={set("last_name")} maxLength={80}
+                    autoComplete="family-name" placeholder="Cruz" enterKeyHint="next"
+                    aria-required="true" aria-invalid={!!errors.last_name}
+                  />
+                  {errors.last_name && <span className="lg-row-hint lg-row-error" role="alert">{errors.last_name}</span>}
+                </div>
+              </LedgerRowPair>
+            </>
+          )}
+
+          {step.key === "account" && (
+            <>
+              <LedgerRow
+                index={1} icon={Mail} htmlFor="email" error={errors.email}
+                label={<>Gmail {req}</>}
+                hint={viaGoogle ? FORMAT_HINTS.gmail : `Format: occ.${lastNameSeg}.firstname@gmail.com (all lowercase). The lastname must match your Last name.`}
+              >
+                <LedgerInput
+                  id="email" type="email" inputMode="email" value={form.email} onChange={set("email")}
+                  autoComplete="email" autoCapitalize="none" autoCorrect="off" spellCheck={false} enterKeyHint="next"
+                  placeholder={viaGoogle ? "name@gmail.com" : `occ.${lastNameSeg}.juan@gmail.com`}
+                  readOnly={viaGoogle} autoFocus={canAutoFocus && !viaGoogle}
+                  aria-required={viaGoogle ? undefined : "true"} aria-invalid={!!errors.email}
+                />
+              </LedgerRow>
+              <LedgerRow
+                index={2} icon={IdCard} htmlFor="student_id" error={errors.student_id}
+                label={<>Student ID {req}</>} hint={FORMAT_HINTS.studentId}
+              >
+                <LedgerInput
+                  id="student_id" value={form.student_id} onChange={set("student_id")} maxLength={12}
+                  autoComplete="username" inputMode="numeric" autoCorrect="off" spellCheck={false} enterKeyHint="next"
+                  placeholder="2021-2-04062" autoFocus={canAutoFocus && viaGoogle}
+                  aria-required="true" aria-invalid={!!errors.student_id}
+                />
+              </LedgerRow>
+            </>
+          )}
+
+          {step.key === "course" && (
+            <>
+              <LedgerRow index={1} icon={GraduationCap} htmlFor="course" error={errors.course} label={<>Course {req}</>}>
+                <LedgerSelect id="course" value={form.course} onChange={set("course")} aria-required="true" aria-invalid={!!errors.course}>
+                  <option value="">{courses.length ? "Select your course" : "Loading courses…"}</option>
+                  {courses.map((g) => (
+                    <optgroup key={g.college} label={g.college}>
+                      {g.courses.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </optgroup>
+                  ))}
+                </LedgerSelect>
+              </LedgerRow>
+              <LedgerRow
+                index={2} icon={User} htmlFor="middle_name" error={errors.middle_name}
+                label={<>Middle name <span style={{ textTransform: "none", letterSpacing: 0, fontWeight: 600 }}>(optional)</span></>}
+              >
+                <LedgerInput
+                  id="middle_name" value={form.middle_name} onChange={set("middle_name")} maxLength={80}
+                  autoComplete="additional-name" placeholder="Dela" enterKeyHint={isLast ? "go" : "next"} aria-invalid={!!errors.middle_name}
+                />
+              </LedgerRow>
+            </>
+          )}
+
+          {step.key === "security" && (
+            <>
+              <LedgerRow index={1} icon={Lock} htmlFor="password" error={errors.password} label={<>Password {req}</>}>
+                <LedgerPasswordInput
+                  id="password" show={show} onToggle={() => setShow((v) => !v)} value={form.password} onChange={set("password")}
+                  autoComplete="new-password" maxLength={100} placeholder="Create a password" enterKeyHint="next"
+                  autoFocus={canAutoFocus} aria-required="true" aria-invalid={!!errors.password}
+                />
+                <StrengthTicks password={form.password} />
+              </LedgerRow>
+              <LedgerRow index={2} icon={Lock} htmlFor="password_confirmation" error={errors.password_confirmation} label={<>Confirm password {req}</>}>
+                <LedgerPasswordInput
+                  id="password_confirmation" show={showConfirm} onToggle={() => setShowConfirm((v) => !v)}
+                  value={form.password_confirmation} onChange={set("password_confirmation")}
+                  autoComplete="new-password" maxLength={100} placeholder="Repeat password" enterKeyHint="go"
+                  aria-required="true" aria-invalid={!!errors.password_confirmation}
+                />
+                <PasswordMatchNote password={form.password} confirm={form.password_confirmation} />
+              </LedgerRow>
+              <RequirementChecklist password={form.password} />
             </>
           )}
         </div>
 
-        <button className="au-btn" disabled={busy}>
-          {busy ? <><span className="au-spin" /> Creating account…</> : "Create account"}
-        </button>
+        <div className="lg-actions-row">
+          {stepIndex > 0 && <LedgerGhostButton onClick={goBack} disabled={busy}>Back</LedgerGhostButton>}
+          <LedgerButton disabled={busy}>
+            {busy
+              ? <><span className="au-spin" /> Creating account…</>
+              : isLast ? "Create account" : "Next entry"}
+          </LedgerButton>
+        </div>
       </form>
 
-      {!viaGoogle && (
+      {!viaGoogle && stepIndex === 0 && (
         <>
           <Divider>or</Divider>
           <GoogleSignInButton onCredential={onGoogle} text="signup_with" disabled={busy} />
         </>
       )}
+
+      <PhotoUploadModal open={photoOpen} onClose={() => setPhotoOpen(false)} onAccept={pickPhoto} title="Profile photo" />
     </AuthShell>
   );
 }

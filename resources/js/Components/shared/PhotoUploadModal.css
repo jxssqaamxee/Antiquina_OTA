@@ -1,0 +1,16 @@
+/* Plain profile-photo picker (see PhotoUploadModal.jsx). Colours come from the
+   app theme tokens, so it follows all five themes. */
+.pum { display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; }
+.pum-frame {
+  width: 148px; height: 148px; border-radius: 36px; overflow: hidden; display: grid; place-items: center;
+  color: var(--ink-soft); background: var(--field); border: 2px dashed var(--edge-strong);
+}
+.pum-frame.has-photo { border-style: solid; border-color: var(--accent-text); }
+.pum-frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pum-tip { margin: 0; max-width: 290px; font-size: 13.5px; line-height: 1.5; color: var(--ink-soft); }
+.pum-error {
+  margin: 0; padding: 10px 12px; width: 100%; border-radius: 14px; font-size: 13px; font-weight: 650; line-height: 1.45;
+  color: var(--bad); background: rgba(var(--bad-rgb), .10); border: 1.5px solid rgba(var(--bad-rgb), .32);
+}
+.pum-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.pum-pick { gap: 8px; }

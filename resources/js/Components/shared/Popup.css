@@ -1,0 +1,61 @@
+/*
+ * Popup.css — the one-time / blocking explanation popup (PopupContext).
+ * Same idea as sclf_APP's Popups.css: the element carries data-occ-theme and
+ * everything reads the --pt-* tokens, so it matches all five OCC themes.
+ */
+[data-occ-theme] {
+  --pt-bg: #ffffff;
+  --pt-fg: #0b1220;
+  --pt-edge: #c3ccdb;
+  --pt-accent: linear-gradient(135deg, #4f46e5, #7c3aed 50%, #0ea5e9);
+  --pt-accent-fg: #ffffff;
+  --pt-accent-solid: #6366f1;
+  --pt-shadow: 0 24px 60px rgba(2, 6, 23, 0.22);
+}
+[data-occ-theme="black"]  { --pt-bg: #12161f; --pt-fg: #e7ecf3; --pt-edge: #323b4a; --pt-shadow: 0 24px 60px rgba(0, 0, 0, 0.6); }
+[data-occ-theme="blue"]   { --pt-bg: #f8fbff; --pt-edge: #a9cdf5; --pt-accent: linear-gradient(135deg, #1e40af, #2563eb 50%, #38bdf8); --pt-accent-solid: #2563eb; }
+[data-occ-theme="yellow"] { --pt-bg: #fffcf5; --pt-fg: #1c1408; --pt-edge: #e6c477; --pt-accent: linear-gradient(135deg, #b45309, #d97706 50%, #f59e0b); --pt-accent-fg: #1c1408; --pt-accent-solid: #d97706; }
+[data-occ-theme="maroon"] { --pt-bg: #fffafb; --pt-edge: #e8b3bc; --pt-accent: linear-gradient(135deg, #7f1d2e, #9f1239 50%, #dc2626); --pt-accent-solid: #9f1239; }
+
+.occ-popup-backdrop {
+  position: fixed; inset: 0; z-index: 10000;
+  background: rgba(11, 13, 25, 0.55); backdrop-filter: blur(2px);
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+  animation: occ-popup-fade 0.15s ease both;
+}
+.occ-popup-card {
+  width: 100%; max-width: 400px; box-sizing: border-box;
+  background: var(--pt-bg); color: var(--pt-fg);
+  border: 1.5px solid var(--pt-edge); border-radius: 16px;
+  padding: 26px 24px 22px; text-align: center; box-shadow: var(--pt-shadow);
+  font-family: var(--font-body, "Inter", system-ui, sans-serif);
+  animation: occ-popup-pop 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.occ-popup-icon {
+  width: 44px; height: 44px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center; margin: 0 auto 14px;
+}
+.occ-popup-icon-info    { background: rgba(14, 165, 233, 0.14); color: #0284c7; }
+.occ-popup-icon-warning { background: rgba(245, 158, 11, 0.16); color: #b45309; }
+.occ-popup-icon-success { background: rgba(22, 163, 74, 0.14); color: #15803d; }
+.occ-popup-icon-error   { background: rgba(239, 68, 68, 0.14); color: #dc2626; }
+.occ-popup-title { font-size: 17px; font-weight: 800; margin: 0 0 8px; }
+.occ-popup-message { font-size: 13.5px; line-height: 1.55; opacity: 0.75; margin: 0 0 22px; white-space: pre-line; overflow-wrap: anywhere; }
+.occ-popup-btn {
+  width: 100%; padding: 11px 14px; border: 0; border-radius: 10px; cursor: pointer;
+  font: inherit; font-size: 13.5px; font-weight: 700;
+  background: var(--pt-accent); color: var(--pt-accent-fg);
+  transition: opacity 0.15s ease, transform 0.1s ease;
+}
+.occ-popup-btn:hover { opacity: 0.92; }
+.occ-popup-btn:active { transform: translateY(1px); }
+.occ-popup-btn:focus-visible { outline: 2px solid var(--pt-accent-solid); outline-offset: 2px; }
+
+@keyframes occ-popup-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes occ-popup-pop {
+  from { opacity: 0; transform: scale(0.94) translateY(6px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .occ-popup-backdrop, .occ-popup-card { animation: none; }
+}

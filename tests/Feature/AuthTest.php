@@ -4,7 +4,9 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class AuthTest extends TestCase
@@ -12,6 +14,18 @@ class AuthTest extends TestCase
     use RefreshDatabase;
 
     private const COURSE = 'BSIT — Bachelor of Science in Information Technology';
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // Photos go to the private ("local") disk; never touch the real storage/ folder in tests.
+        Storage::fake('local');
+    }
+
+    private function photo(string $name = 'me.jpg', int $w = 400, int $h = 500): UploadedFile
+    {
+        return UploadedFile::fake()->image($name, $w, $h);
+    }
 
     private function payload(array $over = []): array
     {
@@ -24,6 +38,7 @@ class AuthTest extends TestCase
             'course' => self::COURSE,
             'password' => 'Secret-Pass1',
             'password_confirmation' => 'Secret-Pass1',
+            'profile_photo' => $this->photo(),
         ], $over);
     }
 
@@ -72,7 +87,7 @@ class AuthTest extends TestCase
 
         $this->postJson('/api/auth/register', [])
             ->assertStatus(422)
-            ->assertJsonValidationErrors(['student_id', 'first_name', 'last_name', 'email', 'course', 'password']);
+            ->assertJsonValidationErrors(['student_id', 'first_name', 'last_name', 'email', 'course', 'password', 'profile_photo']);
     }
 
     public function test_register_names_reject_digits(): void
@@ -149,7 +164,7 @@ class AuthTest extends TestCase
         $res = $this->postJson('/api/auth/register', [
             'google_credential' => 'tok', 'student_id' => '2024-1-00200',
             'first_name' => 'New', 'last_name' => 'User', 'course' => self::COURSE,
-            'email' => 'ignored@gmail.com',
+            'email' => 'ignored@gmail.com', 'profile_photo' => $this->photo(),
         ])->assertCreated();
 
         $this->assertSame('new.user@gmail.com', $res->json('user.email'));
@@ -211,5 +226,131 @@ class AuthTest extends TestCase
             ->assertStatus(422)->assertJsonValidationErrors(['first_name', 'last_name', 'course']);
         $this->actingAs($user, 'sanctum')->putJson('/api/profile', ['first_name' => 'ana', 'last_name' => 'lim', 'course' => self::COURSE])
             ->assertOk()->assertJsonPath('user.name', 'Ana Lim');
+    }
+
+    // ---- Profile photo -----------------------------------------------------
+
+    public function test_register_with_photo_stores_it_privately_and_returns_a_signed_url(): void
+    {
+        $res = $this->postJson('/api/auth/register', $this->payload())->assertCreated();
+
+        $path = User::where('student_id', '2024-1-00099')->first()->profile_photo;
+        $this->assertStringStartsWith('profile-pictures/', $path);
+        Storage::disk('local')->assertExists($path);
+
+        $picture = $res->json('user.picture');
+        $this->assertStringStartsWith('/media/profile-pictures/', $picture);
+        $this->assertStringContainsString('signature=', $picture);
+        $res->assertJsonPath('user.has_profile_photo', true);
+
+        // The signed link really serves an image, with the hardening headers.
+        $this->get($picture)->assertOk()
+            ->assertHeader('X-Content-Type-Options', 'nosniff')
+            ->assertHeader('Content-Type', 'image/jpeg');
+    }
+
+    public function test_register_without_photo_is_rejected(): void
+    {
+        $this->postJson('/api/auth/register', $this->payload(['profile_photo' => null]))
+            ->assertStatus(422)->assertJsonValidationErrors('profile_photo');
+        $this->assertDatabaseCount('users', 0);
+    }
+
+    public function test_register_rejects_non_image_and_oversized_photo(): void
+    {
+        $this->postJson('/api/auth/register', $this->payload(['profile_photo' => UploadedFile::fake()->create('cv.pdf', 50, 'application/pdf')]))
+            ->assertStatus(422)->assertJsonValidationErrors('profile_photo');
+        $this->postJson('/api/auth/register', $this->payload(['profile_photo' => UploadedFile::fake()->create('script.php', 10, 'text/x-php')]))
+            ->assertStatus(422)->assertJsonValidationErrors('profile_photo');
+        // 6 MB (size is in KB)
+        $this->postJson('/api/auth/register', $this->payload(['profile_photo' => UploadedFile::fake()->create('big.jpg', 6144, 'image/jpeg')]))
+            ->assertStatus(422)->assertJsonValidationErrors('profile_photo');
+        $this->assertDatabaseCount('users', 0);
+    }
+
+    public function test_google_register_also_requires_a_photo(): void
+    {
+        $this->fakeGoogle();
+        $this->postJson('/api/auth/register', [
+            'google_credential' => 'tok', 'student_id' => '2024-1-00200',
+            'first_name' => 'New', 'last_name' => 'User', 'course' => self::COURSE,
+        ])->assertStatus(422)->assertJsonValidationErrors('profile_photo');
+    }
+
+    public function test_photo_is_shrunk_to_640px_jpeg(): void
+    {
+        $this->postJson('/api/auth/register', $this->payload(['profile_photo' => $this->photo('big.png', 2000, 1000)]))->assertCreated();
+
+        $path = User::first()->profile_photo;
+        $this->assertStringEndsWith('.jpg', $path);
+        [$w, $h] = getimagesizefromstring(Storage::disk('local')->get($path));
+        $this->assertSame(640, max($w, $h));
+    }
+
+    public function test_photo_upload_requires_a_token(): void
+    {
+        $this->postJson('/api/profile/photo', ['photo' => $this->photo()])->assertUnauthorized();
+        $this->deleteJson('/api/profile/photo')->assertUnauthorized();
+    }
+
+    public function test_upload_replace_and_remove_photo(): void
+    {
+        $user = User::factory()->create(['avatar' => 'https://x/google.png']);
+        $this->actingAs($user, 'sanctum');
+
+        // No uploaded photo yet -> the Google avatar is the fallback.
+        $this->getJson('/api/me')->assertJsonPath('user.picture', 'https://x/google.png')
+            ->assertJsonPath('user.has_profile_photo', false);
+
+        $first = $this->post('/api/profile/photo', ['photo' => $this->photo()], ['Accept' => 'application/json'])
+            ->assertOk()->assertJsonPath('user.has_profile_photo', true);
+        $firstPath = $user->fresh()->profile_photo;
+        Storage::disk('local')->assertExists($firstPath);
+        $this->assertStringStartsWith('/media/profile-pictures/', $first->json('user.picture'));
+
+        // Replacing deletes the old file.
+        $this->post('/api/profile/photo', ['photo' => $this->photo('new.png')], ['Accept' => 'application/json'])->assertOk();
+        $secondPath = $user->fresh()->profile_photo;
+        $this->assertNotSame($firstPath, $secondPath);
+        Storage::disk('local')->assertMissing($firstPath);
+        Storage::disk('local')->assertExists($secondPath);
+
+        // Removing deletes the file and falls back to the Google avatar.
+        $this->deleteJson('/api/profile/photo')->assertOk()
+            ->assertJsonPath('user.picture', 'https://x/google.png')
+            ->assertJsonPath('user.has_profile_photo', false);
+        Storage::disk('local')->assertMissing($secondPath);
+        $this->assertNull($user->fresh()->profile_photo);
+    }
+
+    public function test_photo_upload_rejects_non_images_and_big_files(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user, 'sanctum');
+
+        $this->post('/api/profile/photo', ['photo' => UploadedFile::fake()->create('notes.pdf', 20, 'application/pdf')], ['Accept' => 'application/json'])
+            ->assertStatus(422)->assertJsonValidationErrors('photo');
+        $this->post('/api/profile/photo', ['photo' => UploadedFile::fake()->create('big.jpg', 6144, 'image/jpeg')], ['Accept' => 'application/json'])
+            ->assertStatus(422)->assertJsonValidationErrors('photo');
+        $this->postJson('/api/profile/photo', [])->assertStatus(422)->assertJsonValidationErrors('photo');
+        $this->assertNull($user->fresh()->profile_photo);
+    }
+
+    public function test_media_needs_a_valid_signature(): void
+    {
+        $this->postJson('/api/auth/register', $this->payload())->assertCreated();
+        $path = User::first()->profile_photo;               // profile-pictures/<name>.jpg
+        $file = basename($path);
+
+        $this->get("/media/profile-pictures/{$file}")->assertForbidden();                  // unsigned
+        $this->get("/media/profile-pictures/{$file}?expires=9999999999&signature=nope")->assertForbidden();
+
+        // A valid link for one file cannot be pointed at another folder or a traversal.
+        $signed = \App\Support\PrivateMedia::url($path);
+        $this->get(str_replace($file, "other.jpg", $signed))->assertForbidden();
+
+        // Even a correctly signed link only serves the profile-pictures folder.
+        $other = \Illuminate\Support\Facades\URL::temporarySignedRoute('media.show', now()->addHour(), ['dir' => 'other-folder', 'file' => $file], absolute: false);
+        $this->get($other)->assertNotFound();
     }
 }

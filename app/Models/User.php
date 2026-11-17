@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\PrivateMedia;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -15,7 +16,7 @@ class User extends Authenticatable
 
     protected $fillable = [
         'student_id', 'first_name', 'middle_name', 'last_name', 'email',
-        'course', 'password', 'google_id', 'avatar', 'email_verified_at',
+        'course', 'password', 'google_id', 'avatar', 'profile_photo', 'email_verified_at',
     ];
 
     protected $hidden = ['password', 'remember_token', 'google_id'];
@@ -51,7 +52,9 @@ class User extends Authenticatable
             'name' => $this->fullName(),
             'email' => $this->email,
             'course' => $this->course,
-            'picture' => $this->avatar,
+            // Uploaded photo (signed private URL) first, then the Google picture, then null -> initials.
+            'picture' => PrivateMedia::url($this->profile_photo) ?? $this->avatar,
+            'has_profile_photo' => $this->profile_photo !== null,
             'has_password' => $this->password !== null,
             'has_google' => $this->google_id !== null,
         ];

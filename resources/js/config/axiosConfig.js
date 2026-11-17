@@ -50,6 +50,13 @@ const api = axios.create({
 api.interceptors.request.use((config) => {
   const t = getToken();
   if (t) config.headers.Authorization = `Bearer ${t}`;
+  // A FormData body (photo upload) must NOT be sent as application/json: drop any
+  // Content-Type so the browser writes multipart/form-data with its own boundary.
+  if (typeof FormData !== "undefined" && config.data instanceof FormData) {
+    config.headers.delete ? config.headers.delete("Content-Type") : delete config.headers["Content-Type"];
+    // A phone photo on a slow connection needs longer than a JSON call.
+    if (!config.timeout || config.timeout < 60000) config.timeout = 60000;
+  }
   return config;
 });
 

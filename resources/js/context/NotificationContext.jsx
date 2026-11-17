@@ -10,7 +10,6 @@ import { uid } from "../utils/time";
 
 const HISTORY_KEY = "notifications-v1";
 const MAX_HISTORY = 40;
-const TOAST_LIFETIME_MS = 6000;
 
 const NotificationContext = createContext(null);
 
@@ -20,7 +19,6 @@ export function NotificationProvider({ children }) {
   // in would see Trainee A's notification history (and vice versa).
   const userId = user?.sub || user?.email || null;
 
-  const [toasts, setToasts] = useState([]);
   const [history, setHistory] = useState([]);
   const [permission, setPermission] = useState(() => getPermission());
 
@@ -35,16 +33,15 @@ export function NotificationProvider({ children }) {
     setUserStorage(HISTORY_KEY, userId, history.slice(0, MAX_HISTORY));
   }, [history, userId]);
 
-  const dismissToast = useCallback((id) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  }, []);
-
   const markAllRead = useCallback(() => {
     setHistory((prev) => prev.map((n) => ({ ...n, read: true })));
   }, []);
 
   const clearHistory = useCallback(() => setHistory([]), []);
 
+  // Bell history only. Toasts live in ToastContext (useToast) — keeping the two
+  // apart is what stops the bell badge from growing on every click. Only
+  // milestones and shift reminders should call this.
   const notify = useCallback((notification) => {
     const item = {
       id: uid(),
@@ -55,16 +52,14 @@ export function NotificationProvider({ children }) {
       read: false,
     };
 
-    setToasts((prev) => [...prev, item]);
     setHistory((prev) => [item, ...prev].slice(0, MAX_HISTORY));
 
     if (notification.system) {
       fireSystemNotification(item.title, item.message, notification.tag);
     }
 
-    window.setTimeout(() => dismissToast(item.id), TOAST_LIFETIME_MS);
     return item.id;
-  }, [dismissToast]);
+  }, []);
 
   const enableSystemNotifications = useCallback(async () => {
     const result = await requestPermission();
@@ -76,17 +71,15 @@ export function NotificationProvider({ children }) {
 
   const value = useMemo(
     () => ({
-      toasts,
       history,
       unreadCount,
       permission,
       notify,
-      dismissToast,
       markAllRead,
       clearHistory,
       enableSystemNotifications,
     }),
-    [toasts, history, unreadCount, permission, notify, dismissToast, markAllRead, clearHistory, enableSystemNotifications]
+    [history, unreadCount, permission, notify, markAllRead, clearHistory, enableSystemNotifications]
   );
 
   return <NotificationContext.Provider value={value}>{children}</NotificationContext.Provider>;

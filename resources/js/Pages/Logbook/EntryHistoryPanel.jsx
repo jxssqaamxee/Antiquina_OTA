@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from "react";
-import { History, Search, ArrowUpDown, Users, Sun, Sunset, Moon } from "lucide-react";
+import { Search, ArrowUpDown } from "lucide-react";
+import EntryCard from "../../Components/logbook/EntryCard";
+import logo from "../../assets/images/site-logo.png";
 import {
   formatHours,
-  formatTime12,
   formatDateLong,
   todayStr,
   startOfWeek,
@@ -10,9 +11,6 @@ import {
   monthKey,
   formatMonthLabel,
 } from "../../utils/time";
-import { completionFor } from "../../utils/dutyStatus";
-
-const CATEGORY_LABEL = { regular: "Regular", evening: "Evening", overtime: "Overtime" };
 
 // A dedicated home for every entry from an earlier calendar day — the
 // Logbook tab keeps today's (and any future-dated) rows, even once
@@ -57,137 +55,72 @@ export default function EntryHistoryPanel({ entries, clients, now = new Date() }
   const weekLabel = formatWeekRange(startOfWeek(filterWeek));
   const monthLabel = formatMonthLabel(filterMonth);
 
+  const modes = [
+    { id: "all", label: "All" },
+    { id: "day", label: "By day" },
+    { id: "week", label: "By week" },
+    { id: "month", label: "By month" },
+  ];
+
   return (
-    <div className="history-panel">
-      <div className="history-head">
-        <div className="history-head-title">
-          <History size={16} />
-          <div>
-            <h3>Entry History</h3>
-            <p className="report-card-sub" style={{ margin: 0 }}>
-              Completed entries only, moved off the Logbook tab so it stays short — this list updates in real time as
-              each shift wraps up.
-            </p>
+    <div className="history">
+      <section className="hero" style={{ "--hero-logo": `url("${logo}")` }} aria-label="Completed entries">
+        <div className="hero-top">
+          <div className="hero-who">
+            <small>Completed entries</small>
+            <b>{filtered.length} {filtered.length === 1 ? "day" : "days"}</b>
           </div>
         </div>
-        <div className="history-count">
-          <strong>{filtered.length}</strong> {filtered.length === 1 ? "entry" : "entries"}
-          {filtered.length > 0 && <span> &middot; {formatHours(totalHoursShown)}</span>}
+        <div className="hero-foot" style={{ marginTop: 12 }}>
+          <b>{formatHours(totalHoursShown)} logged</b>
+          Finished shifts land here automatically once their day is over.
         </div>
-      </div>
+      </section>
 
-      <div className="history-controls">
-        <div className="history-filter">
-          <Search size={13} />
-          <select
-            value={filterMode}
-            onChange={(e) => setFilterMode(e.target.value)}
-            aria-label="Filter completed entries by"
-          >
-            <option value="all">All completed entries</option>
-            <option value="day">By day</option>
-            <option value="week">By week</option>
-            <option value="month">By month</option>
-          </select>
-
-          {filterMode === "day" && (
-            <input
-              type="date"
-              value={filterDay}
-              onChange={(e) => setFilterDay(e.target.value)}
-              aria-label="Pick a day"
-            />
-          )}
-          {filterMode === "week" && (
-            <>
-              <input
-                type="date"
-                value={filterWeek}
-                onChange={(e) => setFilterWeek(e.target.value)}
-                aria-label="Pick any day in the week"
-              />
-              <span className="history-filter-label">{weekLabel}</span>
-            </>
-          )}
-          {filterMode === "month" && (
-            <>
-              <input
-                type="month"
-                value={filterMonth}
-                onChange={(e) => setFilterMonth(e.target.value)}
-                aria-label="Pick a month"
-              />
-              <span className="history-filter-label">{monthLabel}</span>
-            </>
-          )}
+      <div className="sec-head"><h2>Filter</h2></div>
+      <div className="hist-filter">
+        <div className="chips" role="tablist" aria-label="Filter completed entries">
+          {modes.map((m) => (
+            <button key={m.id} type="button" role="tab" aria-selected={filterMode === m.id} className={`chip${filterMode === m.id ? " is-active" : ""}`} onClick={() => setFilterMode(m.id)}>
+              {m.id === "all" && <Search size={14} />}{m.label}
+            </button>
+          ))}
+          <button type="button" className="chip" onClick={() => setSortOrder((o) => (o === "asc" ? "desc" : "asc"))} aria-label="Toggle chronological order">
+            <ArrowUpDown size={14} /> {sortOrder === "asc" ? "Oldest first" : "Newest first"}
+          </button>
         </div>
 
-        <button
-          type="button"
-          className="history-sort-btn"
-          onClick={() => setSortOrder((s) => (s === "asc" ? "desc" : "asc"))}
-          title="Toggle chronological order"
-        >
-          <ArrowUpDown size={13} />
-          {sortOrder === "asc" ? "Oldest first (Day 1 on top)" : "Newest first"}
-        </button>
+        {filterMode === "day" && (
+          <div className="fld"><label htmlFor="h-day">Day</label><input id="h-day" type="date" value={filterDay} onChange={(e) => setFilterDay(e.target.value)} /></div>
+        )}
+        {filterMode === "week" && (
+          <div className="fld">
+            <label htmlFor="h-week">Any day in the week</label>
+            <input id="h-week" type="date" value={filterWeek} onChange={(e) => setFilterWeek(e.target.value)} />
+            <span className="hist-range">{weekLabel}</span>
+          </div>
+        )}
+        {filterMode === "month" && (
+          <div className="fld">
+            <label htmlFor="h-month">Month</label>
+            <input id="h-month" type="month" value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)} />
+            <span className="hist-range">{monthLabel}</span>
+          </div>
+        )}
       </div>
 
       {filtered.length === 0 ? (
-        <div className="empty-row">
+        <div className="empty">
+          <b>{completed.length === 0 ? "No completed entries yet" : "Nothing matches this filter"}</b>
           {completed.length === 0
-            ? "No completed entries yet — finished shifts will land here automatically once they're done."
-            : "No completed entries match this filter."}
+            ? "Finished shifts will land here automatically once their day is over."
+            : "Try another day, week or month."}
         </div>
       ) : (
-        <div className="history-list">
-          {filtered.map((e) => {
-            const c = completionFor(e);
-            return (
-              <div className="history-row" key={e.id}>
-                <div className="history-row-main">
-                  <span className="history-date">{formatDateLong(e.date)}</span>
-                  <span className={`tag tag-${e.category}`}>{CATEGORY_LABEL[e.category] || "Regular"}</span>
-                  {c.met ? (
-                    <span className="completion-badge is-met" title="Met the expected hours for this shift coverage">
-                      Complete
-                    </span>
-                  ) : (
-                    <span
-                      className="completion-badge is-short"
-                      title={`Short ${formatHours(Math.abs(c.delta))} of the expected ${formatHours(c.expected)}`}
-                    >
-                      −{formatHours(Math.abs(c.delta))}
-                    </span>
-                  )}
-                </div>
-                <div className="history-row-segs">
-                  {e.amIn && e.amOut && (
-                    <span className="timeline-seg">
-                      <Sun size={12} /> Morning: {formatTime12(e.amIn)} – {formatTime12(e.amOut)}
-                    </span>
-                  )}
-                  {e.pmIn && e.pmOut && (
-                    <span className="timeline-seg">
-                      <Sunset size={12} /> Afternoon: {formatTime12(e.pmIn)} – {formatTime12(e.pmOut)}
-                    </span>
-                  )}
-                  {e.evIn && e.evOut && (
-                    <span className="timeline-seg">
-                      <Moon size={12} /> Evening: {formatTime12(e.evIn)} – {formatTime12(e.evOut)}
-                    </span>
-                  )}
-                </div>
-                <div className="history-row-meta">
-                  <span className="timeline-client">
-                    <Users size={11} /> {clientName(e.client)}
-                  </span>
-                  <span className="history-row-hours">{formatHours(e.hours)}</span>
-                  {e.task && <span className="history-row-task">“{e.task}”</span>}
-                </div>
-              </div>
-            );
-          })}
+        <div className="entry-list">
+          {filtered.map((e) => (
+            <EntryCard key={e.id} entry={e} dateLabel={formatDateLong(e.date)} clientName={clientName(e.client)} />
+          ))}
         </div>
       )}
     </div>

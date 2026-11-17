@@ -1,12 +1,16 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { useNavigate, useLocation, Link } from "react-router-dom";
-import { Plus, Trash2, FileDown, LogOut, X, Users, Sun, Sunset, Moon, Pencil, XCircle } from "lucide-react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { Plus, Trash2, FileDown, Sun, Sunset, Moon, Pencil, Settings2, Info, Clock3, Hourglass, Zap, CalendarDays, Building2, ChevronRight, AlertTriangle } from "lucide-react";
 import MobileTabBar from "../../Components/shared/MobileTabBar";
+import AppBar from "../../Components/shared/AppBar";
+import Sheet, { ConfirmSheet } from "../../Components/shared/Sheet";
+import EntryCard from "../../Components/logbook/EntryCard";
 import { useAuth } from "../../context/AuthContext";
 import { useNotifications } from "../../context/NotificationContext";
 import { useLiveClock } from "../../hooks/useLiveClock";
-import { NotificationBell, ToastStack } from "../../Components/shared/NotificationCenter";
-import { HelpButton, OnboardingGuide } from "../../Components/shared/HelpGuide";
+import { useToast } from "../../context/ToastContext";
+import { usePopup } from "../../context/PopupContext";
+import { OnboardingGuide } from "../../Components/shared/HelpGuide";
 import ProgressRing from "../../Components/logbook/ProgressRing";
 import TimeInput12 from "../../Components/logbook/TimeInput12";
 import ReportsPanel from "./ReportsPanel";
@@ -150,7 +154,9 @@ export default function LogbookPage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const { notify } = useNotifications();
+  const { notify } = useNotifications(); // bell history only (milestones + shift reminders)
+  const toast = useToast();               // results: entry added, report exported…
+  const popup = usePopup();               // things that must be read once or that block an action
   const liveNow = useLiveClock(1000);
 
   // Stable per-account id — every piece of duty-log data below is scoped to
@@ -161,7 +167,9 @@ export default function LogbookPage() {
   const userId = user?.sub || user?.email || null;
 
   const [loaded, setLoaded] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
+  const [entrySheet, setEntrySheet] = useState(false); // add / edit a duty day
+  const [clientSheet, setClientSheet] = useState(false); // add / edit a host client
+  const [setupSheet, setSetupSheet] = useState(false); // trainee name + required hours
   const [studentName, setStudentName] = useState("");
   const [targetHours, setTargetHours] = useState(486);
   // Raw text the "Required hours" field displays, kept separate from the
@@ -193,6 +201,12 @@ export default function LogbookPage() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [clientError, setClientError] = useState(""); // inline error under the host-client form
   const [setupErrors, setSetupErrors] = useState({}); // inline errors for the trainee name field
+  const [entryError, setEntryError] = useState(""); // banner at the top of the Add-day sheet
+  const [clientNote, setClientNote] = useState(""); // inline hint under Host client (coverage auto-switched)
+  const [categoryNote, setCategoryNote] = useState(""); // inline hint under Shift type (coverage auto-switched)
+  const [hoursNote, setHoursNote] = useState(""); // inline hint under Required hours
+  const entryBannerRef = useRef(null);
+  const lunchSwitchedRef = useRef(false);
 
   const milestonesRef = useRef(new Set(getUserStorage(MILESTONES_KEY, userId) || []));
   // Date string (YYYY-MM-DD) the pre-shift reminder already fired for —
@@ -209,27 +223,38 @@ export default function LogbookPage() {
   // disabled, full, or a private/incognito window that wipes on close).
   useEffect(() => {
     if (!isStorageAvailable()) {
-      notify({
+      popup.once("occ_storage_warned", {
         type: "warning",
         title: "Browser storage unavailable",
-        message:
-          "Your entries won't be saved after this tab closes. Exit private/incognito mode, or allow site data, to keep your logbook.",
-        system: true,
-        tag: "storage-unavailable",
+        message: "Your entries won't be saved after this tab closes. Exit private/incognito mode, or allow site data, to keep your logbook.",
+        okLabel: "I understand",
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Tracks page scroll so the sticky header can pick up a subtle shadow
-  // once content has scrolled beneath it (purely cosmetic — the header
-  // itself never moves).
+  // Right after signing in, LoginPage leaves occ_login_toast. Say "Welcome back"
+  // once and remove the flag, so returning to this page never repeats it.
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 4);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    let flagged = false;
+    try {
+      flagged = sessionStorage.getItem("occ_login_toast") === "1";
+      if (flagged) sessionStorage.removeItem("occ_login_toast");
+    } catch { /* storage blocked */ }
+    if (!flagged) return;
+    const first = (user?.first_name || user?.name || "").trim().split(/\s+/)[0];
+    toast.success(first ? `Good to see you, ${first}.` : "You're signed in.", { title: "Welcome back", key: "welcome" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // The tab bar's "+" from another screen (Profile) lands here asking for the add sheet.
+  useEffect(() => {
+    if (location.state?.add) {
+      setEntrySheet(true);
+      navigate(location.pathname, { replace: true, state: { tab: location.state.tab } });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
 
   // Load persisted logbook state — scoped to the signed-in account, and
   // re-run whenever the account changes (e.g. signing out of one Google
@@ -387,16 +412,16 @@ export default function LogbookPage() {
       if (percent >= t && !milestonesRef.current.has(t)) {
         milestonesRef.current.add(t);
         changed = true;
-        notify({
-          type: t === 100 ? "success" : "info",
-          title: t === 100 ? "Target reached!" : `${t}% of your OJT hours logged`,
-          message:
-            t === 100
-              ? `You've logged ${formatHours(totalHours)} of your ${targetHours}h requirement.`
-              : `${formatHours(totalHours)} logged so far — ${formatHours(remaining)} to go.`,
-          system: true,
-          tag: `milestone-${t}`,
-        });
+        const title = t === 100 ? "Target reached!" : `${t}% of your OJT hours logged`;
+        const message =
+          t === 100
+            ? `You've logged ${formatHours(totalHours)} of your ${targetHours}h requirement.`
+            : `${formatHours(totalHours)} logged so far — ${formatHours(remaining)} to go.`;
+        // History (bell) + system notification, once per threshold (persisted).
+        notify({ type: t === 100 ? "success" : "info", title, message, system: true, tag: `milestone-${t}` });
+        // On screen: 25/50/75 are a quiet toast, finishing is a one-time popup.
+        if (t === 100) popup({ type: "success", title, message, okLabel: "Great!" });
+        else toast.info(message, { title, key: "milestone" });
       }
     }
     if (changed) setUserStorage(MILESTONES_KEY, userId, [...milestonesRef.current]);
@@ -434,32 +459,44 @@ export default function LogbookPage() {
     if (nowMin >= startMin - 20 && nowMin < startMin) {
       shiftReminderFiredRef.current = today;
       setUserStorage(REMINDER_KEY, userId, today);
-      notify({
-        type: "info",
+      const reminder = {
         title: "Your OJT shift starts soon",
         message: `${client.name} starts at ${formatTime12(norm.timeIn)} — about ${startMin - nowMin} minute${startMin - nowMin === 1 ? "" : "s"} from now.`,
-        system: true,
-        tag: `shift-reminder-${today}`,
-      });
+      };
+      notify({ type: "info", ...reminder, system: true, tag: `shift-reminder-${today}` });
+      toast.info(reminder.message, { title: reminder.title, key: "shift-reminder" });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveNow, loaded, clients, entries, lastClientId]);
 
-  // If the Add-day form is left open across the 12:00 PM boundary while set
-  // to Morning or Whole day for today, switch it to Afternoon the moment
-  // that coverage stops being valid, with a heads-up why.
+  // Past 12:00 PM, Morning / Whole day stops being valid for today's entry, so
+  // the Add-day form moves itself to Afternoon — silently. The explanation is
+  // the inline hint under "Shift coverage". This only runs while the sheet is
+  // open and at most once per time it becomes true, so coming back to this page
+  // (e.g. from Profile) can never repeat anything.
   useEffect(() => {
-    if (!pastLunchToday) return;
-    if (draftMode === "am" || draftMode === "full") {
-      setShiftMode("pm");
-      notify({
-        type: "info",
-        title: "Switched to Afternoon",
-        message: "It's already past 12:00 PM, so Morning coverage isn't available for today. This entry now covers Afternoon — adjust the times if needed.",
-      });
+    if (!entrySheet || !pastLunchToday) {
+      lunchSwitchedRef.current = false;
+      return;
     }
+    if (lunchSwitchedRef.current) return;
+    lunchSwitchedRef.current = true;
+    if (draftMode === "am" || draftMode === "full") setShiftMode("pm");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pastLunchToday]);
+  }, [entrySheet, pastLunchToday]);
+
+  // Inline notes and the save banner only live while the sheet is open.
+  useEffect(() => {
+    if (!entrySheet) {
+      setEntryError("");
+      setClientNote("");
+      setCategoryNote("");
+    }
+  }, [entrySheet]);
+
+  useEffect(() => {
+    if (entryError) entryBannerRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [entryError]);
 
   // Switches which segment(s) of the day the manual-entry form captures.
   // Clears the fields for whichever segment doesn't apply, instead of
@@ -524,14 +561,9 @@ export default function LogbookPage() {
     // is still selectable — but flag it, since it usually means either the
     // wrong host client was picked, or this host client's schedule needs
     // updating to include this day.
-    if (client && draft.date && !isWorkDay(client, draft.date)) {
-      const weekday = FULL_WEEKDAYS[weekdayOf(draft.date)];
-      notify({
-        type: "warning",
-        title: `"${client.name}" isn't scheduled for ${weekday}`,
-        message: `Its OJT days are set to ${scheduleDaysLabel(client)}. If you actually reported to "${client.name}" this ${weekday}, edit it under Host clients to add ${weekday} to its schedule. Otherwise, add a separate host client for this day.`,
-      });
-    }
+    // (That hint is shown inline under the field — see draftClientDayMismatch.)
+    setClientNote("");
+    setEntryError("");
     // A host client's own hours cap which shift-coverage options actually
     // make sense (e.g. picking a 1:00 PM–8:00 PM afternoon-only client
     // while "Morning only" or "Whole day" was selected). If the current
@@ -541,13 +573,11 @@ export default function LogbookPage() {
     if (client && !allowed.includes(draftMode)) {
       const fallback = allowed[0] || "pm";
       setShiftMode(fallback);
-      notify({
-        type: "info",
-        title: `Switched to ${COVERAGE_META[fallback]?.label || "a different coverage"}`,
-        message: `"${client.name}"'s hours are ${formatTime12(norm.timeIn)}–${formatTime12(norm.timeOut)}, which doesn't include a ${
+      setClientNote(
+        `"${client.name}"'s hours are ${formatTime12(norm.timeIn)}–${formatTime12(norm.timeOut)}, which doesn't include a ${
           COVERAGE_META[draftMode]?.label || "this"
-        } segment — this entry now covers ${COVERAGE_META[fallback]?.label || "a different segment"} instead.`,
-      });
+        } segment — this entry now covers ${COVERAGE_META[fallback]?.label || "a different segment"} instead.`
+      );
     }
   }
 
@@ -562,6 +592,7 @@ export default function LogbookPage() {
   // still-valid option is.
   function handleCategoryChange(nextCategory) {
     setDraft((d) => ({ ...d, category: nextCategory }));
+    setCategoryNote("");
     const eveningCapable = nextCategory === "overtime" || nextCategory === "evening";
     const nowMinutes = toMinutes(nowClock(new Date(liveNow))) ?? 0;
     const selectedClient = clients.find((c) => c.id === draft.client);
@@ -569,11 +600,7 @@ export default function LogbookPage() {
     const allowed = coverageOptionsFor(nextCategory, pastLunchToday, clientCov);
     if (eveningCapable && draft.date === todayStr() && nowMinutes >= EVENING_STARTS_AT && draftMode === "full") {
       setShiftMode("pmev");
-      notify({
-        type: "info",
-        title: "Switched to Afternoon → Evening",
-        message: "It's already past 5:00 PM, so this entry now covers Afternoon → Evening. Adjust the times if needed.",
-      });
+      setCategoryNote("It's already past 5:00 PM, so this entry now covers Afternoon → Evening. Adjust the times if needed.");
     } else if (!eveningCapable && (draftMode === "ev" || draftMode === "pmev")) {
       setShiftMode("full");
     } else if (!allowed.includes(draftMode)) {
@@ -609,15 +636,30 @@ export default function LogbookPage() {
     });
     setDraftMode(mode);
     setEditingId(entry.id);
-    requestAnimationFrame(() => {
-      document.querySelector(".ledger-new-wrap")?.scrollIntoView({ behavior: "smooth", block: "center" });
-    });
+    setEntrySheet(true);
   }
 
   function cancelEdit() {
     setEditingId(null);
     setDraft(emptyDraft());
     setDraftMode("full");
+    setEntrySheet(false);
+  }
+
+  // Opens the add sheet with a fresh draft (or just re-opens an unsaved one).
+  function openNewEntry() {
+    if (editingId) {
+      setEditingId(null);
+      setDraft(emptyDraft());
+      setDraftMode("full");
+    }
+    setEntrySheet(true);
+  }
+
+  // Closing the sheet drops an edit in progress; an unsaved new draft is kept.
+  function closeEntrySheet() {
+    if (editingId) cancelEdit();
+    else setEntrySheet(false);
   }
 
 
@@ -652,46 +694,39 @@ export default function LogbookPage() {
   function submitEntry() {
     const error = validateDraft(draft, editingId);
     if (error) {
-      notify({ type: "warning", title: "Can't save this entry", message: error });
+      setEntryError(error);
+      // Put the cursor on the first field that needs fixing.
+      const bad = !draft.date ? "d-date" : !draft.client ? "d-client" : null;
+      if (bad) document.getElementById(bad)?.focus();
       return;
     }
     const hrs = segmentHours(draft);
     if (hrs <= 0) {
-      notify({ type: "warning", title: "Can't save this entry", message: "Total hours must be greater than zero." });
+      setEntryError("Total hours must be greater than zero.");
       return;
     }
+    setEntryError("");
     const built = { ...draft, client: draft.client || null, hours: hrs };
 
     if (editingId) {
       setEntries((prev) =>
         prev.map((e) => (e.id === editingId ? { ...built, id: editingId } : e)).sort((a, b) => a.date.localeCompare(b.date))
       );
-      notify({
-        type: "success",
-        title: "Entry updated",
-        message: `${formatDateLong(draft.date)} was updated to ${formatHours(hrs)}.`,
-      });
+      toast.success(`${formatDateLong(draft.date)} was updated to ${formatHours(hrs)}.`, { title: "Entry updated", key: "entry-saved" });
     } else {
       setEntries((prev) => [...prev, { id: uid(), ...built }].sort((a, b) => a.date.localeCompare(b.date)));
-      notify({
-        type: "success",
-        title: "Entry added",
-        message: `Logged ${formatHours(hrs)} for ${formatDateLong(draft.date)}.`,
-      });
+      toast.success(`Logged ${formatHours(hrs)} for ${formatDateLong(draft.date)}.`, { title: "Entry added", key: "entry-saved" });
     }
     setDraft(emptyDraft());
     setDraftMode("full");
     setEditingId(null);
+    setEntrySheet(false);
   }
 
   function deleteEntry(id) {
     setEntries((prev) => prev.filter((e) => e.id !== id));
     if (id === editingId) cancelEdit();
-    notify({
-      type: "info",
-      title: "Entry deleted",
-      message: "The logbook entry was removed.",
-    });
+    toast.info("The logbook entry was removed.", { title: "Entry deleted", key: "entry-deleted" });
   }
 
   function requestDeleteEntry(id) {
@@ -711,7 +746,7 @@ export default function LogbookPage() {
     const count = clientEntryCount(id);
     if (count > 0) {
       const client = clients.find((c) => c.id === id);
-      notify({
+      popup({
         type: "warning",
         title: "Can't remove this host client",
         message: `"${client?.name || "This client"}" is used on ${count} duty log ${count === 1 ? "entry" : "entries"} (added via Add day / shift coverage). Edit or delete those entries first, then remove the client.`,
@@ -751,6 +786,15 @@ export default function LogbookPage() {
     setNewClientName("");
     applyClientTypePreset("public");
     setEditingClientId(null);
+    setClientSheet(false);
+  }
+
+  function openNewClient() {
+    setClientError("");
+    setNewClientName("");
+    applyClientTypePreset("public");
+    setEditingClientId(null);
+    setClientSheet(true);
   }
 
   function addClient() {
@@ -764,7 +808,6 @@ export default function LogbookPage() {
     });
     if (problem) {
       setClientError(problem);
-      notify({ type: "warning", title: "Can't save this host client", message: problem });
       return;
     }
     setClientError("");
@@ -782,7 +825,7 @@ export default function LogbookPage() {
       // client and pre-shift/lunch/end-of-day reminders never fired for
       // anyone, no matter how the host client was configured.
       setLastClientId(editingClientId);
-      notify({ type: "success", title: "Host client updated", message: `"${name}" schedule was updated.` });
+      toast.success(`"${name}" schedule was updated.`, { title: "Host client updated", key: "client-saved" });
       resetClientForm();
       return;
     }
@@ -804,6 +847,8 @@ export default function LogbookPage() {
     setNewClientDays(norm.days);
     setNewClientTimeIn(norm.timeIn);
     setNewClientTimeOut(norm.timeOut);
+    setClientError("");
+    setClientSheet(true);
   }
 
   function cancelClientEdit() {
@@ -814,7 +859,7 @@ export default function LogbookPage() {
     setClients((prev) => prev.filter((c) => c.id !== id));
     if (id === editingClientId) resetClientForm();
     if (id === lastClientId) setLastClientId(null);
-    notify({ type: "info", title: "Host client removed", message: "The host client was removed from your list." });
+    toast.info("The host client was removed from your list.", { title: "Host client removed", key: "client-removed" });
   }
 
   function clientName(id) {
@@ -833,7 +878,7 @@ export default function LogbookPage() {
     // its scheduled end hasn't been reached yet). This mirrors the same
     // rule the Reports tab uses.
     if (blockingExport) {
-      notify({
+      popup({
         type: "warning",
         title: "Still tracking today's shift",
         message: "Today's logged hours are still in progress against the clock. Wait until the scheduled shift finishes, then export or view your report.",
@@ -843,8 +888,9 @@ export default function LogbookPage() {
 
     const nameProblem = traineeNameProblem(studentName);
     if (nameProblem) {
+      // Inline error in the trainee-details sheet — open it so it is visible.
       setSetupErrors((x) => ({ ...x, name: nameProblem }));
-      notify({ type: "warning", title: "Add your name first", message: `${nameProblem} It is printed on the report.` });
+      setSetupSheet(true);
       return;
     }
 
@@ -860,11 +906,7 @@ export default function LogbookPage() {
       ]);
     } catch (e) {
       setExporting(false);
-      notify({
-        type: "warning",
-        title: "Couldn't load the PDF engine",
-        message: "Check your connection and try exporting again.",
-      });
+      toast.error("Check your connection and try exporting again.", { title: "Couldn't load the PDF engine", key: "pdf-engine" });
       return;
     }
 
@@ -1113,587 +1155,417 @@ export default function LogbookPage() {
     doc.save(`OCC-OJT-Duty-Log-${(studentName || "trainee").replace(/\s+/g, "-")}-${todayStr()}.pdf`);
 
     setExporting(false);
-    notify({
-      type: "success",
-      title: "Report exported",
-      message: "Your detailed duty log PDF has been downloaded.",
-    });
+    toast.success("Your detailed duty log PDF has been downloaded.", { title: "Report exported", key: "report-exported" });
   }
 
+  const firstName = (studentName || user?.first_name || user?.name || "").trim().split(/\s+/)[0] || "Trainee";
+  const hourNow = nowDate.getHours();
+  const greeting = hourNow < 12 ? "Good morning" : hourNow < 18 ? "Good afternoon" : "Good evening";
+  const heroLogo = `url("${logo}")`;
+  const coverageOpts = coverageOptionsFor(draft.category, pastLunchToday, draftClientCoverage);
+  const categoryIsEvening = draft.category === "evening" || draft.category === "overtime";
+
+  const confirmTarget = confirmDialog
+    ? confirmDialog.kind === "entry"
+      ? entries.find((e) => e.id === confirmDialog.id)
+      : clients.find((c) => c.id === confirmDialog.id)
+    : null;
+  const confirmIsEntry = confirmDialog?.kind === "entry";
+
+  const pageTitle = tab === "reports" ? "Reports" : tab === "history" ? "Entry history" : "Logbook";
+
   return (
-    <div className="duty-page">
-      <ToastStack />
+    <div className="app">
       <OnboardingGuide open={showOnboarding} onDone={finishOnboarding} />
-      {confirmDialog && (() => {
-        const isEntry = confirmDialog.kind === "entry";
-        const target = isEntry
-          ? entries.find((e) => e.id === confirmDialog.id)
-          : clients.find((c) => c.id === confirmDialog.id);
-        const title = isEntry ? "Delete this entry?" : "Remove this host client?";
-        const message = isEntry
-          ? target
-            ? `Are you sure you want to delete the entry for ${formatDateLong(target.date)}? This can't be undone.`
-            : "Are you sure you want to delete this entry? This can't be undone."
-          : target
-          ? `Are you sure you want to remove "${target.name}"? It has no duty log entries, so this is safe.`
-          : "Are you sure you want to remove this host client?";
-        return (
-          <div className="confirm-overlay" role="presentation" onClick={cancelConfirm}>
-            <div
-              className="confirm-card"
-              role="alertdialog"
-              aria-modal="true"
-              aria-labelledby="confirm-delete-title"
-              onClick={(ev) => ev.stopPropagation()}
-            >
-              <h3 id="confirm-delete-title">{title}</h3>
-              <p>{message}</p>
-              <div className="confirm-actions">
-                <button className="confirm-btn confirm-btn--no" onClick={cancelConfirm}>
-                  No, keep it
-                </button>
-                <button className="confirm-btn confirm-btn--yes" onClick={confirmDialogAction}>
-                  Yes, {isEntry ? "delete" : "remove"}
+      <AppBar title={pageTitle} subtitle="OCC · OJT Duty Log" />
+
+      <main className="app-main">
+        {tab === "log" && (
+          <>
+            {/* ---------- hero ---------- */}
+            <section className="hero" style={{ "--hero-logo": heroLogo }} aria-label="Your OJT progress">
+              <div className="hero-top">
+                <div className="hero-who">
+                  <small>{greeting}</small>
+                  <b>{firstName}</b>
+                </div>
+                <button type="button" className="hero-edit" onClick={() => setSetupSheet(true)} aria-label="Edit trainee name and required hours">
+                  <Settings2 size={19} />
                 </button>
               </div>
-            </div>
-          </div>
-        );
-      })()}
+              <div className="hero-body">
+                <ProgressRing percent={percent} complete={complete}>
+                  <b>{Math.round(percent)}%</b>
+                  <span>{complete ? "Target met" : "done"}</span>
+                </ProgressRing>
+                <div className="hero-info">
+                  <div>
+                    <div className="big">{formatHours(totalHours)}</div>
+                    <div className="of">of {targetHours}h required</div>
+                  </div>
+                  <div className="hero-chips">
+                    <span className="hero-chip">{formatHours(remaining)} to go</span>
+                    {overtimeHours > 0 && <span className="hero-chip">{formatHours(overtimeHours)} overtime</span>}
+                  </div>
+                </div>
+              </div>
+              <div className="hero-foot">
+                {studentName.trim() || !loaded ? (
+                  <b>{studentName.trim() || "\u00a0"}</b>
+                ) : (
+                  <button type="button" className="hero-foot-link" onClick={() => setSetupSheet(true)}>Add your name for the PDF report</button>
+                )}
+                Opol Community College · OJT Duty Log
+              </div>
+            </section>
 
-      <div className="duty-shell">
-        <header className={`duty-topbar${scrolled ? " is-scrolled" : ""}`}>
-          <div className="brand">
-            <img className="brand-logo" src={logo} alt="Opol Community College logo" />
-            <div className="brand-text">
-              <div className="brand-eyebrow">OCC</div>
-              <div className="brand-title">Duty Log</div>
-              <div className="brand-sub">{user?.school || "Opol Community College"}</div>
+            {/* ---------- stats ---------- */}
+            <div className="stats" role="list">
+              {[
+                { label: "Hours logged", value: formatHours(totalHours), icon: Clock3 },
+                { label: "Still required", value: formatHours(remaining), icon: Hourglass },
+                { label: "Overtime", value: formatHours(overtimeHours), icon: Zap },
+                { label: "Days logged", value: entries.length, icon: CalendarDays },
+              ].map(({ label, value, icon: Icon }) => (
+                <div className="stat" role="listitem" key={label}>
+                  <span className="stat-ico" aria-hidden="true"><Icon size={17} strokeWidth={2.2} /></span>
+                  <b>{value}</b>
+                  <small>{label}</small>
+                </div>
+              ))}
             </div>
-          </div>
 
-          <div className="topbar-actions">
-            <HelpButton />
-            <NotificationBell />
-            <Link to="/profile" className="user-chip" aria-label="Open your profile">
-              {user?.picture ? (
-                <img className="avatar avatar-photo" src={user.picture} alt="" referrerPolicy="no-referrer" />
-              ) : (
-                <span className="avatar">{initialsOf(user?.name)}</span>
-              )}
-              <span className="user-id">
-                <span className="user-name">{user?.name || user?.email}</span>
-                {user?.name && user?.email ? <span className="user-email">{user.email}</span> : null}
+            {/* ---------- main action ---------- */}
+            <button type="button" className="cta" onClick={clients.length === 0 ? openNewClient : openNewEntry} aria-haspopup="dialog">
+              <span className="cta-icon">{clients.length === 0 ? <Building2 size={24} strokeWidth={1.8} /> : <Plus size={24} strokeWidth={1.8} />}</span>
+              <span className="cta-text">
+                <b>{clients.length === 0 ? "Add your host client" : "Add a duty day"}</b>
+                <small>{clients.length === 0 ? "The office you are deployed to — needed before you log days" : "Log your morning, afternoon or evening shift"}</small>
               </span>
-            </Link>
-            <button className="signout-btn" onClick={handleSignOut} aria-label="Sign out">
-              <LogOut size={14} /> <span>Sign out</span>
+              <ChevronRight size={20} />
             </button>
-          </div>
-        </header>
 
-        <section className="duty-hero">
-          <div className="hero-ring">
-            <ProgressRing percent={percent} complete={complete}>
-              <div className="ring-hours">{formatHours(totalHours)}</div>
-              <div className="ring-target">of {targetHours}h target</div>
-              <div className="ring-percent">{Math.round(percent)}%</div>
-            </ProgressRing>
-            <div className="ring-footnote">
-              <span className="remaining-chip">{formatHours(remaining)} still required</span>
-              {overtimeHours > 0 && <span className="ot-chip">{formatHours(overtimeHours)} overtime</span>}
+            {/* ---------- host clients ---------- */}
+            <div className="sec-head">
+              <h2>Host clients</h2>
+              {clients.length > 0 && <button type="button" className="link-btn" onClick={openNewClient}><Plus size={15} /> Add</button>}
             </div>
-          </div>
-        </section>
-
-        <section className="duty-setup">
-          <div className="setup-field">
-            <label>Trainee name <span className="required-mark">*</span></label>
-            <input
-              value={studentName}
-              maxLength={80}
-              aria-required="true"
-              aria-invalid={!!setupErrors.name}
-              className={setupErrors.name ? "field-invalid" : ""}
-              onChange={(e) => { setStudentName(e.target.value); setSetupErrors((x) => ({ ...x, name: undefined })); }}
-              onBlur={() => setSetupErrors((x) => ({ ...x, name: traineeNameProblem(studentName) || undefined }))}
-              placeholder="Juan Dela Cruz"
-            />
-            {setupErrors.name && <span className="field-error" role="alert">{setupErrors.name}</span>}
-          </div>
-          <div className="setup-field small">
-            <label>Required hours <span className="required-mark">*</span></label>
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={targetHoursInput}
-              onChange={(e) => {
-                // Digits only — also strips any leading zeros as the user
-                // types (e.g. "0" + "4" no longer sits as "04").
-                const digits = e.target.value.replace(/\D/g, "").replace(/^0+(?=\d)/, "").slice(0, 4);
-                setTargetHoursInput(digits);
-                setTargetHours(digits ? Number(digits) : 0);
-              }}
-              onBlur={() => {
-                // Only fall back to a default once the field is actually
-                // left empty (or invalid) on blur — not the instant a digit
-                // is deleted, so clearing the box to retype a new number
-                // doesn't keep snapping back to a stray "0".
-                const problem = targetHoursProblem(targetHoursInput);
-                const parsed = Number(targetHoursInput);
-                const safe = problem ? (parsed > MAX_TARGET_HOURS ? MAX_TARGET_HOURS : 486) : parsed;
-                if (problem) notify({ type: "warning", title: "Required hours adjusted", message: `${problem} It was set to ${safe}.` });
-                setTargetHours(safe);
-                setTargetHoursInput(String(safe));
-              }}
-            />
-          </div>
-          <div className="setup-field grow">
-            <label>
-              <Users size={12} /> Host clients <span className="required-mark">*</span>
-            </label>
-            <div className="client-manager">
-              <div className="client-chips">
-                {clients.length === 0 && <span className="chips-empty">No clients added yet</span>}
+            {clients.length === 0 ? (
+              <div className="empty"><b>No host clients yet</b>Use the button above to add the office or company you are deployed to.</div>
+            ) : (
+              <div className="client-list">
                 {clients.map((c) => {
                   const norm = normalizeClient(c);
                   const inUseCount = clientEntryCount(c.id);
                   return (
-                    <span className={`client-chip${inUseCount > 0 ? " in-use" : ""}${editingClientId === c.id ? " editing" : ""}`} key={c.id}>
-                      <span className="chip-main">
-                        <span className="chip-name">{c.name}</span>
-                        <span className="chip-schedule">
-                          {(COMPANY_TYPES[norm.type] || COMPANY_TYPES.custom).label} · {scheduleDaysLabel(norm)} ·{" "}
-                          {formatTime12(norm.timeIn)}–{formatTime12(norm.timeOut)}
-                        </span>
-                      </span>
-                      {inUseCount > 0 && <span className="chip-count">{inUseCount}</span>}
-                      <button onClick={() => startEditClient(c.id)} aria-label={`Edit ${c.name}`} title="Edit schedule">
-                        <Pencil size={11} />
-                      </button>
-                      <button
-                        onClick={() => requestDeleteClient(c.id)}
-                        aria-label={inUseCount > 0 ? `${c.name} is used on ${inUseCount} duty log entries and can't be removed` : `Remove ${c.name}`}
-                        disabled={inUseCount > 0}
-                        title={inUseCount > 0 ? `Used on ${inUseCount} duty log ${inUseCount === 1 ? "entry" : "entries"} — edit or delete those first` : "Remove client"}
-                      >
-                        <X size={11} />
-                      </button>
-                    </span>
+                    <div className={`client${editingClientId === c.id ? " is-editing" : ""}`} key={c.id}>
+                      <span className="client-ico"><Building2 size={21} /></span>
+                      <div className="client-main">
+                        <b>{c.name}{inUseCount > 0 && <span className="badge mute client-used">{inUseCount} {inUseCount === 1 ? "day" : "days"}</span>}</b>
+                        <small>
+                          {(COMPANY_TYPES[norm.type] || COMPANY_TYPES.custom).label} · {scheduleDaysLabel(norm)}<br />
+                          {formatTime12(norm.timeIn)} – {formatTime12(norm.timeOut)}
+                        </small>
+                      </div>
+                      <div className="client-actions">
+                        <button type="button" className="icon-btn sm" onClick={() => startEditClient(c.id)} aria-label={`Edit ${c.name}`}><Pencil size={15} /></button>
+                        <button
+                          type="button" className="icon-btn sm danger" onClick={() => requestDeleteClient(c.id)}
+                          aria-label={inUseCount > 0 ? `${c.name} is used on ${inUseCount} duty log entries and can't be removed` : `Remove ${c.name}`}
+                          disabled={inUseCount > 0}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </div>
                   );
                 })}
               </div>
-              <div className="client-form">
-                <div className="client-form-row">
-                  <input
-                    className={`client-name-input${clientError ? " field-invalid" : ""}`}
-                    value={newClientName}
-                    maxLength={CLIENT_NAME_MAX}
-                    aria-required="true"
-                    aria-invalid={!!clientError}
-                    onChange={(e) => { setNewClientName(e.target.value); setClientError(""); }}
-                    placeholder="e.g. City Hall — IT Office"
-                  />
-                  <div className="client-type-toggle">
-                    {Object.entries(COMPANY_TYPES).map(([key, meta]) => (
-                      <button
-                        key={key}
-                        type="button"
-                        className={newClientType === key ? "active" : ""}
-                        onClick={() => applyClientTypePreset(key)}
-                      >
-                        {meta.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                {clientError && <p className="field-error" role="alert">{clientError}</p>}
-                <div className="client-form-row">
-                  <div className="client-days-toggle">
-                    {WEEKDAYS.map((d) => (
-                      <button
-                        key={d.id}
-                        type="button"
-                        className={newClientDays.includes(d.id) ? "active" : ""}
-                        onClick={() => toggleNewClientDay(d.id)}
-                      >
-                        {d.short}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="client-time-fields">
-                    <TimeInput12 aria-label="Time in" value={newClientTimeIn} onChange={setNewClientTimeIn} />
-                    <span>to</span>
-                    <TimeInput12 aria-label="Time out" value={newClientTimeOut} onChange={setNewClientTimeOut} />
-                  </div>
-                </div>
-                <p className="client-form-hint">
-                  {formatTime12(newClientTimeIn)}–{formatTime12(newClientTimeOut)} ={" "}
-                  {formatHours(dailyHoursFor({ days: newClientDays, timeIn: newClientTimeIn, timeOut: newClientTimeOut }))}{" "}
-                  a day (lunch break already excluded), on {scheduleDaysLabel({ days: newClientDays })}.
-                </p>
-                <div className="client-form-actions">
-                  {editingClientId && (
-                    <button type="button" className="client-cancel-btn" onClick={cancelClientEdit}>
-                      Cancel
-                    </button>
-                  )}
-                  <button type="button" className="client-save-btn" onClick={addClient}>
-                    <Plus size={15} /> {editingClientId ? "Save changes" : "Add host client"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <nav className="duty-tabs">
-          <button className={tab === "log" ? "active" : ""} onClick={() => setTab("log")}>
-            Logbook
-          </button>
-          <button className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}>
-            Entry History{completedCount > 0 ? ` (${completedCount})` : ""}
-          </button>
-          <button className={tab === "reports" ? "active" : ""} onClick={() => setTab("reports")}>
-            Reports
-          </button>
-        </nav>
-
-        {tab === "log" ? (
-          <section className="ledger-card">
-            <div className="ledger-head">
-              <span>Date</span>
-              <span><Sun size={11} /> Morning</span>
-              <span><Sunset size={11} /> Afternoon</span>
-              <span><Moon size={11} /> Evening</span>
-              <span>Hours</span>
-              <span>Client</span>
-              <span>Type</span>
-              <span>Notes</span>
-              <span></span>
-            </div>
-
-            {entries.length === 0 && (
-              <div className="empty-row">No entries yet — add a day below to get started.</div>
             )}
 
-            {entries.length > 0 && ledgerEntries.length === 0 && (
-              <div className="empty-row">
-                No entries for today (or later) right now — earlier days have moved to the Entry History tab.
-              </div>
-            )}
-
-            {ledgerEntries
-              .slice()
-              .reverse()
-              .map((e) => (
-                <div className={`ledger-row${e.id === editingId ? " is-editing" : ""}`} key={e.id}>
-                  <span data-label="Date">{formatDateLong(e.date)}</span>
-                  <span data-label="Morning">{e.amIn && e.amOut ? `${formatTime12(e.amIn)} – ${formatTime12(e.amOut)}` : "—"}</span>
-                  <span data-label="Afternoon">{e.pmIn && e.pmOut ? `${formatTime12(e.pmIn)} – ${formatTime12(e.pmOut)}` : "—"}</span>
-                  <span data-label="Evening">{e.evIn && e.evOut ? `${formatTime12(e.evIn)} – ${formatTime12(e.evOut)}` : "—"}</span>
-                  <span className="ledger-hours" data-label="Hours">
-                    {(() => {
-                      const p = entryProgress.get(e.id);
-                      if (p && p.status === "upcoming") {
-                        return (
-                          <>
-                            {formatHours(0)}
-                            <span className="completion-badge is-upcoming" title={`Scheduled for ${formatHours(p.scheduledHours)} — hasn't started yet`}>
-                              Scheduled
-                            </span>
-                          </>
-                        );
-                      }
-                      if (p && p.status === "in-progress") {
-                        const livePct = p.scheduledHours > 0 ? Math.min((p.liveHours / p.scheduledHours) * 100, 100) : 0;
-                        return (
-                          <>
-                            {formatHours(p.liveHours)}
-                            <span className="completion-badge is-progress" title={`${formatHours(p.liveHours)} elapsed of ${formatHours(p.scheduledHours)} scheduled — still running`}>
-                              <span className="live-dot" /> In progress
-                            </span>
-                            <span className="inline-progress-track" aria-hidden="true">
-                              <span className="inline-progress-fill" style={{ width: `${livePct}%` }} />
-                            </span>
-                          </>
-                        );
-                      }
-                      const c = completionFor(e);
-                      return (
-                        <>
-                          {formatHours(e.hours)}
-                          {c.met ? (
-                            <span className="completion-badge is-met" title="Met the expected hours for this shift coverage">
-                              Complete
-                            </span>
-                          ) : (
-                            <span className="completion-badge is-short" title={`Short ${formatHours(Math.abs(c.delta))} of the expected ${formatHours(c.expected)}`}>
-                              −{formatHours(Math.abs(c.delta))}
-                            </span>
-                          )}
-                        </>
-                      );
-                    })()}
-                  </span>
-                  <span className="truncate" data-label="Client">{clientName(e.client)}</span>
-                  <span data-label="Type">
-                    <span className={`tag tag-${e.category}`}>{categoryLabel(e.category)}</span>
-                  </span>
-                  <span className="truncate" title={e.task} data-label="Notes">
-                    {e.task || "—"}
-                  </span>
-                  <span className="row-actions">
-                    <button className="edit-btn" onClick={() => startEdit(e)} aria-label="Edit entry">
-                      <Pencil size={14} />
-                    </button>
-                    <button className="del-btn" onClick={() => requestDeleteEntry(e.id)} aria-label="Delete entry">
-                      <Trash2 size={15} />
-                    </button>
-                  </span>
-                </div>
-              ))}
-
-            <div className={`ledger-new-wrap${editingId ? " is-editing" : ""}`}>
-              {editingId && (
-                <div className="editing-banner">
-                  <Pencil size={13} /> Editing an existing entry — change whatever needs correcting (e.g. an early out) and save.
-                </div>
+            {/* ---------- today & upcoming ---------- */}
+            <div className="sec-head">
+              <h2>Today &amp; upcoming</h2>
+              {completedCount > 0 && (
+                <button type="button" className="link-btn" onClick={() => setTab("history")}>History ({completedCount}) <ChevronRight size={15} /></button>
               )}
-
-              <div className="shift-mode-row">
-                <label className="shift-mode-label">Shift coverage</label>
-                <div className={`shift-mode-toggle count-${coverageOptionsFor(draft.category, pastLunchToday, draftClientCoverage).length}`}>
-                  {coverageOptionsFor(draft.category, pastLunchToday, draftClientCoverage).map((key) => {
-                    const meta = COVERAGE_META[key];
-                    const Icon = meta.icon;
-                    return (
-                      <button
-                        type="button"
-                        key={key}
-                        className={draftMode === key ? "active" : ""}
-                        onClick={() => setShiftMode(key)}
-                      >
-                        {Icon && <Icon size={12} />} <span>{meta.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-                {pastLunchToday && (
-                  <span className="field-hint">
-                    It's already past 12:00 PM, so Morning / Whole day isn't available for today's entry.
-                  </span>
-                )}
-                {!pastLunchToday && draftSelectedClient && draftClientCoverage && !(draftClientCoverage.am && draftClientCoverage.pm) && (
-                  <span className="field-hint">
-                    "{draftSelectedClient.name}"'s hours are {formatTime12(normalizeClient(draftSelectedClient).timeIn)}–
-                    {formatTime12(normalizeClient(draftSelectedClient).timeOut)}, so only coverage that fits those hours is shown.
-                  </span>
-                )}
-              </div>
-
-              <div className="new-field date-field">
-                <label>Date</label>
-                <input
-                  type="date"
-                  value={draft.date}
-                  onChange={(e) => setDraft((d) => ({ ...d, date: e.target.value }))}
+            </div>
+            {entries.length === 0 && (
+              <div className="empty"><b>No entries yet</b>{clients.length === 0 ? "Add a host client first, then log your first day." : "Tap the + button to add your first duty day."}</div>
+            )}
+            {entries.length > 0 && ledgerEntries.length === 0 && (
+              <div className="empty"><b>Nothing for today</b>Earlier days have moved to the History tab.</div>
+            )}
+            <div className="entry-list">
+              {ledgerEntries.slice().reverse().map((e) => (
+                <EntryCard
+                  key={e.id}
+                  entry={e}
+                  dateLabel={formatDateLong(e.date)}
+                  clientName={clientName(e.client)}
+                  progress={entryProgress.get(e.id)}
+                  editing={e.id === editingId}
+                  onEdit={startEdit}
+                  onDelete={requestDeleteEntry}
                 />
-              </div>
-
-              <div className="segment-groups">
-                {(draftMode === "full" || draftMode === "am") && (
-                  <div className="segment-group segment-am">
-                    <div className="segment-group-title"><Sun size={13} /> Morning</div>
-                    <div className="segment-group-fields">
-                      <div className="new-field">
-                        <label>Morning in</label>
-                        <TimeInput12
-                          aria-label="Morning in"
-                          value={draft.amIn}
-                          onChange={(v) => setDraft((d) => ({ ...d, amIn: v }))}
-                        />
-                      </div>
-                      <div className="new-field">
-                        <label>Lunch out</label>
-                        <TimeInput12
-                          aria-label="Lunch out"
-                          value={draft.amOut}
-                          onChange={(v) => setDraft((d) => ({ ...d, amOut: v }))}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {(draftMode === "full" || draftMode === "pm" || draftMode === "pmev") && (
-                  <div className="segment-group segment-pm">
-                    <div className="segment-group-title"><Sunset size={13} /> Afternoon</div>
-                    <div className="segment-group-fields">
-                      <div className="new-field">
-                        <label>Lunch in</label>
-                        <TimeInput12
-                          aria-label="Lunch in"
-                          value={draft.pmIn}
-                          onChange={(v) => setDraft((d) => ({ ...d, pmIn: v }))}
-                        />
-                      </div>
-                      <div className="new-field">
-                        <label>Afternoon out</label>
-                        <TimeInput12
-                          aria-label="Afternoon out"
-                          value={draft.pmOut}
-                          onChange={(v) => setDraft((d) => ({ ...d, pmOut: v }))}
-                        />
-                      </div>
-                    </div>
-                    <span className="field-hint">Left early? Set the actual time you clocked out.</span>
-                  </div>
-                )}
-                {(draftMode === "ev" || draftMode === "pmev") && (
-                  <div className="segment-group segment-ev">
-                    <div className="segment-group-title"><Moon size={13} /> Evening</div>
-                    <div className="segment-group-fields">
-                      <div className="new-field">
-                        <label>Evening in</label>
-                        <TimeInput12
-                          aria-label="Evening in"
-                          value={draft.evIn}
-                          onChange={(v) => setDraft((d) => ({ ...d, evIn: v }))}
-                        />
-                      </div>
-                      <div className="new-field">
-                        <label>Evening out</label>
-                        <TimeInput12
-                          aria-label="Evening out"
-                          value={draft.evOut}
-                          onChange={(v) => setDraft((d) => ({ ...d, evOut: v }))}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="total-strip">
-                <span className="total-strip-label">Total for this entry</span>
-                <span className="total-strip-value">{formatHours(segmentHours(draft))}</span>
-              </div>
-              <div className="ledger-new-grid secondary">
-                <div className="new-field grow">
-                  <label>Host client <span className="required-mark">*</span></label>
-                  <select
-                    className={!draft.client ? "field-required" : ""}
-                    value={draft.client}
-                    onChange={(e) => handleClientChange(e.target.value)}
-                  >
-                    <option value="">Select a host client…</option>
-                    {clients.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                  {draftClientDayMismatch && (
-                    <span className="field-hint field-hint-warning">
-                      "{draftSelectedClient.name}" is scheduled {scheduleDaysLabel(draftSelectedClient)}, not{" "}
-                      {draftDateWeekdayLabel}. If this is right, edit "{draftSelectedClient.name}" under Host clients
-                      to add {draftDateWeekdayLabel} — or add it as a separate host client instead.
-                    </span>
-                  )}
-                </div>
-                <div className="new-field">
-                  <label>Shift type</label>
-                  <select value={draft.category} onChange={(e) => handleCategoryChange(e.target.value)}>
-                    {CATEGORIES.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="new-field grow">
-                  <label>Task / remarks</label>
-                  <input
-                    type="text"
-                    placeholder="What are you working on?"
-                    value={draft.task}
-                    onChange={(e) => setDraft((d) => ({ ...d, task: e.target.value }))}
-                  />
-                </div>
-                <div className="new-field-actions">
-                  {editingId && (
-                    <button className="cancel-edit-btn" onClick={cancelEdit} type="button" aria-label="Cancel edit">
-                      <XCircle size={15} /> Cancel
-                    </button>
-                  )}
-                  <button className="add-btn" onClick={submitEntry} aria-label={editingId ? "Save changes" : "Add entry"}>
-                    {editingId ? (
-                      <>Save changes</>
-                    ) : (
-                      <>
-                        <Plus size={17} /> Add {COVERAGE_META[draftMode].short}
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
+              ))}
             </div>
 
-            <div className="ledger-footer">
-              <div className="export-controls">
-                <select
-                  className="export-period-select"
-                  value={exportPeriod}
-                  onChange={(e) => setExportPeriod(e.target.value)}
-                  aria-label="Report period"
-                >
+            {/* ---------- export ---------- */}
+            <section className="card export-card">
+              <h3 className="card-title"><FileDown size={18} /> PDF report</h3>
+              <p className="card-sub">A signable Duty Time Record for your OJT coordinator.</p>
+              <div className="fld">
+                <label htmlFor="export-period">Report type</label>
+                <select id="export-period" value={exportPeriod} onChange={(e) => setExportPeriod(e.target.value)}>
                   <option value="daily">Daily (every entry)</option>
                   <option value="weekly">Weekly summary</option>
                   <option value="monthly">Monthly summary</option>
                 </select>
-                <button
-                  className="export-btn"
-                  onClick={exportPDF}
-                  disabled={exporting || blockingExport}
-                  title={
-                    blockingExport
-                      ? "Today's shift is still in progress against the clock — the report will be available once it finishes."
-                      : undefined
-                  }
-                >
-                  <FileDown size={14} /> {exporting ? "Preparing report…" : blockingExport ? "Shift in progress…" : "Export PDF Report"}
-                </button>
               </div>
+              <button type="button" className="btn btn-primary btn-block" onClick={exportPDF} disabled={exporting || blockingExport}>
+                {exporting ? <><span className="spin" /> Preparing report…</> : blockingExport ? "Shift in progress…" : <><FileDown size={18} /> Export PDF report</>}
+              </button>
               {blockingExport && (
-                <span className="export-blocked-note">
-                  A logged shift for today hasn't reached its scheduled end time yet — report export unlocks once it does.
-                </span>
+                <p className="fld-hint" style={{ textAlign: "center", marginTop: 10 }}>
+                  A logged shift for today hasn't reached its scheduled end yet — export unlocks once it does.
+                </p>
               )}
               <span className="save-note">
-                {saveState === "saving"
-                  ? "Saving…"
-                  : saveState === "error"
-                  ? "Couldn't save — storage may be full or disabled"
-                  : loaded
-                  ? "Saved to your account"
-                  : "Loading…"}
+                {saveState === "saving" ? "Saving…" : saveState === "error" ? "Couldn't save — storage may be full or disabled" : loaded ? "Saved to your account" : "Loading…"}
               </span>
-            </div>
-          </section>
-        ) : tab === "history" ? (
-          <section className="ledger-card">
-            <EntryHistoryPanel entries={entries} clients={clients} now={nowDate} />
-          </section>
-        ) : (
-          <section className="reports-card">
-            <ReportsPanel entries={entries} clients={clients} now={nowDate} blockingExport={blockingExport} />
-          </section>
+            </section>
+          </>
         )}
 
+        {tab === "history" && <EntryHistoryPanel entries={entries} clients={clients} now={nowDate} />}
+        {tab === "reports" && <ReportsPanel entries={entries} clients={clients} now={nowDate} blockingExport={blockingExport} />}
+
         <Footer />
-      </div>
-      <MobileTabBar tab={tab} onTab={setTab} historyCount={completedCount} />
+      </main>
+
+      <MobileTabBar tab={tab} onTab={setTab} onAdd={openNewEntry} historyCount={completedCount} />
+
+      {/* ---------- sheet: add / edit a duty day ---------- */}
+      <Sheet
+        open={entrySheet}
+        onClose={closeEntrySheet}
+        title={editingId ? "Edit duty day" : "Add a duty day"}
+        labelId="entry-sheet-title"
+        footerClass="is-2-1"
+        footer={
+          <>
+            <button type="button" className="btn" onClick={closeEntrySheet}>Cancel</button>
+            <button type="button" className="btn btn-primary" onClick={submitEntry}>
+              {editingId ? "Save changes" : <><Plus size={18} /> Add {COVERAGE_META[draftMode].short}</>}
+            </button>
+          </>
+        }
+      >
+        {entryError && (
+          <div className="notice bad" role="alert" ref={entryBannerRef}>
+            <AlertTriangle size={16} /><span><b>Can't save this entry.</b> {entryError}</span>
+          </div>
+        )}
+        {editingId && (
+          <div className="notice"><Pencil size={16} /><span>Editing an existing entry — fix whatever needs correcting (e.g. an early out) and save.</span></div>
+        )}
+
+        <div className="fld">
+          <label htmlFor="d-date">Date</label>
+          <input id="d-date" type="date" value={draft.date} onChange={(e) => setDraft((d) => ({ ...d, date: e.target.value }))} />
+        </div>
+
+        <div className="fld">
+          <label htmlFor="d-client">Host client <span className="req">*</span></label>
+          <select id="d-client" value={draft.client} aria-invalid={!draft.client ? undefined : false} onChange={(e) => handleClientChange(e.target.value)}>
+            <option value="">Select a host client…</option>
+            {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          {clients.length === 0 && <span className="fld-hint warn">You have no host clients yet — add one from the Logbook screen first.</span>}
+          {clientNote && <span className="fld-hint warn">{clientNote}</span>}
+          {draftClientDayMismatch && (
+            <span className="fld-hint warn">
+              "{draftSelectedClient.name}" is scheduled {scheduleDaysLabel(draftSelectedClient)}, not {draftDateWeekdayLabel}. If this is right, edit it under Host clients to add {draftDateWeekdayLabel} — or add a separate host client.
+            </span>
+          )}
+        </div>
+
+        <div className="fld">
+          <span className="fld-label">Shift type</span>
+          <div className="seg">
+            {CATEGORIES.map((c) => (
+              <button type="button" key={c.id} className={draft.category === c.id ? "active" : ""} onClick={() => handleCategoryChange(c.id)}>{c.label}</button>
+            ))}
+          </div>
+          {categoryNote && <span className="fld-hint">{categoryNote}</span>}
+        </div>
+
+        <div className="fld">
+          <span className="fld-label">Shift coverage</span>
+          <div className={`seg${coverageOpts.length > 3 ? " wrap" : ""}`}>
+            {coverageOpts.map((key) => {
+              const meta = COVERAGE_META[key];
+              const Icon = meta.icon;
+              return (
+                <button type="button" key={key} className={draftMode === key ? "active" : ""} onClick={() => setShiftMode(key)}>
+                  {Icon && <Icon size={14} />} <span>{meta.label}</span>
+                </button>
+              );
+            })}
+          </div>
+          {pastLunchToday && <span className="fld-hint">It's already past 12:00 PM, so Morning / Whole day isn't available for today's entry.</span>}
+          {!pastLunchToday && draftSelectedClient && draftClientCoverage && !(draftClientCoverage.am && draftClientCoverage.pm) && (
+            <span className="fld-hint">
+              "{draftSelectedClient.name}"'s hours are {formatTime12(normalizeClient(draftSelectedClient).timeIn)}–{formatTime12(normalizeClient(draftSelectedClient).timeOut)}, so only coverage that fits those hours is shown.
+            </span>
+          )}
+          {!categoryIsEvening && <span className="fld-hint">Choose Evening or Overtime above to log evening hours.</span>}
+        </div>
+
+        {(draftMode === "full" || draftMode === "am") && (
+          <div className="seg-card seg-am">
+            <div className="seg-card-title"><span className="seg-ico"><Sun size={16} /></span> Morning</div>
+            <div className="fld"><label>Morning in</label><TimeInput12 aria-label="Morning in" value={draft.amIn} onChange={(v) => setDraft((d) => ({ ...d, amIn: v }))} /></div>
+            <div className="fld"><label>Lunch out</label><TimeInput12 aria-label="Lunch out" value={draft.amOut} onChange={(v) => setDraft((d) => ({ ...d, amOut: v }))} /></div>
+          </div>
+        )}
+        {(draftMode === "full" || draftMode === "pm" || draftMode === "pmev") && (
+          <div className="seg-card seg-pm">
+            <div className="seg-card-title"><span className="seg-ico"><Sunset size={16} /></span> Afternoon</div>
+            <div className="fld"><label>Lunch in</label><TimeInput12 aria-label="Lunch in" value={draft.pmIn} onChange={(v) => setDraft((d) => ({ ...d, pmIn: v }))} /></div>
+            <div className="fld"><label>Afternoon out</label><TimeInput12 aria-label="Afternoon out" value={draft.pmOut} onChange={(v) => setDraft((d) => ({ ...d, pmOut: v }))} /></div>
+            <span className="fld-hint">Left early? Set the actual time you clocked out.</span>
+          </div>
+        )}
+        {(draftMode === "ev" || draftMode === "pmev") && (
+          <div className="seg-card seg-ev">
+            <div className="seg-card-title"><span className="seg-ico"><Moon size={16} /></span> Evening</div>
+            <div className="fld"><label>Evening in</label><TimeInput12 aria-label="Evening in" value={draft.evIn} onChange={(v) => setDraft((d) => ({ ...d, evIn: v }))} /></div>
+            <div className="fld"><label>Evening out</label><TimeInput12 aria-label="Evening out" value={draft.evOut} onChange={(v) => setDraft((d) => ({ ...d, evOut: v }))} /></div>
+          </div>
+        )}
+
+        <div className="total-strip"><span>Total for this entry</span><b>{formatHours(segmentHours(draft))}</b></div>
+
+        <div className="fld">
+          <label htmlFor="d-task">Task / remarks <em>(optional)</em></label>
+          <input id="d-task" type="text" placeholder="What are you working on?" value={draft.task} onChange={(e) => setDraft((d) => ({ ...d, task: e.target.value }))} />
+        </div>
+      </Sheet>
+
+      {/* ---------- sheet: host client ---------- */}
+      <Sheet
+        open={clientSheet}
+        onClose={resetClientForm}
+        title={editingClientId ? "Edit host client" : "Add host client"}
+        labelId="client-sheet-title"
+        footerClass="is-2-1"
+        footer={
+          <>
+            <button type="button" className="btn" onClick={resetClientForm}>Cancel</button>
+            <button type="button" className="btn btn-primary" onClick={addClient}>
+              {editingClientId ? "Save changes" : <><Plus size={18} /> Add host client</>}
+            </button>
+          </>
+        }
+      >
+        <div className="fld">
+          <label htmlFor="c-name">Office / company <span className="req">*</span></label>
+          <input
+            id="c-name" value={newClientName} maxLength={CLIENT_NAME_MAX} aria-required="true" aria-invalid={!!clientError}
+            onChange={(e) => { setNewClientName(e.target.value); setClientError(""); }}
+            placeholder="e.g. City Hall — IT Office"
+          />
+          {clientError && <span className="fld-error" role="alert">{clientError}</span>}
+        </div>
+        <div className="fld">
+          <span className="fld-label">Type</span>
+          <div className="seg">
+            {Object.entries(COMPANY_TYPES).map(([key, meta]) => (
+              <button type="button" key={key} className={newClientType === key ? "active" : ""} onClick={() => applyClientTypePreset(key)}>{meta.label}</button>
+            ))}
+          </div>
+        </div>
+        <div className="fld">
+          <span className="fld-label">Working days</span>
+          <div className="days">
+            {WEEKDAYS.map((d) => (
+              <button type="button" key={d.id} className={newClientDays.includes(d.id) ? "active" : ""} onClick={() => toggleNewClientDay(d.id)} aria-pressed={newClientDays.includes(d.id)}>{d.short}</button>
+            ))}
+          </div>
+        </div>
+        <div className="fld"><label>Time in</label><TimeInput12 aria-label="Time in" value={newClientTimeIn} onChange={setNewClientTimeIn} /></div>
+        <div className="fld"><label>Time out</label><TimeInput12 aria-label="Time out" value={newClientTimeOut} onChange={setNewClientTimeOut} /></div>
+        <div className="notice">
+          <Info size={16} />
+          <span>
+            {formatTime12(newClientTimeIn)}–{formatTime12(newClientTimeOut)} = {formatHours(dailyHoursFor({ days: newClientDays, timeIn: newClientTimeIn, timeOut: newClientTimeOut }))} a day
+            (lunch break already excluded), on {scheduleDaysLabel({ days: newClientDays })}.
+          </span>
+        </div>
+      </Sheet>
+
+      {/* ---------- sheet: trainee setup ---------- */}
+      <Sheet
+        open={setupSheet}
+        onClose={() => setSetupSheet(false)}
+        title="Trainee details"
+        labelId="setup-sheet-title"
+        footer={<button type="button" className="btn btn-primary" onClick={() => setSetupSheet(false)}>Done</button>}
+      >
+        <div className={`fld${setupErrors.name ? " has-error" : ""}`}>
+          <label htmlFor="s-name">Trainee name <span className="req">*</span></label>
+          <input
+            id="s-name" value={studentName} maxLength={80} aria-required="true" aria-invalid={!!setupErrors.name} placeholder="Juan Dela Cruz"
+            onChange={(e) => { setStudentName(e.target.value); setSetupErrors((x) => ({ ...x, name: undefined })); }}
+            onBlur={() => setSetupErrors((x) => ({ ...x, name: traineeNameProblem(studentName) || undefined }))}
+          />
+          {setupErrors.name ? <span className="fld-error" role="alert">{setupErrors.name}</span> : <span className="fld-hint">Printed on your PDF report.</span>}
+        </div>
+        <div className="fld">
+          <label htmlFor="s-hours">Required hours <span className="req">*</span></label>
+          <input
+            id="s-hours" type="text" inputMode="numeric" pattern="[0-9]*" value={targetHoursInput}
+            onChange={(e) => {
+              // Digits only — also strips leading zeros as the user types.
+              const digits = e.target.value.replace(/\D/g, "").replace(/^0+(?=\d)/, "").slice(0, 4);
+              setTargetHoursInput(digits);
+              setTargetHours(digits ? Number(digits) : 0);
+              setHoursNote("");
+            }}
+            onBlur={() => {
+              // Fall back to a default only when left empty / invalid, not the instant a digit is deleted.
+              const problem = targetHoursProblem(targetHoursInput);
+              const parsed = Number(targetHoursInput);
+              const safe = problem ? (parsed > MAX_TARGET_HOURS ? MAX_TARGET_HOURS : 486) : parsed;
+              setHoursNote(problem ? `${problem} It was set to ${safe}.` : "");
+              setTargetHours(safe);
+              setTargetHoursInput(String(safe));
+            }}
+          />
+          {hoursNote
+            ? <span className="fld-hint warn" role="status">{hoursNote}</span>
+            : <span className="fld-hint">Total OJT hours your school requires (e.g. 486).</span>}
+        </div>
+      </Sheet>
+
+      <ConfirmSheet
+        open={!!confirmDialog}
+        title={confirmIsEntry ? "Delete this entry?" : "Remove this host client?"}
+        message={
+          confirmIsEntry
+            ? confirmTarget
+              ? `Are you sure you want to delete the entry for ${formatDateLong(confirmTarget.date)}? This can't be undone.`
+              : "Are you sure you want to delete this entry? This can't be undone."
+            : confirmTarget
+            ? `Are you sure you want to remove "${confirmTarget.name}"? It has no duty log entries, so this is safe.`
+            : "Are you sure you want to remove this host client?"
+        }
+        yes={`Yes, ${confirmIsEntry ? "delete" : "remove"}`}
+        onYes={confirmDialogAction}
+        onNo={cancelConfirm}
+      />
     </div>
   );
 }

@@ -4,7 +4,7 @@
 //    and then offline.html, so an installed app still opens with no signal.
 //  - /api/* is NEVER cached (private, per-user data); the app keeps its own
 //    offline copy of the logbook and syncs when the connection returns.
-const VERSION = "occ-v1";
+const VERSION = "occ-v2";
 const SHELL = `${VERSION}-shell`;
 const ASSETS = `${VERSION}-assets`;
 const PRECACHE = ["/offline.html", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];

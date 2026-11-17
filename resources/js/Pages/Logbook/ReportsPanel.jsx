@@ -5,9 +5,9 @@ import { completionFor, COVERAGE_SHORT_LABEL } from "../../utils/dutyStatus";
 import { liveEntryProgress } from "../../utils/liveProgress";
 
 const CATEGORY_META = {
-  regular: { label: "Regular", swatch: "var(--brass)" },
-  evening: { label: "Evening", swatch: "var(--evening)" },
-  overtime: { label: "Overtime", swatch: "var(--rust)" },
+  regular: { label: "Regular", swatch: "var(--accent-text)" },
+  evening: { label: "Evening", swatch: "var(--ev)" },
+  overtime: { label: "Overtime", swatch: "var(--warn)" },
 };
 
 // Reports are a record of what's actually happened, not what's been typed
@@ -135,196 +135,135 @@ export default function ReportsPanel({ entries, clients, now = new Date(), block
     };
   }, [activeEntries, progressById]);
 
-  // No report to show at all until at least one entry has actually
-  // started against the clock — a bunch of scheduled-but-not-yet-due
-  // entries isn't reportable data yet.
+  // No report to show at all until at least one entry has actually started
+  // against the clock — scheduled-but-not-yet-due entries aren't data yet.
   if (activeEntries.length === 0) {
     return (
-      <div className="reports-empty">
+      <div className="empty">
+        <b>No report yet</b>
         {entries.length === 0
-          ? "No entries yet. Add a day in the Logbook tab to see your reports."
-          : "Your logged shift hasn't started yet against the clock — this report will populate in real time once it does."}
+          ? "Add a day with the + button to see your reports."
+          : "Your logged shift hasn't started yet — this report fills in live once it does."}
       </div>
     );
   }
 
+  const stats = [
+    { label: "Hours logged", value: formatHours(grandTotal), icon: Clock3 },
+    { label: "Days logged", value: activeEntries.length, icon: CalendarClock },
+    { label: "Days complete", value: completionSummary.met, icon: CheckCircle2 },
+    { label: "Days short", value: completionSummary.short, icon: AlertTriangle },
+  ];
+
+  const Bar = ({ icon: Icon, name, value, pct, color }) => (
+    <div className="bar-row">
+      <div className="bar-row-head">
+        <span className="bar-name">{Icon && <Icon size={15} />}{name}</span>
+        <span className="bar-value">{formatHours(value)}</span>
+      </div>
+      <div className="bar-track"><div className="bar-fill" style={{ width: `${pct}%`, ...(color ? { background: color } : null) }} /></div>
+    </div>
+  );
+
   return (
-    <div className="reports-grid">
-      {(blockingExport || upcomingCount > 0) && (
-        <div className="report-card report-card--wide reports-live-banner">
-          {blockingExport && (
-            <div className="live-banner-row is-progress">
-              <Clock3 size={15} />
-              <span>
-                Today's shift is still running against the clock — the numbers below are updating in real time, and
-                PDF export is locked until it finishes.
-              </span>
-            </div>
-          )}
-          {upcomingCount > 0 && (
-            <div className="live-banner-row is-upcoming">
-              <CalendarClock size={15} />
-              <span>
-                {upcomingCount} scheduled {upcomingCount === 1 ? "entry hasn't" : "entries haven't"} started yet and{" "}
-                {upcomingCount === 1 ? "isn't" : "aren't"} included below yet.
-              </span>
-            </div>
-          )}
+    <div className="reports">
+      <div className="stats" role="list" style={{ marginTop: 0 }}>
+        {stats.map(({ label, value, icon: Icon }) => (
+          <div className="stat" role="listitem" key={label}>
+            <span className="stat-ico" aria-hidden="true"><Icon size={72} strokeWidth={1.3} /></span>
+            <b>{value}</b>
+            <small>{label}</small>
+          </div>
+        ))}
+      </div>
+
+      {blockingExport && (
+        <div className="live-note is-progress">
+          <Clock3 size={16} />
+          <span>Today's shift is still running — these numbers update live and PDF export is locked until it finishes.</span>
+        </div>
+      )}
+      {upcomingCount > 0 && (
+        <div className="live-note is-upcoming">
+          <CalendarClock size={16} />
+          <span>{upcomingCount} scheduled {upcomingCount === 1 ? "entry hasn't" : "entries haven't"} started yet and {upcomingCount === 1 ? "isn't" : "aren't"} counted below.</span>
         </div>
       )}
 
-      <div className="report-card">
-        <h3>Morning vs. afternoon vs. evening hours</h3>
+      <section className="card report-card">
+        <h3 className="card-title">Morning · afternoon · evening</h3>
         <div className="bar-list">
-          <div className="bar-row">
-            <div className="bar-row-head">
-              <span className="bar-name"><Sun size={13} /> Morning (time in – lunch)</span>
-              <span className="bar-value">{formatHours(dayPart.morning)}</span>
-            </div>
-            <div className="bar-track">
-              <div className="bar-fill" style={{ width: `${(dayPart.morning / maxDayPart) * 100}%`, background: "var(--brass)" }} />
-            </div>
-          </div>
-          <div className="bar-row">
-            <div className="bar-row-head">
-              <span className="bar-name"><Sunset size={13} /> Afternoon (lunch – time out)</span>
-              <span className="bar-value">{formatHours(dayPart.afternoon)}</span>
-            </div>
-            <div className="bar-track">
-              <div className="bar-fill" style={{ width: `${(dayPart.afternoon / maxDayPart) * 100}%`, background: "var(--evening)" }} />
-            </div>
-          </div>
-          <div className="bar-row">
-            <div className="bar-row-head">
-              <span className="bar-name"><Moon size={13} /> Evening (overtime / late coverage)</span>
-              <span className="bar-value">{formatHours(dayPart.evening)}</span>
-            </div>
-            <div className="bar-track">
-              <div className="bar-fill" style={{ width: `${(dayPart.evening / maxDayPart) * 100}%`, background: "var(--rust)" }} />
-            </div>
-          </div>
+          <Bar icon={Sun} name="Morning" value={dayPart.morning} pct={(dayPart.morning / maxDayPart) * 100} color="var(--am)" />
+          <Bar icon={Sunset} name="Afternoon" value={dayPart.afternoon} pct={(dayPart.afternoon / maxDayPart) * 100} color="var(--pm)" />
+          <Bar icon={Moon} name="Evening" value={dayPart.evening} pct={(dayPart.evening / maxDayPart) * 100} color="var(--ev)" />
         </div>
-      </div>
+      </section>
 
-      <div className="report-card">
-        <h3>Hours by host client</h3>
+      <section className="card report-card">
+        <h3 className="card-title">Hours by host client</h3>
         <div className="bar-list">
           {byClient.map((b) => (
-            <div className="bar-row" key={b.id}>
-              <div className="bar-row-head">
-                <span className="bar-name">{b.id === "unassigned" ? "Unassigned" : clientName(b.id)}</span>
-                <span className="bar-value">{formatHours(b.hours)}</span>
-              </div>
-              <div className="bar-track">
-                <div className="bar-fill client" style={{ width: `${(b.hours / maxClientHours) * 100}%` }} />
-              </div>
-              <div className="bar-meta">
-                {b.days} {b.days === 1 ? "entry" : "entries"} &middot; last logged {b.last}
-              </div>
+            <div key={b.id}>
+              <Bar name={b.id === "unassigned" ? "Unassigned" : clientName(b.id)} value={b.hours} pct={(b.hours / maxClientHours) * 100} />
+              <div className="bar-meta">{b.days} {b.days === 1 ? "entry" : "entries"} · last logged {b.last}</div>
             </div>
           ))}
         </div>
-      </div>
+      </section>
 
-      <div className="report-card">
-        <h3>Hours by shift type</h3>
+      <section className="card report-card">
+        <h3 className="card-title">Hours by shift type</h3>
         <div className="bar-list">
           {Object.entries(byCategory).map(([key, hours]) => (
-            <div className="bar-row" key={key}>
-              <div className="bar-row-head">
-                <span className="bar-name">
-                  <i className="dot" style={{ background: CATEGORY_META[key].swatch }} />
-                  {CATEGORY_META[key].label}
-                </span>
-                <span className="bar-value">{formatHours(hours)}</span>
-              </div>
-              <div className="bar-track">
-                <div
-                  className="bar-fill"
-                  style={{
-                    width: `${(hours / maxCategoryHours) * 100}%`,
-                    background: CATEGORY_META[key].swatch,
-                  }}
-                />
-              </div>
-            </div>
+            <Bar key={key} icon={() => <i className="dot" style={{ background: CATEGORY_META[key].swatch }} />} name={CATEGORY_META[key].label} value={hours} pct={(hours / maxCategoryHours) * 100} color={CATEGORY_META[key].swatch} />
           ))}
         </div>
-        <div className="report-total">
-          <span>Total logged</span>
-          <strong>{formatHours(grandTotal)}</strong>
-        </div>
-      </div>
+        <div className="report-total"><span>Total logged</span><strong>{formatHours(grandTotal)}</strong></div>
+      </section>
 
-      <div className="report-card">
-        <h3>Shift coverage completion</h3>
+      <section className="card report-card">
+        <h3 className="card-title">Shift coverage completion</h3>
         <div className="completion-summary">
           <div className="completion-stat completion-stat--met">
-            <CheckCircle2 size={16} />
-            <div>
-              <strong>{completionSummary.met}</strong>
-              <span>day{completionSummary.met === 1 ? "" : "s"} met the hours for their shift coverage</span>
-            </div>
+            <CheckCircle2 size={20} />
+            <div><strong>{completionSummary.met}</strong><span>day{completionSummary.met === 1 ? "" : "s"} met their hours</span></div>
           </div>
           <div className="completion-stat completion-stat--short">
-            <AlertTriangle size={16} />
-            <div>
-              <strong>{completionSummary.short}</strong>
-              <span>day{completionSummary.short === 1 ? "" : "s"} came in short</span>
-            </div>
+            <AlertTriangle size={20} />
+            <div><strong>{completionSummary.short}</strong><span>day{completionSummary.short === 1 ? "" : "s"} came in short</span></div>
           </div>
         </div>
-        <div className="bar-list completion-breakdown">
+        <div className="bar-list">
           {completionSummary.byCoverage.map((b) => {
             const total = b.met + b.short;
             return (
-              <div className="bar-row" key={b.coverage}>
+              <div key={b.coverage}>
                 <div className="bar-row-head">
                   <span className="bar-name">{COVERAGE_SHORT_LABEL[b.coverage] || b.coverage}</span>
-                  <span className="bar-value">
-                    {b.met}/{total} complete
-                  </span>
+                  <span className="bar-value">{b.met}/{total} complete</span>
                 </div>
-                <div className="bar-track">
-                  <div
-                    className="bar-fill"
-                    style={{
-                      width: `${(b.met / total) * 100}%`,
-                      background: b.met === total ? "var(--teal)" : "var(--brass)",
-                    }}
-                  />
-                </div>
-                {b.short > 0 && (
-                  <div className="bar-meta">
-                    Short a combined {formatHours(b.shortfallHours)} across {b.short} {b.short === 1 ? "day" : "days"}
-                  </div>
-                )}
+                <div className="bar-track"><div className="bar-fill" style={{ width: `${(b.met / total) * 100}%`, background: b.met === total ? "var(--ok)" : "var(--warn)" }} /></div>
+                {b.short > 0 && <div className="bar-meta">Short a combined {formatHours(b.shortfallHours)} across {b.short} {b.short === 1 ? "day" : "days"}</div>}
               </div>
             );
           })}
         </div>
-      </div>
+      </section>
 
-      <div className="report-card report-card--wide">
-        <h3>Detailed duty log</h3>
-        <p className="report-card-sub">
-          Every entry, most recent first — exact date, weekday, and the precise time range for each shift-coverage segment logged.
-        </p>
+      <section className="card report-card">
+        <h3 className="card-title">Detailed duty log</h3>
+        <p className="report-sub">Every entry, most recent first, with the exact time range for each segment.</p>
         <div className="timeline-list">
           {detailedLog.map((e) => (
             <div className="timeline-item" key={e.id}>
               <div className="timeline-head">
                 <span className="timeline-date">{formatDateReport(e.date)}</span>
                 <span className="timeline-head-tags">
-                  <span className={`tag tag-${e.category}`}>{CATEGORY_META[e.category].label}</span>
+                  <span className={`badge ${e.category === "evening" ? "ev" : e.category === "overtime" ? "warn" : ""}`}>{CATEGORY_META[e.category].label}</span>
                   {e.progress?.status === "in-progress" ? (
-                    <span className="completion-badge is-progress" title={`${formatHours(e.liveHours)} elapsed of ${formatHours(e.progress.scheduledHours)} scheduled — still running`}>
-                      <span className="live-dot" /> In progress
-                    </span>
+                    <span className="badge warn"><span className="live-dot" /> In progress</span>
                   ) : e.completion ? (
-                    <span className={`completion-badge ${e.completion.met ? "is-met" : "is-short"}`}>
-                      {e.completion.met ? "Complete" : `−${formatHours(Math.abs(e.completion.delta))}`}
-                    </span>
+                    <span className={`badge ${e.completion.met ? "ok" : "bad"}`}>{e.completion.met ? "Complete" : `−${formatHours(Math.abs(e.completion.delta))}`}</span>
                   ) : null}
                 </span>
               </div>
@@ -334,23 +273,20 @@ export default function ReportsPanel({ entries, clients, now = new Date(), block
                   const segLive = segProgress?.status === "in-progress";
                   return (
                     <span className={`timeline-seg${segLive ? " is-live" : ""}`} key={s.key}>
-                      <s.Icon size={12} /> {s.label}: {s.range}{" "}
-                      <em>({segLive ? `${formatHours(segProgress.live)} so far` : formatHours(s.hours)})</em>
+                      <s.Icon size={13} /> {s.label}: {s.range} <em>({segLive ? `${formatHours(segProgress.live)} so far` : formatHours(s.hours)})</em>
                     </span>
                   );
                 })}
               </div>
               <div className="timeline-meta">
-                <span className="timeline-client"><Users size={11} /> {clientName(e.client)}</span>
-                <span className="timeline-total">
-                  {e.progress?.status === "in-progress" ? "Elapsed so far" : "Total for the day"}: {formatHours(e.liveHours)}
-                </span>
+                <span className="timeline-client"><Users size={12} /> {clientName(e.client)}</span>
+                <span>{e.progress?.status === "in-progress" ? "Elapsed so far" : "Total"}: {formatHours(e.liveHours)}</span>
               </div>
               {e.task && <div className="timeline-task">“{e.task}”</div>}
             </div>
           ))}
         </div>
-      </div>
+      </section>
     </div>
   );
 }

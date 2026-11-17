@@ -12,21 +12,21 @@ const CSS = `
   .occ-block{box-sizing:border-box;min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;
     align-items:center;justify-content:center;gap:14px;padding:28px;text-align:center;
     font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
-    background:#ECF0EC;color:#16211C}
-  .occ-block img{width:72px;height:72px;border-radius:18px;object-fit:contain}
+    background:#f4f7fb;color:#0b1220}
+  .occ-block img{width:72px;height:72px;border-radius:20px;object-fit:contain;background:#fff;padding:8px;box-shadow:0 10px 24px -12px rgba(2,6,23,.4)}
   .occ-block h1{margin:0;font-size:24px;font-weight:700}
   .occ-block p{margin:0;max-width:420px;font-size:15px;line-height:1.6;opacity:.78}
   .occ-block ol{margin:2px 0 0;padding:0;list-style-position:inside;max-width:420px;font-size:14px;line-height:1.8;opacity:.85;text-align:left}
-  .occ-block .occ-ico{display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:50%;background:#16211C;color:#fff}
+  .occ-block .occ-ico{display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#4338ca,#4f46e5 50%,#6366f1);color:#fff}
   .occ-block .occ-url{max-width:90vw;word-break:break-all;font:500 13px ui-monospace,SFMono-Regular,Menlo,monospace;
-    padding:10px 14px;border-radius:12px;background:#fff;border:1px solid rgba(22,33,28,.14)}
+    padding:10px 14px;border-radius:16px;background:#fff;border:1.5px solid #c3ccdb}
   .occ-block button{display:inline-flex;align-items:center;gap:8px;padding:11px 22px;border:0;border-radius:12px;
-    font-weight:700;font-size:14px;color:#fff;background:#16211C;cursor:pointer}
+    font-weight:750;font-size:14px;color:#fff;background:linear-gradient(135deg,#4338ca,#4f46e5 50%,#6366f1);cursor:pointer;min-height:48px}
   .occ-block small{opacity:.6;font-size:12px}
   @media (prefers-color-scheme: dark){
-    .occ-block{background:#0f1612;color:#e8efe9}
-    .occ-block .occ-ico,.occ-block button{background:#e8efe9;color:#0f1612}
-    .occ-block .occ-url{background:#16211C;border-color:rgba(255,255,255,.16)}
+    .occ-block{background:#0a0c12;color:#e7ecf3}
+    .occ-block .occ-ico{background:#e7ecf3;color:#0a0c12}
+    .occ-block .occ-url{background:#12161f;border-color:#323b4a}
   }
 `;
 

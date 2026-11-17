@@ -3,6 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import ProtectedRoute, { GuestRoute } from "./Components/shared/ProtectedRoute";
 import { NotificationProvider } from "./context/NotificationContext";
 import { AuthProvider } from "./context/AuthContext";
+import { ToastProvider } from "./context/ToastContext";
+import { PopupProvider } from "./context/PopupContext";
 import Splash from "./Components/shared/Splash";
 import OfflineNotice from "./Components/shared/OfflineNotice";
 import UpdateNotice from "./Components/shared/UpdateNotice";
@@ -14,6 +16,8 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <NotificationProvider>
+          <ToastProvider>
+          <PopupProvider>
           <OfflineNotice />
           <UpdateNotice />
           <Suspense fallback={<Splash />}>
@@ -29,6 +33,8 @@ export default function App() {
             </Routes>
           </Suspense>
           <InstallPrompt />
+          </PopupProvider>
+          </ToastProvider>
         </NotificationProvider>
       </AuthProvider>
     </BrowserRouter>

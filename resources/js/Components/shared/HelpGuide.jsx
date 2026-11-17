@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import Sheet from "./Sheet";
 import {
   HelpCircle,
   X,
@@ -46,7 +47,7 @@ function GuideContent() {
       <section className="help-section">
         <h3><Plus size={14} /> 2. Adding a day</h3>
         <ul>
-          <li>Use <strong>Add day</strong> at the bottom of the Logbook tab to log a shift — for today or any past date.</li>
+          <li>Tap the raised <strong>+ Add day</strong> button in the bottom bar to log a shift — for today or any past date.</li>
           <li>Choose the <strong>shift coverage</strong> for that entry:
             <span className="help-inline-icons">
               <Sun size={12} /> Morning only, <Sunset size={12} /> Afternoon only, <Moon size={12} /> Evening only,
@@ -55,14 +56,14 @@ function GuideContent() {
           </li>
           <li>Available options adjust automatically — e.g. you can't pick "Morning" for today's date once it's already past 12:00 PM, and the options narrow to match whatever hours your selected host client actually works.</li>
           <li>A <strong>host client is required</strong> on every entry, and the time ranges can't overlap another entry already logged for that same date.</li>
-          <li>Use the <strong>pencil icon</strong> on any row to correct it (e.g. an early out), or the <strong>trash icon</strong> to delete it (with a confirmation prompt).</li>
+          <li>Use <strong>Edit</strong> on any entry to correct it (e.g. an early out), or <strong>Delete</strong> to remove it (with a confirmation prompt).</li>
         </ul>
       </section>
 
       <section className="help-section">
         <h3><ShieldCheck size={14} /> 3. Real-time progress &amp; completion</h3>
         <ul>
-          <li>The hero ring shows total hours logged vs. your required hours, and updates live as scheduled shift time actually elapses.</li>
+          <li>The progress ring at the top of the Logbook shows total hours logged vs. your required hours, and updates live as scheduled shift time actually elapses.</li>
           <li>An entry added for a time that hasn't happened yet (e.g. adding today's 8–5 shift at 7:59 AM) contributes <strong>0 hours</strong> until that time actually arrives, then ticks up in real time — it never lets you claim hours you haven't worked yet.</li>
           <li>Each entry gets a badge: <strong>Scheduled</strong> (hasn't started), <strong>In progress</strong> (currently running), <strong>Complete</strong> (met the standard hours for its coverage), or a <strong>−Xh</strong> short badge if it fell short.</li>
         </ul>
@@ -105,126 +106,77 @@ function GuideContent() {
   );
 }
 
-// Always-available reference, opened from the (?) button beside the
-// notification bell. Freely dismissible — unlike the onboarding version
-// below, this one isn't gating anything, so it closes on backdrop click,
-// the X button, or Escape.
+// Always-available reference, opened from the (?) button in the app bar.
 export function HelpButton() {
   const [open, setOpen] = useState(false);
-
   return (
     <>
       <button
-        className="help-btn"
+        type="button"
+        className="icon-btn"
         onClick={() => setOpen(true)}
         aria-label="How to use the Duty Log"
         title="How to use the Duty Log"
       >
-        <HelpCircle size={18} />
+        <HelpCircle size={19} />
       </button>
-
-      {open && (
-        <div className="help-overlay" role="presentation" onClick={() => setOpen(false)}>
-          <div
-            className="help-card"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="help-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="help-card-head">
-              <h2 id="help-title">How the OJT Duty Log works</h2>
-              <button className="icon-btn" onClick={() => setOpen(false)} aria-label="Close">
-                <X size={16} />
-              </button>
-            </div>
-
-            <div className="help-card-body">
-              <GuideContent />
-            </div>
-          </div>
-        </div>
-      )}
+      <Sheet open={open} onClose={() => setOpen(false)} title="How the Duty Log works" labelId="help-title">
+        <GuideContent />
+      </Sheet>
     </>
   );
 }
 
-// One-time walkthrough shown automatically the first time a fresh/new
-// account signs in (see LogbookPage's onboarding-seen check). Deliberately
-// NOT dismissible via backdrop click, Escape, or an X button — the trainee
-// has to actually scroll the guide to its end before Done/Skip unlock, so
-// a first-time user can't accidentally miss how host clients, adding a
-// day, and PDF export work before they start using the app for real.
+// One-time walkthrough shown the first time an account signs in. The trainee
+// has to scroll to the end before Skip / Done unlock, so nobody misses how
+// host clients, adding a day and the PDF export work.
 export function OnboardingGuide({ open, onDone }) {
   const [reachedBottom, setReachedBottom] = useState(false);
   const bodyRef = useRef(null);
 
-  // Re-check whenever the modal opens (covers the case where the content
-  // is already short enough to not need scrolling at all on a tall screen).
   useEffect(() => {
-    if (!open) {
-      setReachedBottom(false);
-      return;
-    }
-    const el = bodyRef.current;
-    if (!el) return;
-    if (el.scrollHeight - el.clientHeight <= 4) setReachedBottom(true);
+    if (!open) { setReachedBottom(false); return undefined; }
+    const t = setTimeout(() => {
+      const el = bodyRef.current?.closest(".sheet-body");
+      if (el && el.scrollHeight - el.clientHeight <= 4) setReachedBottom(true);
+    }, 60);
+    return () => clearTimeout(t);
   }, [open]);
 
-  function handleScroll(e) {
-    const el = e.currentTarget;
-    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= 4;
-    if (atBottom) setReachedBottom(true);
-  }
-
-  if (!open) return null;
+  useEffect(() => {
+    if (!open) return undefined;
+    const el = bodyRef.current?.closest(".sheet-body");
+    if (!el) return undefined;
+    const on = () => { if (el.scrollHeight - el.scrollTop - el.clientHeight <= 6) setReachedBottom(true); };
+    el.addEventListener("scroll", on, { passive: true });
+    return () => el.removeEventListener("scroll", on);
+  }, [open]);
 
   return (
-    <div className="help-overlay onboarding-overlay" role="presentation">
-      <div
-        className="help-card onboarding-card"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="onboarding-title"
-      >
-        <div className="help-card-head">
-          <h2 id="onboarding-title">Welcome! Here's how the OJT Duty Log works</h2>
-        </div>
-
-        <div className="help-card-body" ref={bodyRef} onScroll={handleScroll}>
-          <GuideContent />
-          <p className="onboarding-end-marker">
-            That's everything — you're ready to set up your host client and start logging your hours.
-          </p>
-        </div>
-
-        <div className="onboarding-footer">
+    <Sheet
+      open={open}
+      onClose={() => {}}
+      dismissible={false}
+      title="Welcome! How the Duty Log works"
+      labelId="onboarding-title"
+      footerClass="is-2-1"
+      footer={
+        <>
           {!reachedBottom && (
-            <span className="onboarding-scroll-hint">
-              <ChevronDown size={13} /> Scroll down to read the full guide
-            </span>
+            <span className="onboarding-hint"><ChevronDown size={14} /> Scroll down to read the full guide</span>
           )}
-          <div className="onboarding-actions">
-            <button
-              type="button"
-              className="onboarding-skip-btn"
-              disabled={!reachedBottom}
-              onClick={onDone}
-            >
-              Skip
-            </button>
-            <button
-              type="button"
-              className="onboarding-done-btn"
-              disabled={!reachedBottom}
-              onClick={onDone}
-            >
-              Done
-            </button>
-          </div>
-        </div>
+          <button type="button" className="btn" disabled={!reachedBottom} onClick={onDone}>Skip</button>
+          <button type="button" className="btn btn-primary" disabled={!reachedBottom} onClick={onDone}>Done</button>
+        </>
+      }
+    >
+      <div ref={bodyRef}>
+        <GuideContent />
+        <p className="onboarding-end-marker">
+          That's everything — you're ready to set up your host client and start logging your hours.
+        </p>
       </div>
-    </div>
+    </Sheet>
   );
 }
 

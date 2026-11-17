@@ -1,14 +1,26 @@
 import React, { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Eye, EyeOff } from "lucide-react";
-import AuthShell, { Banner, Divider, Field } from "../../Components/auth/AuthShell";
+import { IdCard, Lock } from "lucide-react";
+import AuthShell, {
+  Divider, LedgerBanner, LedgerButton, LedgerInput, LedgerPasswordInput, LedgerRow,
+} from "../../Components/auth/AuthShell";
 import GoogleSignInButton from "../../Components/auth/GoogleSignInButton";
 import api, { errorMessage, fieldErrors } from "../../config/axiosConfig";
 import { useAuth } from "../../context/AuthContext";
-import { validateLogin, focusFirstInvalid, clean } from "../../utils/validators";
+import { useToast } from "../../context/ToastContext";
+import { validateLogin, focusFirstInvalid, clean, FORMAT_HINTS } from "../../utils/validators";
+
+// iOS opens the keyboard only for a field focused by a tap, so only auto-focus
+// with a real mouse. (utils/touchFocusGuard.js enforces the same on touch.)
+const canAutoFocus = typeof window === "undefined" || !window.matchMedia
+  || window.matchMedia("(pointer: fine)").matches;
+
+// LogbookPage reads this once and shows "Welcome back", then removes it.
+const flagWelcome = () => { try { sessionStorage.setItem("occ_login_toast", "1"); } catch { /* storage blocked */ } };
 
 export default function LoginPage() {
   const { signIn } = useAuth();
+  const toast = useToast();
   const navigate = useNavigate();
   const location = useLocation();
   const [studentId, setStudentId] = useState("");
@@ -21,7 +33,16 @@ export default function LoginPage() {
 
   useEffect(() => { document.title = "Sign in | OCC Duty Log"; }, []);
 
-  const goHome = () => navigate(location.state?.from || "/logbook", { replace: true });
+  const goHome = () => {
+    flagWelcome();
+    navigate(location.state?.from || "/logbook", { replace: true });
+  };
+
+  // One toast for a failed sign-in (replaced, never stacked) + the banner in the card.
+  const fail = (message) => {
+    setError(message);
+    toast.error(message, { title: "Sign in failed", key: "login-error" });
+  };
 
   async function submit(e) {
     e.preventDefault();
@@ -40,7 +61,7 @@ export default function LoginPage() {
       goHome();
     } catch (err) {
       setErrors(fieldErrors(err));
-      setError(errorMessage(err));
+      fail(errorMessage(err));
       setBusy(false);
     }
   }
@@ -57,55 +78,58 @@ export default function LoginPage() {
       await signIn(data, true);
       goHome();
     } catch (err) {
-      setError(errorMessage(err, "Google sign-in failed. Please try again."));
+      fail(errorMessage(err, "Google sign-in failed. Please try again."));
       setBusy(false);
     }
   }
 
   return (
     <AuthShell
-      title="Welcome back"
+      caseSeed="LOG"
+      title={<>Open your <span className="accent">session</span></>}
       subtitle="Sign in with your Student ID to open your duty logbook."
-      railHeadline="Your OJT hours, always up to date."
-      railNote="Sign in to log time in and out, watch your progress ring fill, and export reports for your coordinator."
-      footer={<>New trainee? <Link to="/register">Create an account</Link></>}
+      footer={<>No record on file? <Link to="/register">Open a new case file</Link></>}
     >
-      {location.state?.registered && <Banner tone="notice">Account created. Sign in to continue.</Banner>}
-      <Banner>{error}</Banner>
+      {location.state?.registered && <LedgerBanner tone="notice">Account created. Sign in to continue.</LedgerBanner>}
+      <LedgerBanner>{error}</LedgerBanner>
 
-      <form className="au-form" onSubmit={submit} noValidate>
-        <Field label="Student ID" htmlFor="student_id" error={errors.student_id} required>
-          <input
-            id="student_id" className="au-input" value={studentId} autoComplete="username"
+      <form onSubmit={submit} noValidate>
+        <LedgerRow
+          index={1} icon={IdCard} htmlFor="student_id" error={errors.student_id}
+          label={<>Student ID on file <span className="lg-required" aria-hidden="true">*</span></>}
+          hint={FORMAT_HINTS.studentId}
+        >
+          <LedgerInput
+            id="student_id" value={studentId} autoComplete="username"
             autoCapitalize="characters" autoCorrect="off" spellCheck={false} inputMode="text"
-            placeholder="e.g. 2021-2-04062" aria-required="true" aria-invalid={!!errors.student_id}
+            enterKeyHint="next" placeholder="2021-2-04062" autoFocus={canAutoFocus}
+            aria-required="true" aria-invalid={!!errors.student_id}
             onChange={(e) => { setStudentId(e.target.value); setError(""); setErrors((x) => ({ ...x, student_id: undefined })); }}
           />
-        </Field>
+        </LedgerRow>
 
-        <Field label="Password" htmlFor="password" error={errors.password} required>
-          <div className="au-pass">
-            <input
-              id="password" className="au-input" type={show ? "text" : "password"} value={password}
-              autoComplete="current-password" placeholder="Your password" aria-required="true" aria-invalid={!!errors.password}
-              onChange={(e) => { setPassword(e.target.value); setError(""); setErrors((x) => ({ ...x, password: undefined })); }}
-            />
-            <button type="button" onClick={() => setShow((v) => !v)} aria-label={show ? "Hide password" : "Show password"}>
-              {show ? <EyeOff size={18} /> : <Eye size={18} />}
-            </button>
-          </div>
-        </Field>
+        <LedgerRow
+          index={2} icon={Lock} htmlFor="password" error={errors.password}
+          label={<>Password <span className="lg-required" aria-hidden="true">*</span></>}
+        >
+          <LedgerPasswordInput
+            id="password" show={show} onToggle={() => setShow((v) => !v)} value={password}
+            autoComplete="current-password" enterKeyHint="go" placeholder="Your password"
+            aria-required="true" aria-invalid={!!errors.password}
+            onChange={(e) => { setPassword(e.target.value); setError(""); setErrors((x) => ({ ...x, password: undefined })); }}
+          />
+        </LedgerRow>
 
-        <div className="au-row">
-          <label className="au-check">
+        <div className="lg-remember-row">
+          <label className="lg-remember">
             <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
-            Keep me signed in
+            Keep this session open
           </label>
         </div>
 
-        <button className="au-btn" disabled={busy}>
+        <LedgerButton disabled={busy}>
           {busy ? <><span className="au-spin" /> Signing in…</> : "Sign in"}
-        </button>
+        </LedgerButton>
       </form>
 
       <Divider>or</Divider>

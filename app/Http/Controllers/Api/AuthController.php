@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\Auth\GoogleTokenVerifier;
 use App\Services\Auth\SessionTokenService;
 use App\Support\Formats;
+use App\Support\ProfilePhotoStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -46,6 +47,8 @@ class AuthController extends Controller
             'password' => $profile ? null : $data['password'],
             'google_id' => $profile['sub'] ?? null,
             'avatar' => $profile['picture'] ?? null,
+            // Already validated by RegisterRequest (required image, max 5 MB).
+            'profile_photo' => ProfilePhotoStorage::store($request->file('profile_photo')),
             'email_verified_at' => $profile ? now() : null,
         ]);
 

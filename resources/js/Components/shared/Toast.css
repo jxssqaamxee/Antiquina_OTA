@@ -1,0 +1,131 @@
+.occ-toast-viewport {
+    position: fixed;
+    z-index: 9999;
+    top: max(12px, env(safe-area-inset-top));
+    right: 12px;
+    left: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    pointer-events: none;
+}
+
+@media (min-width: 560px) {
+    .occ-toast-viewport {
+        left: auto;
+        right: 20px;
+        top: 20px;
+        width: 380px;
+        align-items: flex-end;
+    }
+}
+
+/*
+ * Same flat card as the dashboard shell's `.ds-card` / ledger `.lg-card`
+ * surface: light/dark tinted background + border, no per-type accent
+ * anywhere in the fill (no colored background, no colored icon). The
+ * only per-type accent is the card's own outline color — see the
+ * `.occ-toast-success/error/warning/info` rules below.
+ */
+.occ-toast {
+    pointer-events: auto;
+    width: 100%;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 13px 14px;
+    border-radius: 14px;
+    animation: occ-toast-in 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+    font-family: var(--font-body, 'Inter', sans-serif);
+    box-sizing: border-box;
+}
+
+.occ-toast-viewport.light .occ-toast {
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    color: #0b1220;
+    border: 1.5px solid #c3ccdb;
+    box-shadow: 0 16px 40px rgba(2, 6, 23, 0.10);
+}
+.occ-toast-viewport.dark .occ-toast {
+    background: rgba(18, 22, 32, 0.92);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    color: #e7ecf3;
+    border: 1.5px solid #323b4a;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+}
+
+/* Per-type accent: outline color only — background, text, and icon
+   color are untouched, same values as the rest of the app already
+   uses for these states (badges, form errors, strength meter, etc). */
+.occ-toast-success { border-color: #16a34a !important; }
+.occ-toast-error   { border-color: #ef4444 !important; }
+.occ-toast-warning { border-color: #f59e0b !important; }
+.occ-toast-info    { border-color: #0ea5e9 !important; }
+
+
+.occ-toast-icon { flex-shrink: 0; margin-top: 1px; opacity: 0.75; }
+
+.occ-toast-body { flex: 1; min-width: 0; }
+.occ-toast-title { font-weight: 800; font-size: 13.5px; margin-bottom: 2px; }
+.occ-toast-message { font-size: 12.5px; line-height: 1.45; opacity: 0.8; word-break: break-word; white-space: pre-line; }
+
+.occ-toast-close {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 3px;
+    border-radius: 6px;
+    display: inline-flex;
+    opacity: 0.6;
+    color: inherit;
+}
+.occ-toast-close:hover { opacity: 1; }
+.occ-toast-viewport.light .occ-toast-close:hover { background: rgba(15, 23, 42, 0.06); }
+.occ-toast-viewport.dark .occ-toast-close:hover { background: rgba(255, 255, 255, 0.08); }
+
+@keyframes occ-toast-in {
+    from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .occ-toast { animation: none; }
+}
+
+/* ---- Undo toast: countdown ring + Undo button + draining bar ---- */
+.occ-toast-undo { position: relative; align-items: center; overflow: hidden; padding-bottom: 16px; }
+.occ-undo-ring { position: relative; flex-shrink: 0; width: 38px; height: 38px; display: inline-grid; place-items: center; }
+.occ-undo-ring svg { transform: rotate(-90deg); }
+.occ-undo-ring circle { fill: none; stroke-width: 3; }
+.occ-undo-ring-track { stroke: currentColor; opacity: 0.12; }
+.occ-undo-ring-fill {
+    stroke: #16a34a; stroke-linecap: round;
+    stroke-dasharray: 100; stroke-dashoffset: 0;
+    animation: occ-undo-ring var(--undo-s, 15s) linear forwards;
+}
+.occ-undo-ring-num { position: absolute; font-size: 12.5px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.occ-undo-btn {
+    flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px;
+    padding: 7px 12px; border-radius: 999px; cursor: pointer;
+    font: inherit; font-size: 12.5px; font-weight: 800; color: inherit;
+    background: transparent; border: 1.5px solid currentColor;
+    transition: background 0.15s, color 0.15s;
+}
+.occ-toast-viewport.light .occ-undo-btn:hover { background: #0b1220; color: #fff; }
+.occ-toast-viewport.dark .occ-undo-btn:hover { background: #e7ecf3; color: #0b1220; }
+.occ-undo-btn:focus-visible { outline: 2px solid #16a34a; outline-offset: 2px; }
+.occ-undo-bar {
+    position: absolute; left: 0; bottom: 0; height: 4px; width: 100%;
+    background: #16a34a; transform-origin: left center;
+    animation: occ-undo-bar var(--undo-s, 15s) linear forwards;
+}
+@keyframes occ-undo-ring { to { stroke-dashoffset: 100; } }
+@keyframes occ-undo-bar { to { transform: scaleX(0); } }
+@media (prefers-reduced-motion: reduce) {
+    .occ-undo-ring-fill, .occ-undo-bar { animation: none; }
+}
