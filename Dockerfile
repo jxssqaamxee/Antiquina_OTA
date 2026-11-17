@@ -22,8 +22,9 @@ RUN composer update minishlink/web-push --with-dependencies --no-dev --no-intera
     --no-scripts --prefer-dist --optimize-autoloader --ignore-platform-reqs
 
 # ---- 3. Runtime ---------------------------------------------------------------------------
-FROM php:8.3-apache
-ENV PORT=80 \
+# PHP 8.4: the locked/updated Symfony 8 packages (pulled in by minishlink/web-push) need PHP >= 8.4.1.
+FROM php:8.4-apache
+ENV PORT=3000 \
     APACHE_DOCUMENT_ROOT=/var/www/html/public
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -46,11 +47,11 @@ COPY . .
 COPY --from=assets /app/public/build ./public/build
 
 RUN composer dump-autoload --optimize --no-dev --no-interaction \
-    && php artisan package:discover --ansi || true \
+    && (php artisan package:discover --ansi || true) \
     && chmod +x docker/entrypoint.sh \
     && chown -R www-data:www-data storage bootstrap/cache
 
-EXPOSE 80
+EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s \
     CMD curl -fs "http://127.0.0.1:${PORT}/up" || exit 1
 ENTRYPOINT ["docker/entrypoint.sh"]
