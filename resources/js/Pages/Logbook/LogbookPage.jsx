@@ -47,6 +47,8 @@ const STORAGE_KEY = "logbook-v2";
 const MILESTONES_KEY = "milestones-v1";
 const REMINDER_KEY = "shift-reminder-v1";
 const ONBOARDING_KEY = "onboarding-seen-v1";
+const END_REMINDER_KEY = "shift-end-reminder-v1"; // this phone only (not synced): the clock-out reminder already fired today
+const END_REMINDER_MIN = 10; // minutes before the scheduled time out
 
 const CATEGORIES = [
   { id: "regular", label: "Regular" },
@@ -223,6 +225,7 @@ export default function LogbookPage() {
   // prevents it repeating every tick throughout the 10-minute window, and
   // resets naturally the next calendar day.
   const shiftReminderFiredRef = useRef(getUserStorage(REMINDER_KEY, userId));
+  const endReminderFiredRef = useRef(getUserStorage(END_REMINDER_KEY, userId));
 
   useEffect(() => {
     const pageName = tab === "reports" ? "Reports" : tab === "history" ? "Entry History" : "Logbook";
@@ -467,10 +470,9 @@ export default function LogbookPage() {
   //
   // This only fires while this tab is open and in the foreground — it's a
   // same-tab fallback. The real "reaches the phone even with the app
-  // closed" reminder is the scheduled push sent server-side by
-  // functions/index.js (shiftReminders), which runs this same 20-minute-
-  // before check for every host client on every trainee's account, not
-  // just the most recent one.
+  // closed" reminder is the scheduled Web Push sent by the server
+  // (php artisan push:reminders, every minute), with the same 20-minute
+  // rule and the same tag, so it never shows twice.
   useEffect(() => {
     if (!loaded) return;
     const client = clients.find((c) => c.id === lastClientId);
@@ -495,6 +497,42 @@ export default function LogbookPage() {
       notify({ type: "info", ...reminder, system: true, tag: `shift-reminder-${today}` });
       toast.info(reminder.message, { title: reminder.title, key: "shift-reminder" });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveNow, loaded, clients, entries, lastClientId]);
+
+  // Clock-out reminder — same style as the pre-shift one, about 10 minutes before the scheduled time
+  // out of the client the trainee logged under most recently, on that client's working days only.
+  // Skipped when a time out near the end of the shift is already logged today. Fires once per day.
+  // While the app is closed the same reminder arrives as a real push (php artisan push:reminders);
+  // both use the tag `shift-end-<date>`, so the phone shows a single notification.
+  useEffect(() => {
+    if (!loaded) return;
+    const client = clients.find((c) => c.id === lastClientId);
+    if (!client) return;
+    const norm = normalizeClient(client);
+    const today = todayStr();
+    if (!isWorkDay(norm, today)) return;
+    if (endReminderFiredRef.current === today) return;
+
+    const nowMin = toMinutes(nowClock(new Date(liveNow)));
+    const inMin = toMinutes(norm.timeIn);
+    const outMin = toMinutes(norm.timeOut);
+    if (nowMin === null || outMin === null || (inMin !== null && outMin <= inMin)) return;
+    if (!(nowMin >= outMin - END_REMINDER_MIN && nowMin < outMin)) return;
+
+    const clockedOut = entries.some((e) => e.date === today && e.client === client.id
+      && [e.amOut, e.pmOut, e.evOut].some((t) => { const m = toMinutes(t); return m !== null && m >= outMin - END_REMINDER_MIN; }));
+    if (clockedOut) return;
+
+    endReminderFiredRef.current = today;
+    setUserStorage(END_REMINDER_KEY, userId, today);
+    const left = outMin - nowMin;
+    const reminder = {
+      title: "Time to clock out soon",
+      message: `Your shift at ${client.name} ends at ${formatTime12(norm.timeOut)} — about ${left} minute${left === 1 ? "" : "s"} from now. Remember to log your time out.`,
+    };
+    notify({ type: "info", ...reminder, system: true, tag: `shift-end-${today}` });
+    toast.info(reminder.message, { title: reminder.title, key: "shift-end-reminder" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveNow, loaded, clients, entries, lastClientId]);
 

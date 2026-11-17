@@ -7,6 +7,7 @@ import {
   requestPermission,
 } from "../utils/notifications";
 import { uid } from "../utils/time";
+import { disablePush, enablePush, isPushSupported, needsHomeScreenInstall, sendTestPush, syncPush } from "../utils/push";
 
 const HISTORY_KEY = "notifications-v1";
 const MAX_HISTORY = 200; // same cap as the server (LogbookRules::MAX_NOTIFICATIONS)
@@ -30,6 +31,17 @@ export function NotificationProvider({ children }) {
     []
   );
   const [permission, setPermission] = useState(() => getPermission());
+  // Background (closed-app) alerts: "on" | "off" | "unsupported" | "unconfigured" | "denied" | "install" | "error"
+  const [pushStatus, setPushStatus] = useState(() => (isPushSupported() ? "off" : needsHomeScreenInstall() ? "install" : "unsupported"));
+
+  // Signed in with permission already granted: quietly (re)register this phone for push, so reminders
+  // keep arriving after a redeploy, a new sign-in, or when the browser rotated its subscription.
+  useEffect(() => {
+    if (!userId) return undefined;
+    let live = true;
+    syncPush().then((s) => { if (live && s !== "off") setPushStatus(s); });
+    return () => { live = false; };
+  }, [userId]);
 
   // Load (and reload, if a different account signs in) this account's
   // notification history.
@@ -73,8 +85,23 @@ export function NotificationProvider({ children }) {
   const enableSystemNotifications = useCallback(async () => {
     const result = await requestPermission();
     setPermission(result);
+    if (result === "granted") setPushStatus(await enablePush()); // also subscribe for closed-app reminders
     return result;
   }, []);
+
+  const turnOnBackgroundAlerts = useCallback(async () => {
+    const s = await enablePush();
+    setPermission(getPermission());
+    setPushStatus(s);
+    return s;
+  }, []);
+
+  const turnOffBackgroundAlerts = useCallback(async () => {
+    await disablePush();
+    setPushStatus("off");
+  }, []);
+
+  const testBackgroundAlert = useCallback(() => sendTestPush(), []);
 
   const unreadCount = useMemo(() => history.filter((n) => !n.read).length, [history]);
 
@@ -87,8 +114,13 @@ export function NotificationProvider({ children }) {
       markAllRead,
       clearHistory,
       enableSystemNotifications,
+      pushStatus,
+      turnOnBackgroundAlerts,
+      turnOffBackgroundAlerts,
+      testBackgroundAlert,
     }),
-    [history, unreadCount, permission, notify, markAllRead, clearHistory, enableSystemNotifications]
+    [history, unreadCount, permission, notify, markAllRead, clearHistory, enableSystemNotifications,
+      pushStatus, turnOnBackgroundAlerts, turnOffBackgroundAlerts, testBackgroundAlert]
   );
 
   return <NotificationContext.Provider value={value}>{children}</NotificationContext.Provider>;

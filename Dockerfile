@@ -16,8 +16,10 @@ RUN npm run build
 FROM composer:2 AS vendor
 WORKDIR /app
 COPY composer.json composer.lock ./
-RUN composer install --no-dev --no-interaction --no-progress --no-scripts \
-    --prefer-dist --optimize-autoloader --ignore-platform-reqs
+# `update minishlink/web-push` = a partial update: it adds the Web Push package when composer.lock does not
+# have it yet (keeping every other locked version), and is a plain install once the lock is refreshed.
+RUN composer update minishlink/web-push --with-dependencies --no-dev --no-interaction --no-progress \
+    --no-scripts --prefer-dist --optimize-autoloader --ignore-platform-reqs
 
 # ---- 3. Runtime ---------------------------------------------------------------------------
 FROM php:8.3-apache

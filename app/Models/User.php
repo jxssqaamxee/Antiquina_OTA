@@ -41,6 +41,11 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->hasOne(UserSetting::class);
     }
 
+    public function pushSubscriptions(): HasMany
+    {
+        return $this->hasMany(PushSubscription::class);
+    }
+
     public function photo(): HasOne
     {
         return $this->hasOne(UserPhoto::class);

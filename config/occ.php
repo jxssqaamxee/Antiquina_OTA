@@ -38,6 +38,13 @@ return [
     */
     'inspect_protection' => env('OCC_INSPECT_PROTECTION', 'true'),
 
+    // Time zone of the host agencies' schedules. The server runs in UTC, so the push reminders
+    // (php artisan push:reminders) compare each schedule against THIS clock.
+    'timezone' => env('OCC_TIMEZONE', 'Asia/Manila'),
+    // How many minutes before the scheduled time-in / time-out the reminder is sent.
+    'reminder_start_minutes' => (int) env('OCC_REMINDER_START_MIN', 20),
+    'reminder_end_minutes' => (int) env('OCC_REMINDER_END_MIN', 10),
+
     // Registration is limited to Gmail addresses.
     'email_domain' => 'gmail.com',
 

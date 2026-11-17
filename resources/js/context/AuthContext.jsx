@@ -4,6 +4,7 @@ import { KEYS, EVENTS } from "../config/constant";
 import { hydrate, releaseUser, stopSync } from "../utils/sync";
 import { setTheme } from "../utils/theme";
 import { clearPhotoCache, preloadPhoto } from "../utils/imageCache";
+import { forgetThisDevice } from "../utils/push";
 
 const AuthContext = createContext(null);
 
@@ -113,6 +114,8 @@ export function AuthProvider({ children }) {
     // every push would be rejected and the cache could never be wiped.
     window.dispatchEvent(new CustomEvent(EVENTS.flush)); // screens save their last edit first
     if (current) await releaseUser(current.sub);
+    // Stop this phone getting the next person's reminders (needs the session, so before logout).
+    try { await forgetThisDevice(); } catch { /* best effort */ }
     try { await api.post("/auth/logout"); } catch { /* session may already be dead */ }
     setSignedIn(false);
     writeMe(null);

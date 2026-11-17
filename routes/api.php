@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\EmailVerificationController;
 use App\Http\Controllers\Api\PasswordResetController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\MediaController;
+use App\Http\Controllers\PushController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/config', [AuthController::class, 'config']);
@@ -38,6 +39,14 @@ Route::middleware(['auth', 'session.fresh', 'email.verified'])->group(function (
     Route::middleware('throttle:3,1')->post('/email/verification-notification', [EmailVerificationController::class, 'resend']);
     Route::middleware('throttle:10,1')->post('/email/verify-code', [EmailVerificationController::class, 'verifyCode']);
     Route::middleware('throttle:5,1')->post('/email/change', [EmailVerificationController::class, 'changeEmail']);
+
+    // Web Push: reminders that reach the phone with the app closed (see PushController, public/sw.js).
+    Route::get('/push/status', [PushController::class, 'status']);
+    Route::middleware('throttle:20,1')->group(function () {
+        Route::post('/push/subscribe', [PushController::class, 'subscribe']);
+        Route::post('/push/unsubscribe', [PushController::class, 'unsubscribe']);
+    });
+    Route::middleware('throttle:3,1')->post('/push/test', [PushController::class, 'test']);
 
     Route::put('/profile', [ProfileController::class, 'update']);
     Route::put('/profile/password', [ProfileController::class, 'password']);

@@ -83,15 +83,14 @@ function GuideContent() {
         <h3><Bell size={14} /> 5. Notifications</h3>
         <ul>
           <li>The bell icon logs every milestone (25%/50%/75%/100% of your required hours), a heads-up before your shift's scheduled start time, and warnings (e.g. browser storage issues).</li>
-          <li>Reminder heads-ups go out shortly before each checkpoint in your day:
+          <li>Two reminders go out on your working days:
             <ul>
-              <li><strong>Day start</strong> — about 10 minutes before your Morning/Afternoon/Evening time in</li>
-              <li><strong>Lunch out</strong> — about 10 minutes before 12:00 PM</li>
-              <li><strong>Lunch in</strong> — about 5 minutes before 1:00 PM</li>
-              <li><strong>Day end</strong> — about 10 minutes before your scheduled clock-out</li>
+              <li><strong>Shift start</strong> — about 20 minutes before your host client's time in</li>
+              <li><strong>Clock-out</strong> — about 10 minutes before your host client's time out (not sent if you already logged your time out)</li>
             </ul>
           </li>
-          <li>Tap <strong>"Turn on desktop alerts"</strong> in the panel to also get OS-level notifications even when this tab isn't focused.</li>
+          <li>Tap <strong>"Turn on alerts"</strong> in the bell panel. After that, the shift-start and clock-out reminders reach your phone <strong>even when the app is closed</strong>. On iPhone, first add OCCDL to your Home Screen (Share, then Add to Home Screen) and open it from there.</li>
+          <li>Reminders are sent for the host client you logged hours under most recently, only on its working days.</li>
         </ul>
       </section>
 
