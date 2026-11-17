@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Camera, ImagePlus, RotateCcw } from "lucide-react";
+import { Camera, ImagePlus, RotateCcw, Trash2 } from "lucide-react";
 import Sheet from "./Sheet";
 import { PHOTO_ACCEPT, PHOTO_MAX_MB, photoProblem } from "../../utils/photoFile";
 import "./PhotoUploadModal.css";
@@ -12,7 +12,7 @@ import "./PhotoUploadModal.css";
  * button shows a spinner until it settles and the sheet closes when it succeeds.
  * Throw / reject from onAccept to keep the sheet open (the caller shows the error).
  */
-export default function PhotoUploadModal({ open, onClose, onAccept, title = "Profile photo", acceptLabel = "Use this photo" }) {
+export default function PhotoUploadModal({ open, onClose, onAccept, title = "Profile photo", acceptLabel = "Use this photo", onRemove }) {
   const inputRef = useRef(null);
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState("");
@@ -87,6 +87,11 @@ export default function PhotoUploadModal({ open, onClose, onAccept, title = "Pro
         <button type="button" className="btn btn-block pum-pick" onClick={() => inputRef.current?.click()} disabled={busy}>
           {file ? <><RotateCcw size={17} /> Choose a different photo</> : <><ImagePlus size={17} /> Choose a photo</>}
         </button>
+        {onRemove && !file && (
+          <button type="button" className="btn btn-block btn-danger pum-remove" onClick={onRemove} disabled={busy}>
+            <Trash2 size={17} /> Remove current photo
+          </button>
+        )}
       </div>
     </Sheet>
   );

@@ -19,13 +19,6 @@ const isStandalone = () =>
 export const needsHomeScreenInstall = () => isIOS() && !isStandalone();
 
 const getOff = () => { try { return localStorage.getItem(OFF_KEY) === "1"; } catch { return false; } };
-
-/** True when the person switched shift / clock-out alerts off in the avatar menu (this device). */
-export const alertsTurnedOff = getOff;
-
-/** Never wait forever on something the browser may not answer (a worker that is not registered, a dead network). */
-const withTimeout = (promise, ms, fallback = null) =>
-  Promise.race([Promise.resolve(promise).catch(() => fallback), new Promise((r) => setTimeout(() => r(fallback), ms))]);
 const setOff = (v) => { try { v ? localStorage.setItem(OFF_KEY, "1") : localStorage.removeItem(OFF_KEY); } catch { /* ignore */ } };
 
 const urlBase64ToUint8Array = (base64) => {
@@ -45,20 +38,13 @@ const sameKey = (sub, publicKey) => {
   } catch { return true; }
 };
 
-async function registration({ wait = true } = {}) {
-  const existing = await navigator.serviceWorker.getRegistration();
-  if (existing) return existing;
-  if (!wait) throw new Error("no service worker"); // nothing registered, so nothing subscribed either
-  // \"ready\" never settles when no worker is registered (dev server, blocked registration):
-  // without a time limit, signing out (which unsubscribes this device first) would hang forever.
-  const ready = await withTimeout(navigator.serviceWorker.ready, 3000, null);
-  if (!ready) throw new Error("no service worker");
-  return ready;
+async function registration() {
+  return (await navigator.serviceWorker.getRegistration()) || (await navigator.serviceWorker.ready);
 }
 
-export async function currentSubscription({ wait = true } = {}) {
+export async function currentSubscription() {
   if (!isPushSupported()) return null;
-  try { return await (await registration({ wait })).pushManager.getSubscription(); } catch { return null; }
+  try { return await (await registration()).pushManager.getSubscription(); } catch { return null; }
 }
 
 /**
@@ -98,7 +84,6 @@ export async function enablePush() {
   if (!isPushSupported()) return needsHomeScreenInstall() ? "install" : "unsupported";
   const permission = Notification.permission === "default" ? await Notification.requestPermission() : Notification.permission;
   if (permission !== "granted") return "denied";
-  setOff(false); // the person asked for alerts: forget an earlier "off", whatever the server says next
   return syncPush({ force: true });
 }
 
@@ -110,11 +95,11 @@ export async function disablePush() {
 
 /** Used on sign-out too: a shared phone must not keep getting the previous trainee's reminders. */
 export async function forgetThisDevice() {
-  const sub = await withTimeout(currentSubscription({ wait: false }), 3000, null); // no waiting for a worker that is not there
+  const sub = await currentSubscription();
   if (!sub) return;
   const endpoint = sub.endpoint;
-  await withTimeout(api.post("/push/unsubscribe", { endpoint }, { timeout: 4000 }), 5000); // the server drops dead endpoints itself
-  await withTimeout(sub.unsubscribe(), 3000);
+  try { await api.post("/push/unsubscribe", { endpoint }); } catch { /* the server drops dead endpoints itself */ }
+  try { await sub.unsubscribe(); } catch { /* ignore */ }
 }
 
 /** Asks the server to push a test message to this account's devices. Resolves to the number of devices reached. */

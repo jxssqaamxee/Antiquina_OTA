@@ -1,9 +1,9 @@
 @php
     // Colour theme, read from the "occ-theme" cookie that utils/theme.js writes (white | black | blue | yellow | maroon).
     $occTheme = request()->cookie('occ-theme', 'white');
-    $occTheme = in_array($occTheme, ['white', 'black', 'blue', 'yellow', 'maroon', 'dark-white', 'dark-blue', 'dark-yellow', 'dark-maroon'], true) ? $occTheme : 'white';
+    $occTheme = in_array($occTheme, ['white', 'black', 'blue', 'yellow', 'maroon'], true) ? $occTheme : 'white';
     // Browser bar / status bar / installed-app title bar: NAVY on light themes, WHITE on the dark theme (same as sclf_APP).
-    $occBarColor = ($occTheme === 'black' || str_starts_with($occTheme, 'dark-')) ? '#ffffff' : '#01215f';
+    $occBarColor = $occTheme === 'black' ? '#ffffff' : '#01215f';
     // Phone-only switch: OCC_MOBILE_ONLY = true | false. Laravel turns a bare
     // true/false into a boolean, hence '1' and '' below. Unknown values mean
     // "off" so a typo can never lock everyone out.
@@ -32,11 +32,11 @@
     <!-- Saved colour theme, applied before first paint (see resources/js/utils/theme.js). -->
     <script>
         try {
-            var occBg = { white: '#ffffff', black: '#0a0c12', blue: '#f1f6fe', yellow: '#fdf8ec', maroon: '#fdf3f4', 'dark-white': '#000000', 'dark-blue': '#000000', 'dark-yellow': '#000000', 'dark-maroon': '#000000' };
-            var occBar = function (t) { return (t === 'black' || String(t).indexOf('dark-') === 0) ? '#ffffff' : '#01215f'; }; // navy on light themes, white on dark
+            var occBg = { white: '#ffffff', black: '#0a0c12', blue: '#f1f6fe', yellow: '#fdf8ec', maroon: '#fdf3f4' };
+            var occBar = function (t) { return t === 'black' ? '#ffffff' : '#01215f'; }; // navy on light themes, white on dark
             var occTheme = localStorage.getItem('occ_theme');
             if (!occBg[occTheme]) occTheme = 'white';
-            var occDark = occTheme === 'black' || occTheme.indexOf('dark-') === 0;
+            var occDark = occTheme === 'black';
             var root = document.documentElement;
             root.setAttribute('data-theme', occTheme);
             root.style.background = occBg[occTheme];

@@ -935,7 +935,8 @@ export default function LogbookPage() {
   }
 
   async function handleSignOut() {
-    try { await logout(); } finally { navigate("/login", { replace: true }); }
+    await logout();
+    navigate("/login", { replace: true });
   }
 
   async function exportPDF() {

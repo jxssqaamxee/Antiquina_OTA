@@ -19,10 +19,6 @@ class PwaManifestController extends Controller
         'blue' => '#f1f6fe',
         'yellow' => '#fdf8ec',
         'maroon' => '#fdf3f4',
-        'dark-white' => '#0a0a0a',
-        'dark-blue' => '#060d1f',
-        'dark-yellow' => '#120b02',
-        'dark-maroon' => '#14060a',
     ];
 
     public function __invoke(Request $request): JsonResponse
@@ -43,7 +39,7 @@ class PwaManifestController extends Controller
             'prefer_related_applications' => false,
             'background_color' => self::BACKGROUNDS[$theme],
             // Title-bar colour of the installed app: navy on light themes, white on the dark theme.
-            'theme_color' => ($theme === 'black' || str_starts_with($theme, 'dark-')) ? '#ffffff' : '#01215f',
+            'theme_color' => $theme === 'black' ? '#ffffff' : '#01215f',
             'lang' => 'en',
             'dir' => 'ltr',
             'categories' => ['education', 'productivity'],

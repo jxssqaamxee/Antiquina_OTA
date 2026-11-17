@@ -14,3 +14,4 @@
 }
 .pum-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .pum-pick { gap: 8px; }
+.pum-remove { gap: 8px; margin-top: 8px; }

@@ -14,8 +14,18 @@ function timeAgo(iso) {
 }
 
 export function NotificationBell() {
-  const { history, unreadCount, markAllRead, clearHistory } = useNotifications();
+  const {
+    history, unreadCount, markAllRead, clearHistory, permission, enableSystemNotifications,
+    pushStatus, turnOnBackgroundAlerts, turnOffBackgroundAlerts, testBackgroundAlert,
+  } = useNotifications();
   const [open, setOpen] = useState(false);
+  const [note, setNote] = useState("");
+
+  async function test() {
+    setNote("Sending…");
+    const n = await testBackgroundAlert();
+    setNote(n > 0 ? "Sent. Look for it in your notifications." : n === -1 ? "Background alerts are not set up on the server yet." : "No device received it. Turn alerts off and on again.");
+  }
 
   function toggle() {
     setOpen((v) => {
@@ -41,6 +51,33 @@ export function NotificationBell() {
           <button type="button" className="btn" onClick={clearHistory}><Trash2 size={16} /> Clear all</button>
         ) : null}
       >
+        {pushStatus === "install" && (
+          <p className="notif-hint">To get reminders when the app is closed on iPhone: tap Share, then <b>Add to Home Screen</b>, and open OCCDL from the new icon.</p>
+        )}
+        {permission === "denied" && (
+          <p className="notif-hint">Alerts are blocked for this app. Allow notifications for OCCDL in your phone settings, then come back.</p>
+        )}
+        {permission !== "granted" && permission !== "unsupported" && permission !== "denied" && pushStatus !== "install" && (
+          <button type="button" className="notif-permission" onClick={enableSystemNotifications}>
+            Turn on alerts for shift and clock-out reminders
+          </button>
+        )}
+        {permission === "granted" && pushStatus === "off" && (
+          <button type="button" className="notif-permission" onClick={turnOnBackgroundAlerts}>
+            Turn on reminders for when the app is closed
+          </button>
+        )}
+        {permission === "granted" && pushStatus === "on" && (
+          <div className="notif-hint">
+            Reminders reach you even when the app is closed.{" "}
+            <button type="button" className="link-btn" onClick={test}>Send a test</button>{" · "}
+            <button type="button" className="link-btn" onClick={turnOffBackgroundAlerts}>Turn off</button>
+            {note && <div>{note}</div>}
+          </div>
+        )}
+        {permission === "granted" && pushStatus === "unconfigured" && (
+          <p className="notif-hint">Alerts work while the app is open. Closed-app reminders are not set up on the server yet.</p>
+        )}
         <div className="notif-list">
           {history.length === 0 && (
             <div className="empty"><b>Nothing yet</b>Your milestones and shift reminders will show up here.</div>

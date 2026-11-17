@@ -109,88 +109,6 @@
   color-scheme: light;
 }
 
-/* "Black" set (sclf_APP's Custom list): a pure black shell tinted with one accent colour. */
-:root[data-theme="dark-white"] {
-  --bg: #000000;
-  --bg-glow-a: rgba(255,255,255,.05);
-  --bg-glow-b: rgba(255,255,255,.04);
-  --surface: #0a0a0a;
-  --field: #141414;
-  --hover: #1a1a1a;
-  --edge: #2a2a2a;
-  --edge-strong: #3a3a3a;
-  --ink: #f2f2f2;
-  --ink-soft: rgba(242, 242, 242, .62);
-  --accent: linear-gradient(135deg, #ffffff, #e6e6e6 50%, #bdbdbd);
-  --accent-on: #000000;
-  --accent-text: #f2f2f2;
-  --accent-rgb: 255, 255, 255;
-  --shadow: rgba(0, 0, 0, .7);
-  --bar-bg: rgba(8, 8, 8, .97);
-  --theme-color: #000000;
-  color-scheme: dark;
-}
-:root[data-theme="dark-blue"] {
-  --bg: #000000;
-  --bg-glow-a: rgba(56,189,248,.10);
-  --bg-glow-b: rgba(37,99,235,.12);
-  --surface: #060d1f;
-  --field: #0b1a3a;
-  --hover: rgba(56,189,248,.13);
-  --edge: #2f5fae;
-  --edge-strong: #3b72c9;
-  --ink: #f2f2f2;
-  --ink-soft: rgba(242, 242, 242, .62);
-  --accent: linear-gradient(135deg, #1e40af, #2563eb 50%, #38bdf8);
-  --accent-on: #ffffff;
-  --accent-text: #7dd3fc;
-  --accent-rgb: 56, 189, 248;
-  --shadow: rgba(0, 0, 0, .7);
-  --bar-bg: rgba(6, 13, 31, .97);
-  --theme-color: #000000;
-  color-scheme: dark;
-}
-:root[data-theme="dark-yellow"] {
-  --bg: #000000;
-  --bg-glow-a: rgba(245,158,11,.10);
-  --bg-glow-b: rgba(180,83,9,.10);
-  --surface: #120b02;
-  --field: #24170a;
-  --hover: rgba(245,158,11,.15);
-  --edge: #a8761c;
-  --edge-strong: #c08a2a;
-  --ink: #f2f2f2;
-  --ink-soft: rgba(242, 242, 242, .62);
-  --accent: linear-gradient(135deg, #b45309, #d97706 50%, #f59e0b);
-  --accent-on: #1c1408;
-  --accent-text: #fbbf24;
-  --accent-rgb: 245, 158, 11;
-  --shadow: rgba(0, 0, 0, .7);
-  --bar-bg: rgba(18, 11, 2, .97);
-  --theme-color: #000000;
-  color-scheme: dark;
-}
-:root[data-theme="dark-maroon"] {
-  --bg: #000000;
-  --bg-glow-a: rgba(248,113,113,.10);
-  --bg-glow-b: rgba(127,29,46,.14);
-  --surface: #14060a;
-  --field: #2a0f17;
-  --hover: rgba(248,113,113,.14);
-  --edge: #b5485c;
-  --edge-strong: #c95d71;
-  --ink: #f2f2f2;
-  --ink-soft: rgba(242, 242, 242, .62);
-  --accent: linear-gradient(135deg, #7f1d2e, #9f1239 50%, #dc2626);
-  --accent-on: #ffffff;
-  --accent-text: #fca5a5;
-  --accent-rgb: 248, 113, 113;
-  --shadow: rgba(0, 0, 0, .7);
-  --bar-bg: rgba(20, 6, 10, .97);
-  --theme-color: #000000;
-  color-scheme: dark;
-}
-
 /* Auth "ledger" tokens (Login / Register). Light themes reuse their own
    tokens so Blue, Gold and Maroon stay recognisable; the dark theme turns
    sclf_APP's dark navy with a lighter blue accent. */
@@ -207,8 +125,7 @@
   --lg-on: var(--accent-on);
   --lg-field: var(--field);
 }
-:root[data-theme="black"],
-:root[data-theme^="dark-"] {
+:root[data-theme="black"] {
   --lg-bg: #050d22;
   --lg-glow-a: rgba(14, 165, 233, .16);
   --lg-glow-b: rgba(37, 99, 235, .20);
@@ -234,8 +151,7 @@
   --radius-field: 16px;
   --nav-h: 66px;
 }
-:root[data-theme="black"],
-:root[data-theme^="dark-"] {
+:root[data-theme="black"] {
   --ok: #4ade80; --ok-rgb: 74, 222, 128;
   --warn: #fbbf24; --warn-rgb: 251, 191, 36;
   --bad: #f87171; --bad-rgb: 248, 113, 113;

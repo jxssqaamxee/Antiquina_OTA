@@ -2,13 +2,15 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { EVENTS } from "../../config/constant";
 import { ArrowLeft } from "lucide-react";
+import { useAuth } from "../../context/AuthContext";
 import { NotificationBell } from "./NotificationCenter";
 import { HelpButton } from "./HelpGuide";
-import AccountMenu from "./AccountMenu";
+import AvatarPhoto from "./AvatarPhoto";
 import logo from "../../assets/images/site-logo.png";
 
 // Slim frosted top bar: logo + page name on the left, help / bell / avatar on the right.
 export default function AppBar({ title, subtitle, back }) {
+  const { user } = useAuth();
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
     const on = () => setScrolled(window.scrollY > 4);
@@ -39,7 +41,9 @@ export default function AppBar({ title, subtitle, back }) {
         <div className="appbar-actions" style={{ flex: "none" }}>
           <HelpButton />
           <NotificationBell />
-          <AccountMenu />
+          <Link to="/profile" className="avatar-btn" aria-label="Open your profile">
+            <AvatarPhoto user={user} />
+          </Link>
         </div>
       </div>
     </header>
