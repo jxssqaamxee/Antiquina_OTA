@@ -493,3 +493,14 @@ html { overscroll-behavior-y: none; }
   color: var(--ink-soft); overflow-wrap: anywhere;
 }
 .pf-form .pf-locked svg { flex: none; opacity: .7; }
+
+/* Profile: Personal details and Change password stay closed until tapped, so nothing is typed by accident. */
+.pf-form .pf-toggle {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 44px; padding: 0;
+  background: none; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.pf-form .pf-toggle .pf-form-title { margin: 0; }
+.pf-form .pf-chev { flex: none; opacity: .7; transition: transform .18s ease; }
+.pf-form .pf-toggle[aria-expanded="true"] .pf-chev { transform: rotate(180deg); }
+.pf-form .pf-body { padding-top: 8px; }
+.pf-form .pf-body[hidden] { display: none; }
