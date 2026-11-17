@@ -2,11 +2,21 @@
 
 namespace Tests\Feature;
 
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /** The installed app's bar colour: navy on light themes, white on the dark theme (like sclf_APP). */
 class PwaManifestTest extends TestCase
 {
+    // Rendering /login starts a session, and the session driver is "database" under phpunit.
+    use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->withoutVite(); // no compiled assets needed to read the <meta> / <link> tags
+    }
+
     public function test_manifest_is_navy_on_the_default_light_theme_and_named_occdl(): void
     {
         $this->get('/manifest.json')->assertOk()
@@ -53,6 +63,6 @@ class PwaManifestTest extends TestCase
     {
         $this->get('/login')->assertOk()
             ->assertSee('href="/manifest.json"', false)
-            ->assertSee('/icons/occdl-touch-180.png', false);
+            ->assertSee('href="/images/apple-touch-icon.png"', false);
     }
 }

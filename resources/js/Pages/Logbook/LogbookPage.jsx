@@ -17,7 +17,7 @@ import TimeInput12 from "../../Components/logbook/TimeInput12";
 import ReportsPanel from "./ReportsPanel";
 import EntryHistoryPanel from "./EntryHistoryPanel";
 import Footer from "../../Components/shared/Footer";
-import { getUserStorage, setUserStorage, isStorageAvailable } from "../../utils/storage";
+import { getUserStorage, setUserStorage, isStorageAvailable, getStorage, removeStorage } from "../../utils/storage";
 import logo from "../../assets/images/site-logo.png";
 import { LOGO_BASE64 } from "../../assets/logoBase64";
 import {
@@ -49,6 +49,7 @@ const REMINDER_KEY = "shift-reminder-v1";
 const ONBOARDING_KEY = "onboarding-seen-v1";
 const END_REMINDER_KEY = "shift-end-reminder-v1"; // this phone only (not synced): the clock-out reminder already fired today
 const END_REMINDER_MIN = 10; // minutes before the scheduled time out
+const CLOCKED_OUT_WINDOW_MIN = 30; // a time out logged this close to the scheduled one counts as clocked out (same as OCC_CLOCK_OUT_WINDOW_MIN on the server)
 
 const CATEGORIES = [
   { id: "regular", label: "Regular" },
@@ -327,8 +328,84 @@ export default function LogbookPage() {
   // Debounced save. `pendingRef` holds an edit that is not written yet, so closing the app
   // or leaving the page within the 400 ms window can no longer drop the last change.
   const pendingRef = useRef(null);
+
+  // ---- Server copy arrived (another device, or a conflict) ----------------------------------
+  // sync.js already wrote the server's document into storage; here we re-read it into state.
+  // `skipPersistRef` stops the debounced save below from writing the same data straight back
+  // (that would bump the revision and ping-pong between devices).
+  const skipPersistRef = useRef(false);
+
+  const applyLogbook = useCallback((raw) => {
+    if (!raw || typeof raw !== "object") return;
+    skipPersistRef.current = true;
+    pendingRef.current = null; // an unwritten local edit is superseded by the server copy
+    setStudentName(raw.studentName || "");
+    const hrs = typeof raw.targetHours === "number" ? raw.targetHours : 486;
+    setTargetHours(hrs);
+    setTargetHoursInput(String(hrs));
+    setClients(Array.isArray(raw.clients) ? raw.clients : []);
+    setEntries(Array.isArray(raw.entries) ? raw.entries : []);
+    setLastClientId(raw.lastClientId || null);
+  }, []);
+
+  useEffect(() => {
+    if (!userId) return;
+    const onApplied = (e) => {
+      const { key, conflict } = e.detail || {};
+      if (key === STORAGE_KEY) applyLogbook(getUserStorage(STORAGE_KEY, userId));
+      else if (key === MILESTONES_KEY) milestonesRef.current = new Set(getUserStorage(MILESTONES_KEY, userId) || []);
+      else if (key === REMINDER_KEY) shiftReminderFiredRef.current = getUserStorage(REMINDER_KEY, userId);
+      else if (key === ONBOARDING_KEY && getUserStorage(ONBOARDING_KEY, userId)) setShowOnboarding(false);
+
+      if (conflict) {
+        const slot = `sync-rejected::u_${userId}::${key}`;
+        const hasRecovery = getStorage(slot) != null;
+        const opts = {
+          type: "warning",
+          title: "Updated from another device",
+          message: "Another device changed this logbook. Your last edit is kept in recovery.",
+          key: "sync-conflict",
+        };
+        if (hasRecovery && key === STORAGE_KEY) {
+          toast.undo({ ...opts, seconds: 30, undoLabel: "Restore my last edit", onUndo: () => restoreLastEditRef.current() });
+        } else {
+          toast.warning(opts.message, opts);
+        }
+      }
+    };
+    window.addEventListener("occ-sync-applied", onApplied);
+    return () => window.removeEventListener("occ-sync-applied", onApplied);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, applyLogbook]);
+
+  // "Restore my last edit": put the value parked in the recovery slot back into the logbook.
+  // It goes through the normal save path, so it syncs as a fresh edit on top of the server copy.
+  const restoreLastEditRef = useRef(() => false);
+  restoreLastEditRef.current = () => {
+    const slot = `sync-rejected::u_${userId}::${STORAGE_KEY}`;
+    const saved = getStorage(slot);
+    if (!saved || typeof saved !== "object") {
+      toast.info("There is no saved edit to restore.", { title: "Nothing to restore", key: "restore-none" });
+      return true;
+    }
+    skipPersistRef.current = false;
+    applyLogbook(saved);
+    skipPersistRef.current = false; // this one SHOULD be saved and synced
+    persist({
+      studentName: saved.studentName || "",
+      targetHours: typeof saved.targetHours === "number" ? saved.targetHours : 486,
+      clients: Array.isArray(saved.clients) ? saved.clients : [],
+      entries: Array.isArray(saved.entries) ? saved.entries : [],
+      lastClientId: saved.lastClientId || null,
+    });
+    removeStorage(slot);
+    toast.success("Your last edit was restored.", { title: "Restored", key: "restore-done" });
+    return true;
+  };
+
   useEffect(() => {
     if (!loaded) return;
+    if (skipPersistRef.current) { skipPersistRef.current = false; return; } // state came from the server: do not echo it back
     pendingRef.current = { studentName, targetHours, clients, entries, lastClientId };
     const t = setTimeout(() => {
       if (pendingRef.current) { persist(pendingRef.current); pendingRef.current = null; }
@@ -521,7 +598,7 @@ export default function LogbookPage() {
     if (!(nowMin >= outMin - END_REMINDER_MIN && nowMin < outMin)) return;
 
     const clockedOut = entries.some((e) => e.date === today && e.client === client.id
-      && [e.amOut, e.pmOut, e.evOut].some((t) => { const m = toMinutes(t); return m !== null && m >= outMin - END_REMINDER_MIN; }));
+      && [e.amOut, e.pmOut, e.evOut].some((t) => { const m = toMinutes(t); return m !== null && m >= outMin - Math.max(END_REMINDER_MIN, CLOCKED_OUT_WINDOW_MIN); }));
     if (clockedOut) return;
 
     endReminderFiredRef.current = today;

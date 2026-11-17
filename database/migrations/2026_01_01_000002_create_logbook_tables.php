@@ -6,10 +6,7 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Real per-user tables replacing the five opaque JSON blobs in user_documents.
-     * user_documents is left untouched: it stays as a read-only backup of the old data.
-     */
+    /** Real per-user tables behind /api/sync. */
     public function up(): void
     {
         // One row per user: logbook header, last client, theme, onboarding + reminder flags, milestones.
@@ -26,6 +23,20 @@ return new class extends Migration
             $table->timestamp('logbook_saved_at')->nullable();   // null = logbook never saved
             $table->timestamp('notifications_saved_at')->nullable();
             $table->timestamp('legacy_imported_at')->nullable(); // set once user_documents was copied over
+
+            // Sync revision per document (server-authoritative; used by PUT /api/sync/{key}).
+            // *_save_id = the client's id of the last accepted save, so a repeated keepalive save is idempotent.
+            $table->unsignedInteger('logbook_revision')->default(0);
+            $table->string('logbook_save_id', 36)->nullable();
+            $table->unsignedInteger('milestones_revision')->default(0);
+            $table->string('milestones_save_id', 36)->nullable();
+            $table->unsignedInteger('reminder_revision')->default(0);
+            $table->string('reminder_save_id', 36)->nullable();
+            $table->unsignedInteger('onboarding_revision')->default(0);
+            $table->string('onboarding_save_id', 36)->nullable();
+            $table->unsignedInteger('notifications_revision')->default(0);
+            $table->string('notifications_save_id', 36)->nullable();
+
             $table->timestamps();
         });
 

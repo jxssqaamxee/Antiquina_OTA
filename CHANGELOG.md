@@ -1,6 +1,15 @@
 # Release Notes
 
-## [Unreleased](https://github.com/laravel/laravel/compare/v12.12.2...12.x)
+## [Unreleased]
+
+### Changed
+- Database rebuilt as one clean set of `create` migrations (no add/drop churn). Fresh install: `php artisan migrate:fresh`.
+- Sync is server-authoritative: `GET /api/sync` returns `revisions`; `PUT /api/sync/{key}` takes `base_revision` and `save_id`, answers `{ok, revision, value?}` or HTTP 409 with the server copy. A repeated `save_id` is idempotent.
+- `sync.js` is revision-aware (backoff, Retry-After, recovery slot, keepalive on unload).
+- Logbook page reloads data on `occ-sync-applied`, shows a conflict notice and a "Restore my last edit" action.
+- `laravel/sanctum` removed. Stale `public/build` files removed.
+
+(Older entries below are from the Laravel skeleton.)
 
 ## [v12.12.2](https://github.com/laravel/laravel/compare/v12.12.1...v12.12.2) - 2026-03-14
 

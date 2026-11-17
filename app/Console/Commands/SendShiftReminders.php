@@ -42,6 +42,8 @@ class SendShiftReminders extends Command
         $weekday = $now->isoWeekday(); // 1 = Monday ... 7 = Sunday, the same numbers the app saves in `days`
         $startLead = (int) config('occ.reminder_start_minutes', 20);
         $endLead = (int) config('occ.reminder_end_minutes', 10);
+        // A time out logged this close to the end of the shift (or later) means they already clocked out.
+        $clockedOutFrom = max($endLead, (int) config('occ.clock_out_window_minutes', 30));
 
         $sent = 0;
         $userIds = PushSubscription::query()->distinct()->pluck('user_id');
@@ -71,9 +73,10 @@ class SendShiftReminders extends Command
                 ]);
             }
 
-            // Clock-out: skipped when a time out close to the end of the shift is already logged.
+            // Clock-out: skipped when a time out close to the end of the shift (within
+            // OCC_CLOCK_OUT_WINDOW_MIN of it) is already logged, e.g. they left a few minutes early.
             if ($out !== null && ($in === null || $out > $in) && $nowMin >= $out - $endLead && $nowMin < $out
-                && ! $this->alreadyClockedOut($entries, $out - $endLead)) {
+                && ! $this->alreadyClockedOut($entries, $out - $clockedOutFrom)) {
                 $left = $out - $nowMin;
                 $sent += $this->send($push, $user, $client, 'shift-end', $date, [
                     'title' => 'Time to clock out soon',

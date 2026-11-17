@@ -16,6 +16,15 @@ use Illuminate\Support\Facades\DB;
  */
 class LogbookStore
 {
+    /** key => [revision column, last save id column] on user_settings. */
+    private const COLUMNS = [
+        'logbook-v2' => ['logbook_revision', 'logbook_save_id'],
+        'milestones-v1' => ['milestones_revision', 'milestones_save_id'],
+        'shift-reminder-v1' => ['reminder_revision', 'reminder_save_id'],
+        'onboarding-seen-v1' => ['onboarding_revision', 'onboarding_save_id'],
+        'notifications-v1' => ['notifications_revision', 'notifications_save_id'],
+    ];
+
     public function __construct(private LogbookValidator $validator = new LogbookValidator()) {}
 
     /** All documents the user has saved, keyed like the old user_documents rows. */
@@ -28,47 +37,149 @@ class LogbookStore
         }
 
         $docs = [];
-        if ($s->logbook_saved_at) {
-            $docs['logbook-v2'] = $this->readLogbook($user, $s);
-        }
-        if ($s->milestones !== null) {
-            $docs['milestones-v1'] = array_values($s->milestones);
-        }
-        if ($s->shift_reminder_date) {
-            $docs['shift-reminder-v1'] = $s->shift_reminder_date->format('Y-m-d');
-        }
-        if ($s->onboarding_seen !== null) {
-            $docs['onboarding-seen-v1'] = (bool) $s->onboarding_seen;
-        }
-        if ($s->notifications_saved_at) {
-            $docs['notifications-v1'] = $this->readNotifications($user);
+        foreach (LogbookRules::KEYS as $key) {
+            if ($this->exists($s, $key)) {
+                $docs[$key] = $this->readDocument($user, $s, $key);
+            }
         }
 
         return $docs;
     }
 
-    /** Validate + save one document. Throws ValidationException (422) on bad input. */
-    public function put(User $user, string $key, mixed $value): void
+    /** Current revision per existing document, e.g. ['logbook-v2' => 3]. Empty when nothing is saved. */
+    public function revisions(User $user): array
     {
-        $this->importLegacyOnce($user);
-        $this->putValidated($user, $key, $value);
+        $s = UserSetting::where('user_id', $user->id)->first();
+        if (! $s) {
+            return [];
+        }
+        $out = [];
+        foreach (LogbookRules::KEYS as $key) {
+            if ($this->exists($s, $key)) {
+                $out[$key] = (int) $s->{self::COLUMNS[$key][0]};
+            }
+        }
+
+        return $out;
     }
 
-    /** Same as put() without the legacy import (the importer itself writes through this). */
+    private function exists(UserSetting $s, string $key): bool
+    {
+        return match ($key) {
+            'logbook-v2' => (bool) $s->logbook_saved_at,
+            'milestones-v1' => $s->milestones !== null,
+            'shift-reminder-v1' => (bool) $s->shift_reminder_date,
+            'onboarding-seen-v1' => $s->onboarding_seen !== null,
+            'notifications-v1' => (bool) $s->notifications_saved_at,
+        };
+    }
+
+    private function readDocument(User $user, UserSetting $s, string $key): mixed
+    {
+        if (! $this->exists($s, $key)) {
+            return null;
+        }
+
+        return match ($key) {
+            'logbook-v2' => $this->readLogbook($user, $s),
+            'milestones-v1' => array_values($s->milestones),
+            'shift-reminder-v1' => $s->shift_reminder_date->format('Y-m-d'),
+            'onboarding-seen-v1' => (bool) $s->onboarding_seen,
+            'notifications-v1' => $this->readNotifications($user),
+        };
+    }
+
+    /**
+     * Revision-aware save. Returns ['status' => 'saved'|'duplicate'|'conflict', 'revision' => int,
+     * 'value' => canonical server document, 'changed' => bool (canonical differs from what was sent)].
+     * Throws ValidationException (422) on bad input.
+     *
+     *  - $baseRevision null          -> last write wins (old clients)
+     *  - $baseRevision == current    -> saved, revision + 1
+     *  - differs, same $saveId as the last accepted save -> 'duplicate' (client's earlier keepalive), nothing written
+     *  - otherwise                   -> 'conflict', nothing written
+     */
+    public function save(User $user, string $key, mixed $value, ?int $baseRevision = null, ?string $saveId = null): array
+    {
+        $this->importLegacyOnce($user);
+        $clean = $this->validator->validate($key, $value);
+        [$revCol, $idCol] = self::COLUMNS[$key];
+
+        return DB::transaction(function () use ($user, $key, $value, $clean, $baseRevision, $saveId, $revCol, $idCol) {
+            $s = $this->lockedSettings($user);
+            $current = (int) $s->{$revCol};
+
+            if ($baseRevision !== null && $baseRevision !== $current) {
+                $duplicate = $saveId !== null && $saveId === $s->{$idCol};
+
+                return [
+                    'status' => $duplicate ? 'duplicate' : 'conflict',
+                    'revision' => $current,
+                    'value' => $this->readDocument($user, $s, $key),
+                    'changed' => false,
+                ];
+            }
+
+            $this->write($user, $s, $key, $clean);
+            $s->update([$revCol => $current + 1, $idCol => $saveId]);
+            $canonical = $this->readDocument($user, $s, $key);
+
+            return [
+                'status' => 'saved',
+                'revision' => $current + 1,
+                'value' => $canonical,
+                'changed' => ! $this->sameValue($canonical, $value),
+            ];
+        });
+    }
+
+    /** Structural equality ignoring key order; numbers compare by value (4 == 4.0). */
+    private function sameValue(mixed $a, mixed $b): bool
+    {
+        if (is_array($a) && is_array($b)) {
+            if (count($a) !== count($b)) {
+                return false;
+            }
+            foreach ($a as $k => $v) {
+                if (! array_key_exists($k, $b) || ! $this->sameValue($v, $b[$k])) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+        if (is_numeric($a) && is_numeric($b) && ! is_string($a) && ! is_string($b)) {
+            return $a == $b;
+        }
+
+        return $a === $b;
+    }
+
+    /** Validate + save one document (no revision check). Throws ValidationException (422) on bad input. */
+    public function put(User $user, string $key, mixed $value): void
+    {
+        $this->save($user, $key, $value);
+    }
+
+    /** Same as put() without the legacy import or revision bump (the importer itself writes through this). */
     public function putValidated(User $user, string $key, mixed $value): void
     {
         $clean = $this->validator->validate($key, $value);
 
         DB::transaction(function () use ($user, $key, $clean) {
-            $s = $this->lockedSettings($user);
-            match ($key) {
-                'logbook-v2' => $this->writeLogbook($user, $s, $clean),
-                'milestones-v1' => $s->update(['milestones' => $clean]),
-                'shift-reminder-v1' => $s->update(['shift_reminder_date' => $clean]),
-                'onboarding-seen-v1' => $s->update(['onboarding_seen' => $clean]),
-                'notifications-v1' => $this->writeNotifications($user, $s, $clean),
-            };
+            $this->write($user, $this->lockedSettings($user), $key, $clean);
         });
+    }
+
+    private function write(User $user, UserSetting $s, string $key, mixed $clean): void
+    {
+        match ($key) {
+            'logbook-v2' => $this->writeLogbook($user, $s, $clean),
+            'milestones-v1' => $s->update(['milestones' => $clean]),
+            'shift-reminder-v1' => $s->update(['shift_reminder_date' => $clean]),
+            'onboarding-seen-v1' => $s->update(['onboarding_seen' => $clean]),
+            'notifications-v1' => $this->writeNotifications($user, $s, $clean),
+        };
     }
 
     public function forget(User $user, string $key): void
@@ -82,6 +193,9 @@ class LogbookStore
                 'onboarding-seen-v1' => $s->update(['onboarding_seen' => null]),
                 'notifications-v1' => $this->clearNotifications($user, $s),
             };
+            // Deleting is a change too: stale devices must conflict instead of silently resurrecting it.
+            [$revCol, $idCol] = self::COLUMNS[$key];
+            $s->update([$revCol => (int) $s->{$revCol} + 1, $idCol => null]);
         });
     }
 

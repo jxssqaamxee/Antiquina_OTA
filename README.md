@@ -79,7 +79,8 @@ php artisan db:seed       # optional demo trainee: 2024-1-00001 / password (emai
 composer dev              # or: php artisan serve  +  npm run dev
 ```
 For production run `npm install && npm run build`, then `php artisan config:clear`. Use HTTPS (required for PWA install), set `APP_URL` to the real site address (it is used in the emailed verification / reset links) and configure the `MAIL_*` settings so those emails can be delivered.
-Existing database? Run `php artisan migrate` — it drops the old Google columns.
+Fresh database: `php artisan migrate:fresh` (the migrations are now one clean set of `create` files; there are no add/drop migrations).
+Existing database? The old migration history was collapsed, so `php artisan migrate` on it fails with "table already exists". Either export what you need and run `migrate:fresh`, or keep the old migration files for that server.
 Tests: `php artisan test`.
 
 ## Notes
@@ -99,8 +100,15 @@ Everything per user is saved on the server, in tables that belong to one account
 | `duty_entries` | each duty day: date, client, shift type, morning/afternoon/evening times, `coverage` (`full` = whole day), **hours computed by the server**, task |
 | `user_notifications` | the bell history (read/unread), up to 200 per user |
 
+`user_settings` also holds a `*_revision` (integer, starts at 0) and `*_save_id` (uuid) column for each synced document (logbook, milestones, reminder, onboarding, notifications). They are created now and used by the server-side sync revision check added in the next step; nothing reads them yet.
+
 The app still talks to `/api/sync` with the same JSON, but every save is validated first (`app/Support/Logbook/LogbookValidator.php`): bad data gets a `422` with a message per field, never a 500. Rules: names required/unique per user, target hours 1–2000, time out after time in, no overlapping entries on the same date, task text max 500 characters. The theme is saved with `PUT /api/profile/preferences`.
 
 `user_documents` (the old JSON blobs) is never modified, it stays as a backup. Each account's old data is copied into the new tables automatically the first time it syncs, or for everyone at once with `php artisan occ:import-legacy`.
 
 Known limit: a logbook save replaces the whole logbook, so a phone that was offline for a long time can overwrite entries another phone added meanwhile. Use one device at a time until a merge step is added.
+
+
+## Sync behaviour
+
+Each synced document (logbook, milestones, reminder, onboarding, notifications) has a server revision. A device sends its last known revision with every save. If another device saved first, the server answers 409 with its copy; the app adopts it, keeps the local version in a recovery slot and offers "Restore my last edit".

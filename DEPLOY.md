@@ -54,6 +54,9 @@ messages. They need three things, all included in the Dockerfile / entrypoint:
 2. **The scheduler.** `docker/entrypoint.sh` runs `php artisan schedule:run` every minute (which runs
    `push:reminders`). No cron setup needed. Keep ONE running container; two are harmless too (each reminder is sent once).
 3. **Tables** `push_subscriptions` and `push_reminder_logs` (created by `php artisan migrate`, automatic on start).
+4. **Fresh database only.** The migration history is one clean `create` set. A database created by the old
+   migrations must be rebuilt (`php artisan migrate:fresh --force`, which deletes all data) or kept on the old
+   migration files; running plain `migrate` on it fails with "table already exists".
 
 Check it: sign in on the phone, open the bell, tap **Turn on alerts**, then **Send a test**.
 Test the schedule logic without waiting: `php artisan push:reminders --at="2026-11-16 16:50"` (Monday, Manila time).

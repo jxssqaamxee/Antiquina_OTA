@@ -6,10 +6,12 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
+    /**
+     * Legacy, read-only backup: one JSON blob per (user, key) from the pre-table version of the app.
+     * Only LegacyImporter reads it. Nothing writes to it any more.
+     */
     public function up(): void
     {
-        // One JSON document per (user, key): logbook entries + host clients,
-        // milestones, reminder flags, notification history.
         Schema::create('user_documents', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
