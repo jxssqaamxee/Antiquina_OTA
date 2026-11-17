@@ -56,16 +56,15 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="OCCDL">
+    <!-- Favicons / home-screen icons: identical files and markup to SCLF (public/images). -->
     <link rel="icon" href="/favicon.ico" sizes="any">
-    <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32.png?v=4">
-    <link rel="icon" type="image/png" sizes="16x16" href="/icons/icon-16.png?v=4">
-    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png?v=4">
-    <!-- iPhone / iPad home-screen icon: opaque 180px tile (a transparent one turns black on iOS). -->
-    <!-- No query string and a brand-new file name: iOS keeps a failed/blank icon per URL, so a new URL
-         makes it fetch again. /apple-touch-icon.png (root) is the address iOS tries by itself. -->
-    <link rel="apple-touch-icon" sizes="180x180" href="/icons/occdl-touch-180.png">
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-    <meta name="msapplication-TileImage" content="/icons/icon-192.png?v=4">
+    <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16.png">
+    <link rel="icon" type="image/png" sizes="48x48" href="/images/icon-48.png">
+    <link rel="icon" type="image/png" sizes="96x96" href="/images/icon-96.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/images/icon-192.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png">
+    <meta name="msapplication-TileImage" content="/images/icon-192.png">
     <meta name="msapplication-TileColor" content="#01215f">
 
     <!-- iOS zooms the page when a field with text smaller than 16px gets focus.

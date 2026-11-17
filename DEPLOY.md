@@ -40,7 +40,7 @@ next time their owner opens the app (while the file still exists).
 ## Checking the PWA after a deploy
 
 * `curl -i https://your-domain/manifest.json` must answer `200` with `Content-Type: application/manifest+json` and JSON (not HTML).
-* `https://your-domain/icons/occdl-touch-180.png` must open the shield icon (same size/padding as the SCLF icon).
+* `https://your-domain/images/apple-touch-icon.png` must open the shield icon (the exact same file SCLF uses).
 * iPhone: delete the old home-screen icon first, reload the site once in Safari, then Share > Add to Home Screen again (iOS keeps the old/blank icon until you do).
 
 ## Reminders on a closed app (Web Push)

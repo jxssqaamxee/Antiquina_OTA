@@ -4,10 +4,10 @@
 //    and then offline.html, so an installed app still opens with no signal.
 //  - /api/* is NEVER cached (private, per-user data); the app keeps its own
 //    offline copy of the logbook and syncs when the connection returns.
-const VERSION = "occ-v7"; // bumped: v=4 icons (icons re-synced with SCLF)
+const VERSION = "occ-v8"; // bumped: icons now served from /images like SCLF
 const SHELL = `${VERSION}-shell`;
 const ASSETS = `${VERSION}-assets`;
-const PRECACHE = ["/offline.html", "/icons/icon-192.png?v=4", "/icons/icon-512.png?v=4"];
+const PRECACHE = ["/offline.html", "/images/icon-192.png", "/images/icon-512.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(SHELL).then((c) => c.addAll(PRECACHE)).catch(() => {}));
@@ -36,8 +36,8 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(p.title || "OCCDL", {
       body: p.body || "",
-      icon: p.icon || "/icons/icon-192.png?v=4",
-      badge: "/icons/icon-96.png?v=4",
+      icon: p.icon || "/images/icon-192.png",
+      badge: "/images/icon-96.png",
       // Same tag as the in-app reminder, so one reminder never shows twice.
       tag: p.tag || "occ-notification",
       renotify: false,
@@ -72,9 +72,9 @@ self.addEventListener("fetch", (event) => {
   if (url.pathname.startsWith("/api/")) return;          // private data: always network
   // Manifest and iOS home-screen icons always go straight to the network (never answered by the worker).
   if (url.pathname === "/manifest.json" || url.pathname === "/manifest.webmanifest" || url.pathname.startsWith("/apple-touch-icon")
-      || url.pathname.startsWith("/icons/apple-touch-icon") || url.pathname.startsWith("/icons/occdl-touch")) return;
+      || url.pathname.startsWith("/images/apple-touch-icon")) return;
 
-  if (url.pathname.startsWith("/build/assets/") || url.pathname.startsWith("/icons/")) {
+  if (url.pathname.startsWith("/build/assets/") || url.pathname.startsWith("/images/")) {
     event.respondWith(
       caches.open(ASSETS).then(async (cache) => {
         const hit = await cache.match(req);

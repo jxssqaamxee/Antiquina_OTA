@@ -26,23 +26,6 @@ class PwaManifestController extends Controller
         $theme = (string) $request->cookie('occ-theme', 'white');
         $theme = array_key_exists($theme, self::BACKGROUNDS) ? $theme : 'white';
 
-        $icon = fn (string $file, string $size, string $purpose) => [
-            'src' => "/icons/{$file}?v=4", 'sizes' => "{$size}x{$size}", 'type' => 'image/png', 'purpose' => $purpose,
-        ];
-
-        // Only advertise icon files that really exist on disk: a missing file makes the browser log
-        // "Error while trying to use the following icon from the Manifest" and can block installing.
-        $icons = array_values(array_filter([
-            $icon('icon-48.png', '48', 'any'),
-            $icon('icon-96.png', '96', 'any'),
-            $icon('icon-144.png', '144', 'any'),
-            $icon('icon-192.png', '192', 'any'),
-            $icon('icon-384.png', '384', 'any'),
-            $icon('icon-512.png', '512', 'any'),
-            $icon('icon-192-maskable.png', '192', 'maskable'),
-            $icon('icon-512-maskable.png', '512', 'maskable'),
-        ], fn (array $i) => is_file(public_path(strtok($i['src'], '?')))));
-
         $manifest = [
             'id' => '/',
             'name' => 'OCCDL',
@@ -60,10 +43,16 @@ class PwaManifestController extends Controller
             'lang' => 'en',
             'dir' => 'ltr',
             'categories' => ['education', 'productivity'],
-            'icons' => $icons,
+            'icons' => [
+                // Same three icons as SCLF: the shield on a transparent background, and a full-bleed
+                // navy "maskable" version that Android can crop to a circle / squircle.
+                ['src' => '/images/icon-192.png', 'sizes' => '192x192', 'type' => 'image/png', 'purpose' => 'any'],
+                ['src' => '/images/icon-512.png', 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'any'],
+                ['src' => '/images/icon-maskable-512.png', 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'maskable'],
+            ],
             'shortcuts' => [
-                ['name' => 'Logbook', 'short_name' => 'Logbook', 'url' => '/logbook', 'icons' => [['src' => '/icons/icon-192.png?v=4', 'sizes' => '192x192']]],
-                ['name' => 'Profile', 'short_name' => 'Profile', 'url' => '/profile', 'icons' => [['src' => '/icons/icon-192.png?v=4', 'sizes' => '192x192']]],
+                ['name' => 'Logbook', 'short_name' => 'Logbook', 'url' => '/logbook', 'icons' => [['src' => '/images/icon-192.png', 'sizes' => '192x192']]],
+                ['name' => 'Profile', 'short_name' => 'Profile', 'url' => '/profile', 'icons' => [['src' => '/images/icon-192.png', 'sizes' => '192x192']]],
             ],
         ];
 
