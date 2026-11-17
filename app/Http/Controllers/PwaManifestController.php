@@ -27,7 +27,7 @@ class PwaManifestController extends Controller
         $theme = array_key_exists($theme, self::BACKGROUNDS) ? $theme : 'white';
 
         $icon = fn (string $file, string $size, string $purpose) => [
-            'src' => "/icons/{$file}?v=2", 'sizes' => "{$size}x{$size}", 'type' => 'image/png', 'purpose' => $purpose,
+            'src' => "/icons/{$file}?v=3", 'sizes' => "{$size}x{$size}", 'type' => 'image/png', 'purpose' => $purpose,
         ];
 
         $manifest = [
@@ -58,15 +58,17 @@ class PwaManifestController extends Controller
                 $icon('icon-512-maskable.png', '512', 'maskable'),
             ],
             'shortcuts' => [
-                ['name' => 'Logbook', 'short_name' => 'Logbook', 'url' => '/logbook', 'icons' => [['src' => '/icons/icon-192.png?v=2', 'sizes' => '192x192']]],
-                ['name' => 'Profile', 'short_name' => 'Profile', 'url' => '/profile', 'icons' => [['src' => '/icons/icon-192.png?v=2', 'sizes' => '192x192']]],
+                ['name' => 'Logbook', 'short_name' => 'Logbook', 'url' => '/logbook', 'icons' => [['src' => '/icons/icon-192.png?v=3', 'sizes' => '192x192']]],
+                ['name' => 'Profile', 'short_name' => 'Profile', 'url' => '/profile', 'icons' => [['src' => '/icons/icon-192.png?v=3', 'sizes' => '192x192']]],
             ],
         ];
 
-        return response()->json($manifest)->withHeaders([
-            'Content-Type' => 'application/manifest+json',
-            'Cache-Control' => 'no-cache',
-            'Vary' => 'Cookie',
-        ]);
+        // Built by hand (not response()->json) so nothing else can ever change the body: it is
+        // always plain JSON, whatever the server is doing.
+        return new JsonResponse(
+            $manifest,
+            200,
+            ['Content-Type' => 'application/manifest+json; charset=UTF-8', 'Cache-Control' => 'no-cache', 'Vary' => 'Cookie'],
+        );
     }
 }

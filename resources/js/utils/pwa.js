@@ -6,6 +6,9 @@ export function registerServiceWorker() {
 
   window.addEventListener("load", async () => {
     try {
+      // The very first install also fires "controllerchange" (clients.claim). Reloading then makes the
+      // page load, flash and load again. Only reload when an OLD worker is being replaced.
+      const hadController = !!navigator.serviceWorker.controller;
       const reg = await navigator.serviceWorker.register("/sw.js");
 
       const announce = (worker) => window.dispatchEvent(new CustomEvent(EVENTS.swUpdate, { detail: worker }));
@@ -22,7 +25,7 @@ export function registerServiceWorker() {
 
       let reloading = false;
       navigator.serviceWorker.addEventListener("controllerchange", () => {
-        if (reloading) return;
+        if (reloading || !hadController) return;
         reloading = true;
         window.location.reload();
       });

@@ -77,10 +77,8 @@ class ProfileController extends Controller
         ]);
 
         $user = $request->user();
-        $old = $user->profile_photo;
 
-        $user->update(['profile_photo' => ProfilePhotoStorage::store($request->file('photo'))]);
-        ProfilePhotoStorage::delete($old);
+        ProfilePhotoStorage::save($user, $request->file('photo'));
 
         return response()->json(['user' => $user->fresh()->toClient()]);
     }
@@ -89,10 +87,8 @@ class ProfileController extends Controller
     public function destroyPhoto(Request $request): JsonResponse
     {
         $user = $request->user();
-        $old = $user->profile_photo;
 
-        $user->update(['profile_photo' => null]);
-        ProfilePhotoStorage::delete($old);
+        ProfilePhotoStorage::clear($user);
 
         return response()->json(['user' => $user->fresh()->toClient()]);
     }

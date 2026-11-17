@@ -2,6 +2,8 @@
 
 namespace App\Support;
 
+use App\Models\User;
+use App\Models\UserPhoto;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
@@ -33,6 +35,45 @@ class ProfilePhotoStorage
         Storage::disk(PrivateMedia::DISK)->put($path, $resized);
 
         return $path;
+    }
+
+    /**
+     * Saves the photo for a user: in the DATABASE (authoritative, survives redeploys) and, as a
+     * best-effort extra copy, on the private disk. Replaces and cleans up any previous photo.
+     */
+    public static function save(User $user, UploadedFile $file): void
+    {
+        $old = $user->profile_photo;
+        $bytes = self::shrink((string) $file->getRealPath());
+        $mime = 'image/jpeg';
+        if ($bytes === null) {
+            $bytes = (string) @file_get_contents((string) $file->getRealPath());
+            $info = @getimagesizefromstring($bytes);
+            $mime = in_array($info['mime'] ?? '', ['image/jpeg', 'image/png', 'image/webp'], true) ? $info['mime'] : 'image/jpeg';
+        }
+        $ext = ['image/png' => 'png', 'image/webp' => 'webp'][$mime] ?? 'jpg';
+        $path = self::DIRECTORY.'/'.bin2hex(random_bytes(20)).'.'.$ext;
+
+        UserPhoto::updateOrCreate(['user_id' => $user->id], ['mime' => $mime, 'data' => base64_encode($bytes)]);
+        $user->update(['profile_photo' => $path]);
+
+        try {
+            Storage::disk(PrivateMedia::DISK)->put($path, $bytes);
+        } catch (\Throwable) {
+            // The database copy is the real one; a read-only disk must not fail the upload.
+        }
+        if ($old && $old !== $path) {
+            self::delete($old);
+        }
+    }
+
+    /** Removes the user's photo everywhere (database + disk). */
+    public static function clear(User $user): void
+    {
+        $old = $user->profile_photo;
+        UserPhoto::where('user_id', $user->id)->delete();
+        $user->update(['profile_photo' => null]);
+        self::delete($old);
     }
 
     /** Deletes a stored photo. Only paths inside the profile-pictures folder are touched. */

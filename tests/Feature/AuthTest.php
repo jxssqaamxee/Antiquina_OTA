@@ -450,4 +450,17 @@ class AuthTest extends TestCase
         // The old signed route is gone.
         $this->assertFalse(\Illuminate\Support\Facades\Route::has('media.show'));
     }
+
+    public function test_the_photo_survives_the_disk_being_wiped_because_it_is_stored_in_the_database(): void
+    {
+        $this->postJson('/api/auth/register', $this->payload())->assertCreated();
+        $user = User::where('student_id', '2024-1-00099')->first();
+
+        // Simulate a redeploy: the container's disk is empty again, the database is not.
+        Storage::disk('local')->delete($user->profile_photo);
+        Storage::disk('local')->assertMissing($user->profile_photo);
+
+        $this->signedIn($user)->getJson('/api/me')->assertOk()->assertJsonPath('user.has_profile_photo', true);
+        $this->signedIn($user)->get('/api/me/photo')->assertOk()->assertHeader('Content-Type', 'image/jpeg');
+    }
 }

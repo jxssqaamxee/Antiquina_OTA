@@ -38,10 +38,11 @@ class AuthController extends Controller
             'course' => $data['course'],
             'password' => $data['password'],
             // Already validated by RegisterRequest (required image, max 5 MB).
-            'profile_photo' => ProfilePhotoStorage::store($request->file('profile_photo')),
             // The email must be verified before the app opens (code or link).
             'email_verified_at' => null,
         ]);
+
+        ProfilePhotoStorage::save($user, $request->file('profile_photo'));
 
         // Sends the 6-digit code + link. Never fails registration if the mail server is down:
         // the verify screen has a "Resend email" button.

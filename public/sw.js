@@ -4,10 +4,10 @@
 //    and then offline.html, so an installed app still opens with no signal.
 //  - /api/* is NEVER cached (private, per-user data); the app keeps its own
 //    offline copy of the logbook and syncs when the connection returns.
-const VERSION = "occ-v4"; // bumped: the app icons and name changed, so old cached icons are dropped
+const VERSION = "occ-v5"; // bumped: new icon URLs + stateless manifest
 const SHELL = `${VERSION}-shell`;
 const ASSETS = `${VERSION}-assets`;
-const PRECACHE = ["/offline.html", "/icons/icon-180.png?v=2", "/icons/icon-192.png?v=2", "/icons/icon-512.png?v=2"];
+const PRECACHE = ["/offline.html", "/icons/icon-192.png?v=3", "/icons/icon-512.png?v=3"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(SHELL).then((c) => c.addAll(PRECACHE)).catch(() => {}));
@@ -44,6 +44,9 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;       // fonts, etc.
   if (url.pathname.startsWith("/api/")) return;          // private data: always network
+  // Manifest and iOS home-screen icons always go straight to the network (never answered by the worker).
+  if (url.pathname === "/manifest.webmanifest" || url.pathname.startsWith("/apple-touch-icon")
+      || url.pathname.startsWith("/icons/apple-touch-icon")) return;
 
   if (url.pathname.startsWith("/build/assets/") || url.pathname.startsWith("/icons/")) {
     event.respondWith(
@@ -51,7 +54,8 @@ self.addEventListener("fetch", (event) => {
         const hit = await cache.match(req);
         if (hit) return hit;
         const res = await fetch(req);
-        if (res.ok) cache.put(req, res.clone());
+        const type = res.headers.get("content-type") || "";
+        if (res.ok && !type.includes("text/html")) cache.put(req, res.clone());
         return res;
       })
     );

@@ -283,6 +283,8 @@ html { overscroll-behavior-y: none; }
     overflow: hidden;
     animation: mp-fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+.mp-wrapper.mp-again .mp-card { animation: none; }
+.mp-wrapper.mp-again { transition: none; }
 .mp-wrapper.light .mp-card {
     background: rgba(255,255,255,0.85);
     backdrop-filter: blur(14px);

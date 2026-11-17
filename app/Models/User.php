@@ -41,6 +41,27 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->hasOne(UserSetting::class);
     }
 
+    public function photo(): HasOne
+    {
+        return $this->hasOne(UserPhoto::class);
+    }
+
+    /**
+     * Address of this account's photo, or null (-> initials). The photo counts as present when it is
+     * stored in the database (survives redeploys) or, for old accounts, still on disk.
+     */
+    public function photoUrl(): ?string
+    {
+        if (! $this->profile_photo) {
+            return null;
+        }
+        if ($this->photo()->exists()) {
+            return PrivateMedia::url($this->profile_photo);
+        }
+
+        return PrivateMedia::urlIfExists($this->profile_photo);
+    }
+
     public function hostClients(): HasMany
     {
         return $this->hasMany(HostClient::class);
@@ -75,7 +96,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'email' => $this->email,
             'course' => $this->course,
             // Own photo URL (only this account's session can open it), or null -> initials.
-            'picture' => $picture = PrivateMedia::urlIfExists($this->profile_photo),
+            'picture' => $picture = $this->photoUrl(),
             'has_profile_photo' => $picture !== null,
             'has_password' => $this->password !== null,
             // Colour theme saved on the account (null = never chosen; the device keeps its own).

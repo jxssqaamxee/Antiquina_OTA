@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import Splash from "../../Components/shared/Splash";
+import { preloadPage } from "../../routes/loaders";
 
 // Main loading page at "/" (same idea as sclf_APP's MainPage). The logo on the sign-in pages and in
 // the logbook app bar opens it, so tapping the logo behaves like a refresh: the branded loading
@@ -29,6 +30,10 @@ export default function SplashPage() {
       if (userRef.current) {
         await Promise.race([refresh(), new Promise((r) => setTimeout(r, REFRESH_TIMEOUT_MS))]);
       }
+      // Fetch the destination page while the loading screen is still showing.
+      const u0 = userRef.current;
+      const target = !u0 ? "login" : u0.email_verified === false ? "verify" : "logbook";
+      await Promise.race([preloadPage(target), new Promise((r) => setTimeout(r, 4000))]);
       if (!live) return;
       const wait = Math.max(0, REDIRECT_DELAY_MS - (Date.now() - openedAt.current));
       timer = setTimeout(() => {

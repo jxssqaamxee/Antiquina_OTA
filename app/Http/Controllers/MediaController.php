@@ -17,7 +17,17 @@ class MediaController extends Controller
 
     public function mine(Request $request)
     {
-        $parts = PrivateMedia::split($request->user()->profile_photo);
+        $user = $request->user();
+
+        // 1) The database copy (survives redeploys).
+        $row = $user->photo;
+        if ($row && in_array($row->mime, self::IMAGE_MIME, true) && ($bytes = $row->bytes()) !== '') {
+            return $this->image($bytes, $row->mime);
+        }
+
+        // 2) Old accounts: the file is still on disk. Serve it AND copy it into the database,
+        //    so the next redeploy cannot take it away.
+        $parts = PrivateMedia::split($user->profile_photo);
         abort_unless($parts, 404);
 
         $disk = Storage::disk(PrivateMedia::DISK);
@@ -42,8 +52,23 @@ class MediaController extends Controller
             return $this->notFound('not-an-image');
         }
 
-        return $disk->response($path, $parts[1], [
+        $bytes = (string) @file_get_contents($full);
+        if ($bytes !== '' && strlen($bytes) < 6_000_000) {
+            try {
+                \App\Models\UserPhoto::updateOrCreate(['user_id' => $user->id], ['mime' => $mime, 'data' => base64_encode($bytes)]);
+            } catch (\Throwable) {
+                // Backfill is best-effort; the response below still works.
+            }
+        }
+
+        return $this->image($bytes, $mime);
+    }
+
+    private function image(string $bytes, string $mime)
+    {
+        return response($bytes, 200, [
             'Content-Type' => $mime,
+            'Content-Length' => (string) strlen($bytes),
             'Content-Disposition' => 'inline',
             'X-Content-Type-Options' => 'nosniff',
             // Private: never stored by a shared cache / proxy. The ?v= value changes with every

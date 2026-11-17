@@ -1,14 +1,20 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useAppTheme } from "../../hooks/useAppTheme";
 import logo from "../../assets/images/site-logo.png";
 
 // Main loading screen — same design as sclf_APP's MainPage (Secure Session chip,
 // floating logo, gradient title, animated bar). Styles live in styles/app.css (.mp-*).
 // Follows the saved theme so there is no flash while the session is restored.
+// True once a loading screen has been shown: any later one (route change, auth check) appears
+// already settled instead of replaying the fade-in, so it never looks like a blink.
+let shownBefore = false;
+
 function Splash() {
   const { isDark } = useAppTheme();
+  const [again] = useState(() => shownBefore);
+  useEffect(() => { shownBefore = true; }, []);
   return (
-    <div className={`mp-wrapper ${isDark ? "dark" : "light"}`} role="status" aria-label="Loading" aria-busy="true">
+    <div className={`mp-wrapper ${isDark ? "dark" : "light"}${again ? " mp-again" : ""}`} role="status" aria-label="Loading" aria-busy="true">
       <span className="mp-blob mp-blob-1" />
       <span className="mp-blob mp-blob-2" />
       <span className="mp-blob mp-blob-3" />

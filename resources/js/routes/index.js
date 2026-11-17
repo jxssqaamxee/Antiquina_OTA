@@ -1,14 +1,18 @@
 import { lazy } from "react";
+// The loading page at "/" is NOT lazy: if it were, the screen would show the loading fallback,
+// then this page's own loading screen, then the fallback again for the next page: several loading
+// screens in a row, which looks like blinking. Now there is a single one.
+import SplashPage from "../Pages/Main/SplashPage";
 
 // Pages are code-split: the heavy logbook (and its PDF export) only loads after sign-in.
-const SplashPage = lazy(() => import("../Pages/Main/SplashPage"));
-const LoginPage = lazy(() => import("../Pages/Auth/LoginPage"));
-const RegisterPage = lazy(() => import("../Pages/Auth/RegisterPage"));
-const ForgotPasswordPage = lazy(() => import("../Pages/Auth/ForgotPasswordPage"));
-const ResetPasswordPage = lazy(() => import("../Pages/Auth/ResetPasswordPage"));
-const LogbookPage = lazy(() => import("../Pages/Logbook/LogbookPage"));
-const ProfilePage = lazy(() => import("../Pages/Profile/ProfilePage"));
-const VerifyEmailPage = lazy(() => import("../Pages/Auth/VerifyEmailPage"));
+import { loaders } from "./loaders";
+const LoginPage = lazy(loaders.login);
+const RegisterPage = lazy(loaders.register);
+const ForgotPasswordPage = lazy(loaders.forgot);
+const ResetPasswordPage = lazy(loaders.reset);
+const LogbookPage = lazy(loaders.logbook);
+const ProfilePage = lazy(loaders.profile);
+const VerifyEmailPage = lazy(loaders.verify);
 
 export const publicRoutes = [{ path: "/", component: SplashPage }];
 export const guestRoutes = [

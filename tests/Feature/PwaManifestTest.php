@@ -35,4 +35,12 @@ class PwaManifestTest extends TestCase
         $this->withUnencryptedCookie('occ-theme', 'black')->get('/login')->assertOk()
             ->assertSee('<meta name="theme-color" content="#ffffff">', false);
     }
+
+    public function test_manifest_is_plain_json_and_opens_no_session(): void
+    {
+        $res = $this->get('/manifest.webmanifest')->assertOk();
+        $this->assertStringStartsWith('application/manifest+json', (string) $res->headers->get('Content-Type'));
+        $this->assertIsArray(json_decode($res->getContent(), true));
+        $this->assertEmpty($res->headers->getCookies(), 'the manifest must not set cookies / start a session');
+    }
 }

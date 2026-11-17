@@ -26,10 +26,18 @@ Do not set `SESSION_SECURE_COOKIE`: in production it defaults to secure, which n
 
 ## Persistent storage
 
-Profile photos are saved in `/var/www/html/storage/app/private`. A container's disk is wiped on every
-redeploy, so mount a persistent volume on that path, otherwise every photo disappears after each deploy
-(the app then shows initials). If you stay on SQLite, also mount `/var/www/html/database`.
-A managed MySQL/PostgreSQL database is safer than SQLite.
+Profile photos are now stored **in the database** (table `user_photos`), so they survive every
+redeploy as long as the database does. Use a managed MySQL/PostgreSQL database (or mount a volume on
+`/var/www/html/database` if you stay on SQLite). A copy is also written to
+`/var/www/html/storage/app/private`, but that disk may be wiped and nothing depends on it.
+Photos that were saved on disk by an older version are copied into the database automatically the
+next time their owner opens the app (while the file still exists).
+
+## Checking the PWA after a deploy
+
+* `curl -i https://your-domain/manifest.webmanifest` must answer `200` with `Content-Type: application/manifest+json` and JSON (not HTML).
+* `https://your-domain/apple-touch-icon.png` must open the shield icon.
+* iPhone: delete the old home-screen icon first, reload the site once in Safari, then Share > Add to Home Screen again (iOS keeps the old/blank icon until you do).
 
 ## Health check
 
