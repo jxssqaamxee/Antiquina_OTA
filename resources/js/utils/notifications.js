@@ -1,5 +1,6 @@
 // Thin wrapper around the browser Notification API so the rest of the app
 // never has to worry about missing support or unresolved permission.
+import { alertsTurnedOff } from "./push";
 
 export function notificationsSupported() {
   return typeof window !== "undefined" && "Notification" in window;
@@ -27,6 +28,7 @@ export async function requestPermission() {
 export async function fireSystemNotification(title, body, tag) {
   if (!notificationsSupported()) return;
   if (Notification.permission !== "granted") return;
+  if (alertsTurnedOff()) return; // switched off in the avatar menu: the bell history still keeps the message
   const options = {
     body,
     tag,

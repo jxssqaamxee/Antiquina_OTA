@@ -17,7 +17,6 @@ import {
 } from "../../utils/validators";
 import MobileTabBar from "../../Components/shared/MobileTabBar";
 import AppBar from "../../Components/shared/AppBar";
-import { THEMES, getTheme, setTheme, saveThemeToAccount } from "../../utils/theme";
 import logo from "../../assets/images/site-logo.png";
 import Footer from "../../Components/shared/Footer";
 import { canNativePrompt, isInstalled, promptInstall, subscribe } from "../../utils/pwaInstall";
@@ -36,7 +35,6 @@ export default function ProfilePage() {
   const [errs, setErrs] = useState({});
   const [busy, setBusy] = useState("");
   const [, force] = useState(0);
-  const [theme, setThemeState] = useState(getTheme);
   const [photoOpen, setPhotoOpen] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [showPw, setShowPw] = useState(false);
@@ -127,8 +125,9 @@ export default function ProfilePage() {
   }
 
   async function signOut() {
-    await logout();
-    navigate("/login", { replace: true });
+    if (busy === "signout") return;
+    setBusy("signout");
+    try { await logout(); } finally { navigate("/login", { replace: true }); }
   }
 
   const courses = config?.courses || [];
@@ -136,7 +135,7 @@ export default function ProfilePage() {
 
   return (
     <div className="app">
-      <AppBar title="Profile" subtitle="Account & appearance" back="/logbook" />
+      <AppBar title="Profile settings" subtitle="Your account" back="/logbook" />
 
       <main className="app-main">
         <section className="pf-hero" style={{ "--pf-logo": `url("${logo}")` }}>
@@ -157,35 +156,27 @@ export default function ProfilePage() {
 
         <div className="pf-stack">
           <section className="card">
-            <h3 className="card-title">Appearance</h3>
-            <p className="pf-muted">Pick a colour theme. It is saved on your account and follows you to any device.</p>
-            <div className="theme-grid" role="radiogroup" aria-label="Colour theme">
-              {THEMES.map((t) => (
-                <button
-                  key={t.id} type="button" role="radio" aria-checked={theme === t.id}
-                  className={`theme-opt${theme === t.id ? " is-active" : ""}`}
-                  onClick={() => { setThemeState(setTheme(t.id)); saveThemeToAccount(t.id); }}
-                >
-                  <span className="theme-swatch" style={{ background: t.bg, "--sw-accent": t.accent }} />
-                  {t.label}
+            <h3 className="card-title">Profile photo</h3>
+            <p className="pf-muted" style={{ marginBottom: 0 }}>
+              {user.has_profile_photo
+                ? "Tap the camera on your picture, or the button below, to replace it. Removing it shows your initials instead."
+                : "Add a photo so your supervisor can recognise you. Without one, your initials show instead."}
+            </p>
+            <div className="pf-photo-actions">
+              <button type="button" className="btn" onClick={() => setPhotoOpen(true)} disabled={busy === "photo"}>
+                <Camera size={16} /> {user.has_profile_photo ? "Replace photo" : "Add photo"}
+              </button>
+              {user.has_profile_photo && (
+                <button type="button" className="btn btn-danger" onClick={() => setConfirmRemove(true)} disabled={busy === "photo"}>
+                  <Trash2 size={16} /> Remove photo
                 </button>
-              ))}
+              )}
             </div>
           </section>
 
-          {user.has_profile_photo && (
-            <section className="card">
-              <h3 className="card-title">Profile photo</h3>
-              <p className="pf-muted" style={{ marginBottom: 0 }}>Tap the camera on your picture to replace it. Removing it shows your initials instead.</p>
-              <div className="pf-photo-actions">
-                <button type="button" className="btn" onClick={() => setPhotoOpen(true)}><Camera size={16} /> Replace photo</button>
-                <button type="button" className="btn btn-danger" onClick={() => setConfirmRemove(true)} disabled={busy === "photo"}><Trash2 size={16} /> Remove photo</button>
-              </div>
-            </section>
-          )}
-
           <form className="card pf-form" onSubmit={saveProfile} noValidate>
             <h3 className="card-title pf-form-title">Personal details</h3>
+            <p className="pf-muted" style={{ margin: "0 0 4px" }}>Tap a field and type to change it, then press Save changes.</p>
             <LedgerBanner tone={msg.profile?.tone}>{msg.profile?.text}</LedgerBanner>
 
             <LedgerRowPair index={1}>
@@ -212,10 +203,10 @@ export default function ProfilePage() {
               </LedgerSelect>
             </LedgerRow>
             <LedgerRow index={4} icon={Mail} htmlFor="pf_email" label="Gmail" hint="Your Gmail and Student ID can’t be changed here.">
-              <LedgerInput id="pf_email" value={user.email} readOnly />
+              <div id="pf_email" className="pf-locked"><Lock size={13} aria-hidden="true" />{user.email}</div>
             </LedgerRow>
             <LedgerRow index={5} icon={IdCard} htmlFor="pf_sid" label="Student ID">
-              <LedgerInput id="pf_sid" value={user.student_id} readOnly />
+              <div id="pf_sid" className="pf-locked"><Lock size={13} aria-hidden="true" />{user.student_id}</div>
             </LedgerRow>
             <button className="lg-submit" disabled={busy === "profile"}>{busy === "profile" ? "Saving…" : "Save changes"}</button>
           </form>
@@ -241,7 +232,7 @@ export default function ProfilePage() {
 
           <section className="card pf-actions">
             {showInstall && <button type="button" className="btn btn-block" onClick={promptInstall}><Download size={18} /> Install app</button>}
-            <button type="button" className="btn btn-block btn-signout" onClick={signOut}><LogOut size={18} /> Sign out</button>
+            <button type="button" className="btn btn-block btn-signout" onClick={signOut} disabled={busy === "signout"}><LogOut size={18} /> {busy === "signout" ? "Signing out…" : "Sign out"}</button>
           </section>
         </div>
         <Footer />

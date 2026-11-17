@@ -9,15 +9,26 @@ const COOKIE = "occ-theme"; // lets the server (app.blade.php + the manifest) kn
 // NAVY on the light themes, WHITE on the dark theme. (The page background is the theme's own colour.)
 export const BAR_NAVY = "#01215f";
 export const BAR_WHITE = "#ffffff";
-export const barColorFor = (id) => (id === "black" ? BAR_WHITE : BAR_NAVY);
 
+/** "black" (Dark) and every "dark-*" (Black + accent) theme are dark; the rest are light tints. */
+export const isDarkId = (id) => id === "black" || (typeof id === "string" && id.startsWith("dark-"));
+export const barColorFor = (id) => (isDarkId(id) ? BAR_WHITE : BAR_NAVY);
+
+// Same nine themes as sclf_APP's account menu: the five regular ones, plus the "Black" set
+// (a pure black shell tinted with one accent colour) behind the Black / White switch.
 export const THEMES = [
-  { id: "white", label: "Light", bg: "#ffffff", accent: "#4f46e5", color: "#ffffff" },
-  { id: "black", label: "Dark", bg: "#12161f", accent: "#6366f1", color: "#0a0c12" },
-  { id: "blue", label: "Blue", bg: "#eaf2fd", accent: "#2563eb", color: "#f1f6fe" },
-  { id: "yellow", label: "Gold", bg: "#fbf3dc", accent: "#d97706", color: "#fdf8ec" },
-  { id: "maroon", label: "Maroon", bg: "#fdeef0", accent: "#9f1239", color: "#fdf3f4" },
+  { id: "white", label: "Default", bg: "#ffffff", accent: "#4f46e5", color: "#ffffff", swatch: "white" },
+  { id: "black", label: "Dark", bg: "#12161f", accent: "#6366f1", color: "#0a0c12", swatch: "black" },
+  { id: "blue", label: "Blue", bg: "#eaf2fd", accent: "#2563eb", color: "#f1f6fe", swatch: "blue" },
+  { id: "yellow", label: "Yellow", bg: "#fbf3dc", accent: "#d97706", color: "#fdf8ec", swatch: "yellow" },
+  { id: "maroon", label: "Maroon", bg: "#fdeef0", accent: "#9f1239", color: "#fdf3f4", swatch: "maroon" },
+  { id: "dark-white", label: "Black / White", bg: "#0a0a0a", accent: "#f2f2f2", color: "#000000", swatch: "black-white" },
+  { id: "dark-blue", label: "Black / Blue", bg: "#060d1f", accent: "#38bdf8", color: "#000000", swatch: "black-blue" },
+  { id: "dark-yellow", label: "Black / Yellow", bg: "#120b02", accent: "#f59e0b", color: "#000000", swatch: "black-yellow" },
+  { id: "dark-maroon", label: "Black / Maroon", bg: "#14060a", accent: "#dc2626", color: "#000000", swatch: "black-maroon" },
 ];
+export const REGULAR_THEMES = THEMES.filter((t) => !t.id.startsWith("dark-"));
+export const BLACK_THEMES = THEMES.filter((t) => t.id.startsWith("dark-"));
 
 export function getTheme() {
   try {
@@ -36,7 +47,7 @@ export function applyTheme(id = getTheme()) {
   try { document.cookie = `${COOKIE}=${t.id}; path=/; max-age=31536000; SameSite=Lax`; } catch { /* cookies blocked */ }
   // Keep what app.blade.php painted before first paint in step with the choice,
   // otherwise the old theme's colour stays behind the page (overscroll, rotation).
-  const dark = t.id === "black";
+  const dark = isDarkId(t.id);
   const root = document.documentElement;
   root.style.background = t.color;
   root.style.colorScheme = dark ? "dark" : "light";

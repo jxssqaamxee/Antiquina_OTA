@@ -486,3 +486,10 @@ html { overscroll-behavior-y: none; }
 .pf-cam:disabled { opacity: .6; }
 .pf-photo-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .pf-photo-actions .btn { min-height: 38px; padding: 0 14px; font-size: 13px; }
+
+/* Profile: read-only facts (Gmail, Student ID) shown as plain locked lines, so only the fields you can type in look like inputs. */
+.pf-form .pf-locked {
+  display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 4px 2px; font-size: 15px; font-weight: 650;
+  color: var(--ink-soft); overflow-wrap: anywhere;
+}
+.pf-form .pf-locked svg { flex: none; opacity: .7; }
