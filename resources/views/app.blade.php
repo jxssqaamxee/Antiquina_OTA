@@ -30,7 +30,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="format-detection" content="telephone=no">
     <!-- Saved colour theme, applied before first paint (see resources/js/utils/theme.js). -->
-    <script>
+    <script nonce="{{ $cspNonce ?? '' }}">
         try {
             var occBg = { white: '#ffffff', black: '#0a0c12', blue: '#f1f6fe', yellow: '#fdf8ec', maroon: '#fdf3f4', 'dark-white': '#000000', 'dark-blue': '#000000', 'dark-yellow': '#000000', 'dark-maroon': '#000000' };
             var occBar = function (t) { return (t === 'black' || String(t).indexOf('dark-') === 0) ? '#ffffff' : '#01215f'; }; // navy on light themes, white on dark

@@ -10,6 +10,7 @@ use App\Support\Formats;
 use App\Support\Logbook\LogbookRules;
 use App\Support\Logbook\LogbookStore;
 use App\Support\ProfilePhotoStorage;
+use App\Support\SecurityLog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -51,10 +52,13 @@ class ProfileController extends Controller
         $data = $request->validated();
 
         if (! $user->password || ! Hash::check($data['current_password'] ?? '', $user->password)) {
+            SecurityLog::failure('password_change_failed');
             throw ValidationException::withMessages(['current_password' => 'Your current password is incorrect.']);
         }
 
         $user->update(['password' => $data['password']]);
+        SecurityLog::event('password_changed', [], 'notice');
+        \App\Mail\PasswordChangedMail::notify($user);
 
         // Sign out every OTHER device: whoever had the old password (or a stolen session)
         // loses access. The device making this request stays signed in.

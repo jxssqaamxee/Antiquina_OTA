@@ -37,7 +37,11 @@ class RegisterRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'student_id' => ['required', 'string', 'regex:'.Formats::STUDENT_ID, 'unique:users,student_id'],
+            'student_id' => array_values(array_filter([
+                'required', 'string', 'regex:'.Formats::STUDENT_ID, 'unique:users,student_id',
+                // Only trainees on the enrolled list may register (OCC_ROSTER_ENFORCE=true).
+                config('occ.roster_enforce') ? Rule::exists('enrolled_students', 'student_id') : null,
+            ])),
             'first_name' => ['required', 'string', 'max:80', 'regex:'.Formats::NAME],
             'middle_name' => ['nullable', 'string', 'max:80', 'regex:'.Formats::NAME],
             'last_name' => ['required', 'string', 'max:80', 'regex:'.Formats::NAME],
@@ -63,6 +67,7 @@ class RegisterRequest extends FormRequest
         return [
             'student_id.required' => 'Student ID is required.',
             'student_id.regex' => 'Student ID must follow the format YYYY-N-NNNNN, e.g. 2021-2-04062.',
+            'student_id.exists' => 'That Student ID is not on the enrolled list. Please contact your coordinator.',
             'student_id.unique' => 'That Student ID is already registered. Sign in instead, or contact an administrator.',
             'first_name.required' => 'First name is required.',
             'first_name.regex' => 'First name can only contain letters, spaces, hyphens and apostrophes.',

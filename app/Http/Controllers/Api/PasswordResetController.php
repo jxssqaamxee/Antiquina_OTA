@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Services\Auth\SessionLogin;
+use App\Support\SecurityLog;
 use Carbon\Carbon;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\JsonResponse;
@@ -40,8 +41,10 @@ class PasswordResetController extends Controller
         $email = strtolower(trim($request->email));
         $key = 'forgot-password|'.$email.'|'.$request->ip();
 
-        if (RateLimiter::tooManyAttempts($key, self::MAX_ASKS)) {
+        $emailKey = 'forgot-password-email|'.$email; // all IPs together: stops mail-bombing one inbox
+        if (RateLimiter::tooManyAttempts($key, self::MAX_ASKS) || RateLimiter::tooManyAttempts($emailKey, 10)) {
             $minutes = max(1, (int) ceil(RateLimiter::availableIn($key) / 60));
+            SecurityLog::failure('password_reset_throttled', ['email' => SecurityLog::fingerprint($email)]);
 
             return response()->json([
                 'success' => false,
@@ -51,6 +54,8 @@ class PasswordResetController extends Controller
         }
 
         RateLimiter::hit($key, self::DECAY_SECONDS);
+        RateLimiter::hit($emailKey, 3600);
+        SecurityLog::event('password_reset_requested', ['email' => SecurityLog::fingerprint($email)], 'info');
 
         // After the response is sent, so the answer is not slower for real accounts.
         // Laravel's broker applies its own 60-second per-account throttle.
@@ -130,6 +135,8 @@ class PasswordResetController extends Controller
                 app(SessionLogin::class)->revokeAll($user);
 
                 event(new PasswordReset($user));
+                SecurityLog::event('password_reset_done', ['user_id' => $user->id], 'notice');
+                \App\Mail\PasswordChangedMail::notify($user);
             }
         );
 
@@ -149,7 +156,7 @@ class PasswordResetController extends Controller
         }
 
         $state = $this->linkState(strtolower(trim($request->email)), (string) $request->token);
-
+        SecurityLog::failure('password_reset_failed', ['reason' => $state, 'email' => SecurityLog::fingerprint((string) $request->email)]);
         return response()->json([
             'success' => false,
             'code' => $state === 'expired' ? 'link_expired' : 'link_invalid',

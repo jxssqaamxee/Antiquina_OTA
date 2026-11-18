@@ -40,6 +40,22 @@ return [
 
     // Time zone of the host agencies' schedules. The server runs in UTC, so the push reminders
     // (php artisan push:reminders) compare each schedule against THIS clock.
+    /*
+    | Content-Security-Policy: false = report-only (console warnings, nothing blocked),
+    | true = enforced. Turn on after testing every screen.
+    */
+    'csp_enforce' => filter_var(env('OCC_CSP_ENFORCE', false), FILTER_VALIDATE_BOOLEAN),
+
+    // Alert when this many failures (logins, resets, codes ...) happen inside the window.
+    'alert_failures' => (int) env('OCC_ALERT_FAILURES', 20),
+    'alert_window_minutes' => (int) env('OCC_ALERT_WINDOW_MIN', 10),
+
+    // Redirect http:// to https:// (see App\Http\Middleware\ForceHttps). Turn on once your host forwards X-Forwarded-Proto.
+    'force_https' => filter_var(env('OCC_FORCE_HTTPS', false), FILTER_VALIDATE_BOOLEAN),
+
+        // true = only Student IDs imported with `php artisan roster:import file.csv` can register.
+    'roster_enforce' => filter_var(env('OCC_ROSTER_ENFORCE', false), FILTER_VALIDATE_BOOLEAN),
+
     'timezone' => env('OCC_TIMEZONE', 'Asia/Manila'),
     // How many minutes before the scheduled time-in / time-out the reminder is sent.
     'reminder_start_minutes' => (int) env('OCC_REMINDER_START_MIN', 20),

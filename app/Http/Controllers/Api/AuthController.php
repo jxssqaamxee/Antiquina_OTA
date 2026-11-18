@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\Auth\SessionLogin;
 use App\Support\Formats;
 use App\Support\ProfilePhotoStorage;
+use App\Support\SecurityLog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -59,8 +60,10 @@ class AuthController extends Controller
         // Per Student ID + IP: the route throttle only counts requests per IP, so one
         // account could still be guessed slowly. 5 wrong passwords lock it for 5 minutes.
         $limiterKey = 'login|'.strtolower((string) $data['student_id']).'|'.$request->ip();
-        if (RateLimiter::tooManyAttempts($limiterKey, 5)) {
-            $minutes = max(1, (int) ceil(RateLimiter::availableIn($limiterKey) / 60));
+        $accountKey = 'login-account|'.strtolower((string) $data['student_id']);
+        if (RateLimiter::tooManyAttempts($limiterKey, 5) || RateLimiter::tooManyAttempts($accountKey, 15)) {
+            $minutes = max(1, (int) ceil(max(RateLimiter::availableIn($limiterKey), RateLimiter::availableIn($accountKey)) / 60));
+            SecurityLog::failure('login_lockout', ['student_id' => $data['student_id']]);
             throw ValidationException::withMessages([
                 'student_id' => "Too many sign-in attempts. Try again in {$minutes} minute".($minutes === 1 ? '' : 's').'.',
             ]);
@@ -72,10 +75,15 @@ class AuthController extends Controller
         // so the form never reveals which Student IDs exist.
         if (! $user || ! $user->password || ! Hash::check($data['password'], $user->password)) {
             RateLimiter::hit($limiterKey, 300);
+            RateLimiter::hit($accountKey, 1800); // all IPs together: 15 wrong tries per 30 min
+            SecurityLog::failure('login_failed', ['student_id' => $data['student_id']]);
             throw ValidationException::withMessages(['student_id' => 'Student ID or password is incorrect.']);
         }
 
         RateLimiter::clear($limiterKey);
+        RateLimiter::clear($accountKey);
+        SecurityLog::event('login_ok', ['student_id' => $user->student_id, 'user_id' => $user->id], 'info');
+
 
         return response()->json($this->sessions->start($request, $user, (bool) ($data['remember'] ?? false)));
     }

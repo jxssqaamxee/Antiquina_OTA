@@ -37,25 +37,14 @@ export default function LoginPage() {
 
   useEffect(() => { document.title = "Sign in | OCCDL"; }, []);
 
-  // Prefill from anything remembered on a prior sign-in in this tab (only written when
-  // "Keep this session open" was ticked). Survives logout, like sclf_APP.
+  // Prefill ONLY the Student ID remembered by "Keep this session open". The password is never
+  // stored by the app: the phone's password manager fills it (autoComplete="current-password").
   useEffect(() => {
     const remembered = loadRememberedCredentials();
     if (remembered) {
       setStudentId(remembered.studentId || "");
-      setPassword(remembered.password || "");
       setRemember(true);
-      return undefined;
     }
-    // Nothing remembered: the form must start empty. A browser's autofill may fill it a
-    // moment after load, so wipe anything the person did not type.
-    const wipe = () => {
-      if (userTyped.current) return;
-      setStudentId("");
-      setPassword("");
-    };
-    const timers = [50, 250, 700, 1500].map((ms) => window.setTimeout(wipe, ms));
-    return () => timers.forEach(window.clearTimeout);
   }, []);
 
   const goHome = () => {
@@ -84,7 +73,7 @@ export default function LoginPage() {
       const { data } = await api.post("/auth/login", { student_id: clean(studentId), password, remember });
       await signIn(data, remember);
       // Ticked: keep the ID + password for the next visit to this form. Unticked: leave nothing behind.
-      if (remember) saveRememberedCredentials(clean(studentId), password);
+      if (remember) saveRememberedCredentials(clean(studentId));
       else clearRememberedCredentials();
       goHome();
     } catch (err) {
@@ -121,7 +110,7 @@ export default function LoginPage() {
           hint={FORMAT_HINTS.studentId}
         >
           <LedgerInput
-            id="student_id" value={studentId} autoComplete="off" onKeyDown={() => { userTyped.current = true; }} onPaste={() => { userTyped.current = true; }} maxLength={12}
+            id="student_id" value={studentId} autoComplete="username" onKeyDown={() => { userTyped.current = true; }} onPaste={() => { userTyped.current = true; }} maxLength={12}
             autoCapitalize="none" autoCorrect="off" spellCheck={false} inputMode="numeric"
             enterKeyHint="next" placeholder="2021-2-04062" autoFocus={canAutoFocus}
             aria-required="true" aria-invalid={!!errors.student_id}
@@ -135,7 +124,7 @@ export default function LoginPage() {
         >
           <LedgerPasswordInput
             id="password" show={show} onToggle={() => setShow((v) => !v)} value={password}
-            autoComplete="new-password" onKeyDown={() => { userTyped.current = true; }} onPaste={() => { userTyped.current = true; }} enterKeyHint="go" placeholder="Your password" maxLength={100}
+            autoComplete="current-password" onKeyDown={() => { userTyped.current = true; }} onPaste={() => { userTyped.current = true; }} enterKeyHint="go" placeholder="Your password" maxLength={100}
             aria-required="true" aria-invalid={!!errors.password}
             onChange={(e) => { setPassword(e.target.value); setError(""); setErrors((x) => ({ ...x, password: undefined })); }}
           />

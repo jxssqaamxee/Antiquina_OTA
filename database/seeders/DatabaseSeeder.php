@@ -9,6 +9,13 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
+        // The demo trainee below has the password "password": never create it on a live site.
+        if (app()->isProduction()) {
+            $this->command?->warn('Seeder skipped: it creates a demo account with a known password.');
+
+            return;
+        }
+
         // Demo trainee: sign in with Student ID 2024-1-00001 / password "password".
         User::factory()->create([
             'student_id' => '2024-1-00001',

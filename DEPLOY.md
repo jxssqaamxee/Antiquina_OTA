@@ -25,8 +25,17 @@ the site with Apache. Install / Build / Start commands are not needed: leave the
 | `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME` | sender shown in the emails |
 | `OCC_MOBILE_ONLY` | `true` (phones only) or `false` |
 | `OCC_INSPECT_PROTECTION` | `true` for production |
+| `OCC_FORCE_HTTPS` | `true` once your host forwards `X-Forwarded-Proto` (redirects http to https; `/up` is exempt) |
+| `OCC_TRUSTED_PROXIES` | your host's proxy IPs/CIDRs, comma separated (default `*` is only safe if the container cannot be reached directly) |
+| `OCC_ROSTER_ENFORCE` | `true` = only Student IDs loaded with `php artisan roster:import ids.csv` can register |
+| `OCC_CSP_ENFORCE` | `true` after testing the Content-Security-Policy in report-only mode |
 
 Do not set `SESSION_SECURE_COOKIE`: in production it defaults to secure, which needs HTTPS (EthioDeploy domains are HTTPS).
+
+Production safety: `docker/entrypoint.sh` refuses to start when `APP_DEBUG=true` in production and prints
+`SECURITY WARNING` lines for weak settings (debug log level, `MAIL_MAILER=log`, non-https `APP_URL`, SQLite,
+short `APP_KEY`). `OCC_INSPECT_PROTECTION` only hides the page while DevTools is open; it is a deterrent,
+not a security control. Real protection is server-side.
 
 ## Persistent storage
 
@@ -63,8 +72,10 @@ Test the schedule logic without waiting: `php artisan push:reminders --at="2026-
 
 iPhone: Web Push only works for the app added to the Home Screen (iOS 16.4 or newer), opened from that icon.
 
-After the first build, refresh the lock file on your computer so builds are exactly reproducible:
-`composer update minishlink/web-push` and commit `composer.lock`.
+Before deploying, `composer.lock` must contain every package in `composer.json` (the Dockerfile
+fails fast with `composer validate` if it does not). After changing dependencies run, on a machine
+with PHP 8.4 and Composer: `composer update <package> --with-dependencies`, then `composer audit`
+and commit `composer.lock`.
 
 ## Health check
 

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Services\Auth\EmailVerificationCodeService;
 use App\Support\Formats;
+use App\Support\SecurityLog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -62,6 +63,7 @@ class EmailVerificationController extends Controller
         $result = $this->codes->check($user, (string) $request->input('code'));
 
         if ($result !== EmailVerificationCodeService::OK) {
+            SecurityLog::failure($result === EmailVerificationCodeService::LOCKED ? 'verify_code_lockout' : 'verify_code_failed');
             $messages = [
                 EmailVerificationCodeService::INVALID => 'That code is not correct. Please check it and try again.',
                 EmailVerificationCodeService::EXPIRED => 'That code has expired. Press "Resend email" to get a new one.',
@@ -134,9 +136,10 @@ class EmailVerificationController extends Controller
         ]);
 
         if (! $user->password || ! Hash::check($data['current_password'], $user->password)) {
+            SecurityLog::failure('email_change_failed');
             throw ValidationException::withMessages(['current_password' => 'Your current password is incorrect.']);
         }
-
+        SecurityLog::event('email_changed', [], 'notice');
         $user->forceFill(['email' => $data['email'], 'email_verified_at' => null])->save();
 
         $sent = self::send($user);

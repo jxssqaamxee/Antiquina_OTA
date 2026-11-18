@@ -16,10 +16,16 @@ RUN npm run build
 FROM composer:2 AS vendor
 WORKDIR /app
 COPY composer.json composer.lock ./
-# `update minishlink/web-push` = a partial update: it adds the Web Push package when composer.lock does not
-# have it yet (keeping every other locked version), and is a plain install once the lock is refreshed.
-RUN composer update minishlink/web-push --with-dependencies --no-dev --no-interaction --no-progress \
-    --no-scripts --prefer-dist --optimize-autoloader --ignore-platform-reqs
+# Reproducible build: install EXACTLY what composer.lock says (no `update` here).
+# 1) `composer validate` stops the build early if composer.json and composer.lock disagree
+#    (for example a package added to composer.json but never locked).
+# 2) `composer audit` lists known vulnerabilities; it only warns, so a new advisory never blocks
+#    an urgent deploy, but read the build log.
+# composer.json pins config.platform.php, so no --ignore-platform-reqs is needed.
+RUN composer validate --no-check-publish --no-interaction \
+    && composer install --no-dev --no-interaction --no-progress \
+       --no-scripts --prefer-dist --optimize-autoloader \
+    && (composer audit --locked --no-dev --no-interaction || echo "WARNING: composer audit reported advisories (see above)")
 
 # ---- 3. Runtime ---------------------------------------------------------------------------
 # PHP 8.4: the locked/updated Symfony 8 packages (pulled in by minishlink/web-push) need PHP >= 8.4.1.
@@ -35,7 +41,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf /etc/apache2/apache2.conf \
     && sed -ri -e 's!Listen 80!Listen ${PORT}!' /etc/apache2/ports.conf \
     && sed -ri -e 's!<VirtualHost \*:80>!<VirtualHost *:${PORT}>!' /etc/apache2/sites-available/000-default.conf \
-    && printf '<Directory ${APACHE_DOCUMENT_ROOT}>\n    AllowOverride All\n    Require all granted\n</Directory>\nServerName localhost\n' > /etc/apache2/conf-available/occ.conf \
+    && printf '<Directory ${APACHE_DOCUMENT_ROOT}>\n    AllowOverride All\n    Require all granted\n</Directory>\nServerName localhost\nServerTokens Prod\nServerSignature Off\nTraceEnable Off\n' > /etc/apache2/conf-available/occ.conf \
     && a2enconf occ \
     && printf 'opcache.enable=1\nopcache.validate_timestamps=0\nupload_max_filesize=8M\npost_max_size=10M\nexpose_php=0\n' > /usr/local/etc/php/conf.d/occ.ini \
     && rm -rf /var/lib/apt/lists/*

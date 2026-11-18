@@ -13,7 +13,14 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         // Behind a reverse proxy / Cloudflare / Hostinger: trust forwarded headers.
-        $middleware->trustProxies(at: '*');
+        // Which proxies may tell us the real client IP / https. '*' = trust the direct sender, which is
+        // only safe when the container is reachable ONLY through your host's proxy. Better: list the
+        // proxy IPs/CIDRs, comma separated, in OCC_TRUSTED_PROXIES (a forged X-Forwarded-For then
+        // cannot dodge the rate limits).
+        $proxies = trim((string) env('OCC_TRUSTED_PROXIES', '*'));
+        $middleware->trustProxies(at: $proxies === '*' ? '*' : array_map('trim', explode(',', $proxies)));
+        $middleware->append(\App\Http\Middleware\ForceHttps::class);
+        $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
 
         // The colour-theme cookie is written by JavaScript, so it is not encrypted. The server reads it
         // to colour the browser bar / installed-app title bar before the page even loads.
@@ -37,5 +44,13 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         // The SPA always talks JSON to /api/*, never redirect to a login page.
+        // Log suspicious HTTP errors: 419 = bad/missing CSRF token, 403 = forbidden, 429 = throttled.
+        $exceptions->render(function (\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $e, $request) {
+            if (in_array($e->getStatusCode(), [403, 419, 429], true)) {
+                \App\Support\SecurityLog::event('http_'.$e->getStatusCode(), ['path' => $request->path(), 'method' => $request->method()]);
+            }
+
+            return null; // keep Laravel's normal response
+        });
         $exceptions->shouldRenderJsonWhen(fn ($request) => $request->is('api/*') || $request->expectsJson());
     })->create();

@@ -58,6 +58,36 @@ return [
             'ignore_exceptions' => false,
         ],
 
+        // Security events (see App\Support\SecurityLog). Always info+, whatever LOG_LEVEL is.
+        // To get alerts: LOG_SECURITY_STACK=security_stderr,security_slack + LOG_SECURITY_WEBHOOK_URL=...
+        'security' => [
+            'driver' => 'stack',
+            'channels' => explode(',', (string) env('LOG_SECURITY_STACK', 'security_stderr')),
+            'ignore_exceptions' => true,
+        ],
+        'security_stderr' => [
+            'driver' => 'monolog',
+            'level' => 'info',
+            'handler' => StreamHandler::class,
+            'handler_with' => ['stream' => 'php://stderr'],
+            'processors' => [PsrLogMessageProcessor::class],
+        ],
+        'security_file' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/security.log'),
+            'level' => 'info',
+            'days' => 30,
+            'replace_placeholders' => true,
+        ],
+        'security_slack' => [
+            'driver' => 'slack',
+            'url' => env('LOG_SECURITY_WEBHOOK_URL'),
+            'username' => env('APP_NAME', 'OCCDL').' security',
+            'emoji' => ':rotating_light:',
+            'level' => 'error',
+            'replace_placeholders' => true,
+        ],
+
         'single' => [
             'driver' => 'single',
             'path' => storage_path('logs/laravel.log'),
