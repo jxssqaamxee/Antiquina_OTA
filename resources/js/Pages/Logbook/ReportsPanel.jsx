@@ -17,7 +17,7 @@ const CATEGORY_META = {
 // nothing yet; an entry mid-shift right now contributes only what's
 // elapsed so far and ticks upward live; only a finished entry counts its
 // full hours.
-export default function ReportsPanel({ entries, clients, now = new Date(), blockingExport = false }) {
+export default function ReportsPanel({ entries, clients, now = new Date(), blockingExport = false, scopedName = null }) {
   const clientName = (id) => clients.find((c) => c.id === id)?.name || "Unassigned";
 
   // Real-time status for every entry, recomputed each time `now` ticks.
@@ -167,6 +167,13 @@ export default function ReportsPanel({ entries, clients, now = new Date(), block
 
   return (
     <div className="reports">
+      <p className="fld-hint" style={{ margin: "0 0 8px" }}>
+        {scopedName
+          ? `Report for ${scopedName} only.`
+          : byClient.length > 1
+            ? `All host clients combined: ${byClient.map((b) => `${b.id === "unassigned" ? "Unassigned" : clientName(b.id)} (${formatHours(b.hours)})`).join(" · ")}.`
+            : null}
+      </p>
       <div className="stats" role="list" style={{ marginTop: 0 }}>
         {stats.map(({ label, value, icon: Icon }) => (
           <div className="stat" role="listitem" key={label}>

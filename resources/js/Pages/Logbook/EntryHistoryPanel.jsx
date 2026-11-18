@@ -22,7 +22,7 @@ import {
 // elapsed, so its stored `hours` is already the final, settled value —
 // no need to re-derive live status here the way LogbookPage does for
 // today's still-moving entries.
-export default function EntryHistoryPanel({ entries, clients, now = new Date() }) {
+export default function EntryHistoryPanel({ entries, clients, now = new Date(), scopedName = null }) {
   const [filterMode, setFilterMode] = useState("all"); // all | day | week | month
   const [filterDay, setFilterDay] = useState(() => todayStr(now));
   const [filterWeek, setFilterWeek] = useState(() => todayStr(now));
@@ -51,6 +51,12 @@ export default function EntryHistoryPanel({ entries, clients, now = new Date() }
       .sort((a, b) => (sortOrder === "asc" ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date)));
   }, [completed, filterMode, filterDay, filterWeek, filterMonth, sortOrder]);
 
+  const hostsInList = useMemo(() => {
+    const counts = new Map();
+    for (const e of completed) { const n = clientName(e.client); counts.set(n, (counts.get(n) || 0) + 1); }
+    return [...counts.entries()].map(([n, c]) => `${n} (${c})`);
+  }, [completed, clients]);
+
   const totalHoursShown = Math.round(filtered.reduce((s, e) => s + (e.hours || 0), 0) * 100) / 100;
   const weekLabel = formatWeekRange(startOfWeek(filterWeek));
   const monthLabel = formatMonthLabel(filterMonth);
@@ -73,10 +79,13 @@ export default function EntryHistoryPanel({ entries, clients, now = new Date() }
         </div>
         <div className="hero-foot" style={{ marginTop: 12 }}>
           <b>{formatHours(totalHoursShown)} logged</b>
-          Finished shifts land here automatically once their day is over.
+          {scopedName ? `Showing only ${scopedName}.` : "Finished shifts land here automatically once their day is over."}
         </div>
       </section>
 
+      {!scopedName && hostsInList.length > 1 && (
+        <p className="fld-hint" style={{ margin: "0 0 8px" }}>All host clients: {hostsInList.join(" · ")}. Each card shows its host client.</p>
+      )}
       <div className="sec-head"><h2>Filter</h2></div>
       <div className="hist-filter">
         <div className="chips" role="tablist" aria-label="Filter completed entries">

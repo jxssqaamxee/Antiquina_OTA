@@ -508,6 +508,22 @@ export default function LogbookPage() {
     [entries, clients, effectiveViewClientId, scoped]
   );
   const viewClientName = effectiveViewClientId === "none" ? "Unassigned" : clients.find((c) => c.id === effectiveViewClientId)?.name || "";
+  // Today & upcoming follows the same host-client scope as the progress ring.
+  const viewLedgerEntries = useMemo(
+    () => (scoped ? ledgerEntries.filter((e) => entryInView(e, effectiveViewClientId)) : ledgerEntries),
+    [ledgerEntries, clients, effectiveViewClientId, scoped]
+  );
+  const hiddenLedgerCount = ledgerEntries.length - viewLedgerEntries.length;
+  const viewCompletedCount = viewEntries.length - viewEntries.filter((e) => e.date >= todayStr(nowDate)).length;
+  // Specific hint for the "All host clients" view: which clients the rows belong to.
+  const allClientsHint = useMemo(() => {
+    const counts = new Map();
+    for (const e of ledgerEntries) {
+      const k = entryInView(e, "none") ? "Unassigned" : clients.find((c) => c.id === e.client)?.name;
+      counts.set(k, (counts.get(k) || 0) + 1);
+    }
+    return [...counts.entries()].map(([n, c]) => `${n} (${c})`).join(" · ");
+  }, [ledgerEntries, clients]);
   const viewHours = useMemo(
     () => Math.round(viewEntries.reduce((sum, e) => sum + (entryProgress.get(e.id)?.liveHours || 0), 0) * 100) / 100,
     [viewEntries, entryProgress]
@@ -1049,20 +1065,28 @@ export default function LogbookPage() {
     try { await logout(); } finally { navigate("/login", { replace: true }); }
   }
 
-  // Host clients that actually have reportable (already-started) entries —
-  // these are the only ones worth offering in the PDF "Host client" picker.
+  // PDF "Host client" picker. Every host client is listed so the person can see
+  // them all, but only the ones with at least one reportable (already-started)
+  // entry can be picked: a host client with nothing logged yet is disabled, so
+  // an empty PDF can never be requested for it.
   const exportClientOptions = useMemo(() => {
-    const map = new Map();
+    const counts = new Map();
     for (const e of entries) {
       if (entryProgress.get(e.id)?.status === "upcoming") continue;
       const id = e.client && clients.some((c) => c.id === e.client) ? e.client : "none";
-      if (!map.has(id)) map.set(id, { id, name: id === "none" ? "Unassigned" : clientName(id), days: 0 });
-      map.get(id).days += 1;
+      counts.set(id, (counts.get(id) || 0) + 1);
     }
-    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+    const list = clients.map((c) => ({ id: c.id, name: c.name, days: counts.get(c.id) || 0 }));
+    // "Unassigned" only appears when there really are entries without a host client.
+    if (counts.get("none")) list.push({ id: "none", name: "Unassigned", days: counts.get("none") });
+    return list
+      .map((o) => ({ ...o, disabled: o.days === 0 }))
+      .sort((a, b) => Number(a.disabled) - Number(b.disabled) || a.name.localeCompare(b.name));
   }, [entries, entryProgress, clients]);
-  // If the chosen host client was deleted or has no entries any more, fall back to "all".
-  const effectiveExportClientId = exportClientId === "all" || exportClientOptions.some((o) => o.id === exportClientId) ? exportClientId : "all";
+  const totalReportableEntries = exportClientOptions.reduce((s, o) => s + o.days, 0);
+  // If the chosen host client was deleted or has no entries (any more), fall back to "all".
+  const effectiveExportClientId = exportClientId === "all" || exportClientOptions.some((o) => o.id === exportClientId && !o.disabled) ? exportClientId : "all";
+  const exportBlockedByEmpty = totalReportableEntries === 0;
 
   async function exportPDF() {
     // Real-time gate: a report is a record of finished duty hours, so it
@@ -1075,6 +1099,18 @@ export default function LogbookPage() {
         title: "Still tracking today's shift",
         message: "Today's logged hours are still in progress against the clock. Wait until the scheduled shift finishes, then export or view your report.",
       });
+      return;
+    }
+
+    // Validate first: make sure there is something to put in the report before
+    // anything is loaded or built, so an empty PDF can never be downloaded.
+    const wanted = effectiveExportClientId === "all" ? null : exportClientOptions.find((o) => o.id === effectiveExportClientId) || null;
+    const available = wanted ? wanted.days : totalReportableEntries;
+    if (available === 0) {
+      toast.error(
+        wanted ? `${wanted.name} has no logged entries yet.` : "You have no logged entries yet.",
+        { title: "Nothing to export", key: "pdf-empty" }
+      );
       return;
     }
 
@@ -1151,7 +1187,7 @@ export default function LogbookPage() {
       <AppBar title={pageTitle} subtitle="OCC · OJT Duty Log" />
 
       <main className="app-main">
-        {(tab === "log" || tab === "reports") && clients.length > 0 && (
+        {(tab === "log" || tab === "reports" || tab === "history") && clients.length > 0 && (
           <div className="fld view-client">
             <label htmlFor="view-client">Show progress for</label>
             <select id="view-client" value={effectiveViewClientId} onChange={(e) => setViewClientId(e.target.value)}>
@@ -1272,18 +1308,25 @@ export default function LogbookPage() {
             {/* ---------- today & upcoming ---------- */}
             <div className="sec-head">
               <h2>Today &amp; upcoming</h2>
-              {completedCount > 0 && (
-                <button type="button" className="link-btn" onClick={() => setTab("history")}>History ({completedCount}) <ChevronRight size={15} /></button>
+              {viewCompletedCount > 0 && (
+                <button type="button" className="link-btn" onClick={() => setTab("history")}>History ({viewCompletedCount}) <ChevronRight size={15} /></button>
               )}
             </div>
             {entries.length === 0 && (
               <div className="empty"><b>No entries yet</b>{clients.length === 0 ? "Add a host client first, then log your first day." : "Tap the + button to add your first duty day."}</div>
             )}
-            {entries.length > 0 && ledgerEntries.length === 0 && (
-              <div className="empty"><b>Nothing for today</b>Earlier days have moved to the History tab.</div>
+            {entries.length > 0 && ledgerEntries.length > 0 && (
+              <p className="fld-hint" style={{ margin: "0 0 8px" }}>
+                {scoped
+                  ? `Showing only ${viewClientName}.${hiddenLedgerCount > 0 ? ` ${hiddenLedgerCount} ${hiddenLedgerCount === 1 ? "entry" : "entries"} for other host clients ${hiddenLedgerCount === 1 ? "is" : "are"} hidden.` : ""}`
+                  : `All host clients: ${allClientsHint}. Each card shows its host client.`}
+              </p>
+            )}
+            {entries.length > 0 && viewLedgerEntries.length === 0 && (
+              <div className="empty"><b>Nothing for today{scoped ? ` at ${viewClientName}` : ""}</b>{scoped && hiddenLedgerCount > 0 ? "Switch to All host clients to see entries for other host clients." : "Earlier days have moved to the History tab."}</div>
             )}
             <div className="entry-list">
-              {ledgerEntries.slice().reverse().map((e) => (
+              {viewLedgerEntries.slice().reverse().map((e) => (
                 <EntryCard
                   key={e.id}
                   entry={e}
@@ -1311,19 +1354,23 @@ export default function LogbookPage() {
               </div>
               <div className="fld">
                 <label htmlFor="export-client">Host client</label>
-                <select id="export-client" value={effectiveExportClientId} onChange={(e) => setExportClientId(e.target.value)}>
-                  <option value="all">All host clients</option>
+                <select id="export-client" value={effectiveExportClientId} onChange={(e) => setExportClientId(e.target.value)} disabled={exportBlockedByEmpty}>
+                  <option value="all" disabled={exportBlockedByEmpty}>All host clients</option>
                   {exportClientOptions.map((o) => (
-                    <option key={o.id} value={o.id}>{o.name} ({o.days} {o.days === 1 ? "entry" : "entries"})</option>
+                    <option key={o.id} value={o.id} disabled={o.disabled}>
+                      {o.disabled ? `${o.name} (no entries yet)` : `${o.name} (${o.days} ${o.days === 1 ? "entry" : "entries"})`}
+                    </option>
                   ))}
                 </select>
                 <span className="fld-hint">
-                  {effectiveExportClientId === "all"
-                    ? "The report will include every host client."
+                  {exportBlockedByEmpty
+                    ? "No logged entries yet, so there is nothing to export. Add a day and let its shift start."
+                    : effectiveExportClientId === "all"
+                    ? "The report will include every host client that has entries."
                     : "The report will only include entries for this host client."}
                 </span>
               </div>
-              <button type="button" className="btn btn-primary btn-block" onClick={exportPDF} disabled={exporting || blockingExport}>
+              <button type="button" className="btn btn-primary btn-block" onClick={exportPDF} disabled={exporting || blockingExport || exportBlockedByEmpty}>
                 {exporting ? <><span className="spin" /> Preparing report…</> : blockingExport ? "Shift in progress…" : <><FileDown size={18} /> Export PDF report</>}
               </button>
               {blockingExport && (
@@ -1338,8 +1385,8 @@ export default function LogbookPage() {
           </>
         )}
 
-        {tab === "history" && <EntryHistoryPanel entries={entries} clients={clients} now={nowDate} />}
-        {tab === "reports" && <ReportsPanel entries={viewEntries} clients={clients} now={nowDate} blockingExport={blockingExport} />}
+        {tab === "history" && <EntryHistoryPanel entries={viewEntries} clients={clients} now={nowDate} scopedName={scoped ? viewClientName : null} />}
+        {tab === "reports" && <ReportsPanel entries={viewEntries} clients={clients} now={nowDate} blockingExport={blockingExport} scopedName={scoped ? viewClientName : null} />}
 
         <Footer />
       </main>

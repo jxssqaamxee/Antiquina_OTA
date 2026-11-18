@@ -125,7 +125,7 @@
 .pf-form .lg-foot a:hover { text-decoration: underline; }
 .pf-form .lg-legal { max-width: 440px; margin: 14px auto 0; text-align: center; font-size: 11px; line-height: 1.55; opacity: .6; }
 .pf-form .lg-stage .app-footer { margin-top: auto; padding-top: 14px; color: inherit; opacity: .8; }
-.pf-form .lg-stage .app-footer a, .pf-form .lg-stage .app-footer__tag { color: var(--lg-accent); }
+.pf-form .lg-stage .app-footer a, .pf-form .lg-stage .app-footer .dc-trigger, .pf-form .lg-stage .app-footer__tag { color: var(--lg-accent); }
 
 /* numbered ledger rows */
 .pf-form .lg-row { display: flex; gap: 12px; padding: 10px 0; align-items: flex-start; }

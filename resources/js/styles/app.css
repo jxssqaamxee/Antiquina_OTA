@@ -435,7 +435,8 @@ html { overscroll-behavior-y: none; }
 
 /* ---------- footer credit ---------- */
 .app-footer { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 18px 8px 4px; font-size: 12px; color: var(--ink-soft); text-align: center; }
-.app-footer a { color: var(--accent-text); font-weight: 750; text-decoration: none; }
+.app-footer a, .app-footer .dc-trigger { color: var(--accent-text); font-weight: 750; text-decoration: none; }
+.app-footer .dc-trigger { text-decoration: underline dotted; text-decoration-thickness: 1px; text-underline-offset: 3px; text-decoration-color: color-mix(in srgb, currentColor 55%, transparent); }
 .app-footer__tag { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 800; color: var(--accent-text); }
 
 /* ---------- profile ---------- */
