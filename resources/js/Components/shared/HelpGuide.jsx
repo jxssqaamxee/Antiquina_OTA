@@ -24,81 +24,82 @@ function GuideContent() {
   return (
     <>
       <p className="help-intro">
-        This app is your digital Daily Time Record (DTR). It tracks your OJT hours
-        against your required total, in real time, and can generate a signable PDF
-        report for your coordinator. Here's exactly how each part works.
+        This app is your digital Daily Time Record (DTR). It counts your OJT hours
+        toward your required total as the time actually passes, keeps your record
+        safe in your account, and creates a signable PDF report for your coordinator.
       </p>
 
       <section className="help-section">
-        <h3><Users size={14} /> 1. Set up your profile &amp; host clients</h3>
+        <h3><Users size={14} /> 1. Set up first</h3>
         <ul>
-          <li><strong>Trainee name</strong> and <strong>Required hours</strong> (e.g. 486h) appear on the printed report — fill these in first.</li>
-          <li><strong>Host clients</strong> are the company/office you're deployed to. Add one with its <em>type</em>:
+          <li>Open the setup sheet and enter your <strong>Trainee name</strong> (letters only) and your <strong>Required hours</strong> (a whole number, 1 to 2000). Both are printed on the PDF.</li>
+          <li>Add a <strong>Host client</strong> — the office or company you are deployed to — and pick its type:
             <ul>
-              <li><strong>Public</strong> — Mon–Thu, 8:00 AM–5:00 PM (default)</li>
-              <li><strong>Private</strong> — Mon–Fri, 7:00 AM–6:00 PM (default)</li>
-              <li><strong>Custom</strong> — set your own days and time in/out</li>
+              <li><strong>Public</strong> — Mon to Thu, 8:00 AM to 5:00 PM</li>
+              <li><strong>Private</strong> — Mon to Fri, 7:00 AM to 6:00 PM</li>
+              <li><strong>Custom</strong> — you choose the days and the time in and out</li>
             </ul>
           </li>
-          <li>You can edit a host client's schedule any time. A host client that's already used on a saved entry <strong>can't be deleted</strong> until you edit/remove those entries first — this protects your logged hours from being orphaned.</li>
+          <li>You can edit a host client's schedule at any time. A host client that is used by a saved entry <strong>cannot be removed</strong> until those entries are deleted.</li>
         </ul>
       </section>
 
       <section className="help-section">
-        <h3><Plus size={14} /> 2. Adding a day</h3>
+        <h3><Plus size={14} /> 2. Logging a day</h3>
         <ul>
-          <li>Tap the raised <strong>+ Add day</strong> button in the bottom bar to log a shift — for today or any past date.</li>
-          <li>Choose the <strong>shift coverage</strong> for that entry:
+          <li>Tap <strong>+ Add day</strong>, pick the date, the <strong>host client</strong> (required) and the entry type: <strong>Regular</strong>, <strong>Evening</strong> or <strong>Overtime</strong>.</li>
+          <li>Choose the <strong>shift coverage</strong>:
             <span className="help-inline-icons">
               <Sun size={12} /> Morning only, <Sunset size={12} /> Afternoon only, <Moon size={12} /> Evening only,
-              Afternoon → Evening, or Whole day.
+              Afternoon and Evening, or Whole day.
             </span>
           </li>
-          <li>Available options adjust automatically — e.g. you can't pick "Morning" for today's date once it's already past 12:00 PM, and the options narrow to match whatever hours your selected host client actually works.</li>
-          <li>A <strong>host client is required</strong> on every entry, and the time ranges can't overlap another entry already logged for that same date.</li>
-          <li>Use <strong>Edit</strong> on any entry to correct it (e.g. an early out), or <strong>Delete</strong> to remove it (with a confirmation prompt).</li>
+          <li>Only the options that fit your host client's hours are shown. For today, "Morning" and "Whole day" disappear once it is past 12:00 PM.</li>
+          <li>The 12:00 to 1:00 PM lunch break is not counted. Time ranges cannot overlap another entry on the same date.</li>
+          <li>Use <strong>Edit</strong> to correct an entry or <strong>Delete</strong> to remove it. Today's entries stay on the Logbook tab so you can fix them; from the next day they move to the <strong>History</strong> tab, where you can search and filter by day, week or month.</li>
         </ul>
       </section>
 
       <section className="help-section">
-        <h3><ShieldCheck size={14} /> 3. Real-time progress &amp; completion</h3>
+        <h3><ShieldCheck size={14} /> 3. Hours count in real time</h3>
         <ul>
-          <li>The progress ring at the top of the Logbook shows total hours logged vs. your required hours, and updates live as scheduled shift time actually elapses.</li>
-          <li>An entry added for a time that hasn't happened yet (e.g. adding today's 8–5 shift at 7:59 AM) contributes <strong>0 hours</strong> until that time actually arrives, then ticks up in real time — it never lets you claim hours you haven't worked yet.</li>
-          <li>Each entry gets a badge: <strong>Scheduled</strong> (hasn't started), <strong>In progress</strong> (currently running), <strong>Complete</strong> (met the standard hours for its coverage), or a <strong>−Xh</strong> short badge if it fell short.</li>
+          <li>Hours are credited only as the clock passes. An entry for a time that has not arrived yet adds <strong>0 hours</strong>, then grows minute by minute while the shift runs. You can never claim hours you have not worked.</li>
+          <li>Each entry shows a badge: <strong>Scheduled</strong> (not started), <strong>In progress</strong> (running now), <strong>Complete</strong> (reached the standard hours for its coverage: Morning 4h, Afternoon 4h, Evening 3h) or <strong>Short</strong> with the missing time, such as −1h 00m.</li>
+          <li>The progress ring on the Logbook tab shows hours logged, hours still required and overtime.</li>
         </ul>
       </section>
 
       <section className="help-section">
-        <h3><FileDown size={14} /> 4. Reports &amp; exporting your PDF</h3>
+        <h3><FileDown size={14} /> 4. Reports and the PDF</h3>
         <ul>
-          <li>The <strong>Reports</strong> tab breaks your hours down by Morning/Afternoon/Evening, by host client, by shift type, and shows a day-by-day detailed log.</li>
-          <li><strong>Export PDF Report</strong> generates an official, signable Duty Time Record — choose Daily, Weekly summary, or Monthly summary before exporting.</li>
-          <li>Export is <strong>locked while a logged shift is still running</strong> (its scheduled end time hasn't passed yet) — a report only reflects hours that have actually finished.</li>
-          <li>The PDF includes trainee info, a summary of hours/remaining/progress/overtime, the full log table, an hourly breakdown, and signature lines for you and your supervisor/coordinator.</li>
+          <li>The <strong>Reports</strong> tab shows live totals by Morning, Afternoon and Evening, by host client and by entry type, how many days were complete or short, and a detailed day-by-day log.</li>
+          <li>On the Logbook tab, choose a <strong>report type</strong> and tap <strong>Export PDF report</strong>:
+            <ul>
+              <li><strong>Daily</strong> — one row per entry with the exact time record, host client, hours, status and your task notes</li>
+              <li><strong>Weekly</strong> or <strong>Monthly</strong> — one row per period with days logged, hours per shift and days complete</li>
+            </ul>
+          </li>
+          <li>Every report has the trainee details, summary cards with a progress bar, the duty log, an hours breakdown by host client and by shift, and signature lines for you and your supervisor.</li>
+          <li>Export is <strong>locked while a shift is still running</strong> and unlocks when it ends. Entries that have not started yet are left out of the report.</li>
         </ul>
       </section>
 
       <section className="help-section">
         <h3><Bell size={14} /> 5. Notifications</h3>
         <ul>
-          <li>The bell icon logs every milestone (25%/50%/75%/100% of your required hours), a heads-up before your shift's scheduled start time, and warnings (e.g. browser storage issues).</li>
-          <li>Two reminders go out on your working days:
-            <ul>
-              <li><strong>Shift start</strong> — about 20 minutes before your host client's time in</li>
-              <li><strong>Clock-out</strong> — about 10 minutes before your host client's time out (not sent if you already logged your time out)</li>
-            </ul>
-          </li>
-          <li>Tap <strong>"Turn on alerts"</strong> in the bell panel. After that, the shift-start and clock-out reminders reach your phone <strong>even when the app is closed</strong>. On iPhone, first add OCCDL to your Home Screen (Share, then Add to Home Screen) and open it from there.</li>
-          <li>Reminders are sent for the host client you logged hours under most recently, only on its working days.</li>
+          <li>The bell keeps a history of your milestones (25%, 50%, 75% and 100% of your required hours), shift reminders and warnings.</li>
+          <li>On your host client's working days you get two reminders: <strong>shift start</strong> about 20 minutes before time in, and <strong>clock-out</strong> about 10 minutes before time out (skipped if you already logged your time out).</li>
+          <li>Tap <strong>Turn on alerts</strong> in the bell panel so reminders reach your phone <strong>even when the app is closed</strong>. On iPhone, first add OCCDL to your Home Screen (Share, then Add to Home Screen) and open it from there.</li>
+          <li>Reminders follow the host client you logged most recently.</li>
         </ul>
       </section>
 
       <section className="help-section">
-        <h3><ShieldCheck size={14} /> 6. Your data &amp; privacy</h3>
+        <h3><ShieldCheck size={14} /> 6. Your data</h3>
         <ul>
-          <li>Your logbook is tied to your signed-in account and stored securely (encrypted) in <strong>this browser only</strong> — it is not uploaded to a server.</li>
-          <li>Using a different device or browser starts a fresh, empty logbook for that device. Export a PDF regularly so you always have a backup copy of your official record.</li>
+          <li>Your logbook is saved to <strong>your account</strong>, so you can sign in on another phone or browser and find the same record.</li>
+          <li>It keeps working offline. Changes are stored on your device and sent to your account when the connection returns. The footer shows "Saved to your account" once it is synced.</li>
+          <li>Still export a PDF regularly as your own copy of the official record.</li>
         </ul>
       </section>
     </>
