@@ -112,6 +112,32 @@ class LogbookStorageTest extends TestCase
             ->assertJsonPath('documents.logbook-v2.lastClientId', null);
     }
 
+    public function test_selected_host_client_for_view_and_pdf_is_saved_and_restored_on_another_device(): void
+    {
+        $u = User::factory()->create();
+        $this->save($u, 'logbook-v2', $this->logbook(null, null, ['viewClientId' => 'c1', 'exportClientId' => 'none']))->assertOk();
+
+        $this->assertDatabaseHas('user_settings', ['user_id' => $u->id, 'view_client_uid' => 'c1', 'export_client_uid' => 'none']);
+        $this->signedIn($u)->getJson('/api/sync')
+            ->assertJsonPath('documents.logbook-v2.viewClientId', 'c1')
+            ->assertJsonPath('documents.logbook-v2.exportClientId', 'none');
+
+        // "all" is stored as null and read back as "all".
+        $this->save($u, 'logbook-v2', $this->logbook(null, null, ['viewClientId' => 'all']))->assertOk();
+        $this->assertDatabaseHas('user_settings', ['user_id' => $u->id, 'view_client_uid' => null]);
+        $this->signedIn($u)->getJson('/api/sync')->assertJsonPath('documents.logbook-v2.viewClientId', 'all');
+    }
+
+    public function test_an_unknown_or_removed_host_client_selection_falls_back_to_all(): void
+    {
+        $u = User::factory()->create();
+        $this->save($u, 'logbook-v2', $this->logbook(null, null, ['viewClientId' => 'ghost', 'exportClientId' => '<script>']))->assertOk();
+
+        $this->signedIn($u)->getJson('/api/sync')
+            ->assertJsonPath('documents.logbook-v2.viewClientId', 'all')
+            ->assertJsonPath('documents.logbook-v2.exportClientId', 'all');
+    }
+
     public function test_text_is_sanitised(): void
     {
         $u = User::factory()->create();

@@ -208,6 +208,8 @@ export default function LogbookPage() {
   const [editingClientId, setEditingClientId] = useState(null); // id of the client being edited, or null when adding a new one
   const [exporting, setExporting] = useState(false);
   const [exportPeriod, setExportPeriod] = useState("daily"); // "daily" | "weekly" | "monthly" — grouping used by the PDF export
+  const [viewClientId, setViewClientId] = useState("all"); // "all" | host-client id | "none" — which host client the progress ring, stats and Reports tab are scoped to
+  const [exportClientId, setExportClientId] = useState("all"); // "all" | host-client id | "none" (unassigned) — which host client the PDF report covers
   const [draftMode, setDraftMode] = useState("full"); // "full" | "am" | "pm" | "ev" | "pmev" — which segment(s) this manual entry covers
   const [editingId, setEditingId] = useState(null); // id of the entry currently being edited, or null when adding a new one
   const [confirmDialog, setConfirmDialog] = useState(null); // { kind: "entry" | "client", id }
@@ -287,6 +289,8 @@ export default function LogbookPage() {
         setClients(Array.isArray(raw.clients) ? raw.clients : []);
         setEntries(Array.isArray(raw.entries) ? raw.entries : []);
         setLastClientId(raw.lastClientId || null);
+        setViewClientId(raw.viewClientId || "all");
+        setExportClientId(raw.exportClientId || "all");
       } else {
         // Fresh account on this browser — reset everything rather than
         // keeping whatever the previously signed-in account had loaded.
@@ -296,6 +300,8 @@ export default function LogbookPage() {
         setClients([]);
         setEntries([]);
         setLastClientId(null);
+        setViewClientId("all");
+        setExportClientId("all");
       }
     } catch (e) {
       // start fresh
@@ -346,6 +352,8 @@ export default function LogbookPage() {
     setClients(Array.isArray(raw.clients) ? raw.clients : []);
     setEntries(Array.isArray(raw.entries) ? raw.entries : []);
     setLastClientId(raw.lastClientId || null);
+    setViewClientId(raw.viewClientId || "all");
+    setExportClientId(raw.exportClientId || "all");
   }, []);
 
   useEffect(() => {
@@ -397,6 +405,8 @@ export default function LogbookPage() {
       clients: Array.isArray(saved.clients) ? saved.clients : [],
       entries: Array.isArray(saved.entries) ? saved.entries : [],
       lastClientId: saved.lastClientId || null,
+      viewClientId: saved.viewClientId || "all",
+      exportClientId: saved.exportClientId || "all",
     });
     removeStorage(slot);
     toast.success("Your last edit was restored.", { title: "Restored", key: "restore-done" });
@@ -406,12 +416,12 @@ export default function LogbookPage() {
   useEffect(() => {
     if (!loaded) return;
     if (skipPersistRef.current) { skipPersistRef.current = false; return; } // state came from the server: do not echo it back
-    pendingRef.current = { studentName, targetHours, clients, entries, lastClientId };
+    pendingRef.current = { studentName, targetHours, clients, entries, lastClientId, viewClientId, exportClientId };
     const t = setTimeout(() => {
       if (pendingRef.current) { persist(pendingRef.current); pendingRef.current = null; }
     }, 400);
     return () => clearTimeout(t);
-  }, [loaded, studentName, targetHours, clients, entries, lastClientId, persist]);
+  }, [loaded, studentName, targetHours, clients, entries, lastClientId, viewClientId, exportClientId, persist]);
 
   useEffect(() => {
     const writeNow = () => {
@@ -483,6 +493,30 @@ export default function LogbookPage() {
   const overtimeHours = useMemo(
     () => entries.filter((e) => e.category === "overtime").reduce((s, e) => s + e.hours, 0),
     [entries]
+  );
+
+  // ---- Host-client scoped view ----
+  // Picking a host client scopes the ring, stats and Reports tab to that
+  // client's entries only. Milestones/toasts above stay on the overall total.
+  const entryInView = (e, id) => id === "all" || (id === "none" ? !(e.client && clients.some((c) => c.id === e.client)) : e.client === id);
+  const hasUnassigned = useMemo(() => entries.some((e) => entryInView(e, "none")), [entries, clients]);
+  const effectiveViewClientId =
+    viewClientId === "all" || (viewClientId === "none" ? hasUnassigned : clients.some((c) => c.id === viewClientId)) ? viewClientId : "all";
+  const scoped = effectiveViewClientId !== "all";
+  const viewEntries = useMemo(
+    () => (scoped ? entries.filter((e) => entryInView(e, effectiveViewClientId)) : entries),
+    [entries, clients, effectiveViewClientId, scoped]
+  );
+  const viewClientName = effectiveViewClientId === "none" ? "Unassigned" : clients.find((c) => c.id === effectiveViewClientId)?.name || "";
+  const viewHours = useMemo(
+    () => Math.round(viewEntries.reduce((sum, e) => sum + (entryProgress.get(e.id)?.liveHours || 0), 0) * 100) / 100,
+    [viewEntries, entryProgress]
+  );
+  const viewPercent = targetHours > 0 ? Math.min((viewHours / targetHours) * 100, 100) : 0;
+  const viewShare = totalHours > 0 ? Math.round((viewHours / totalHours) * 100) : 0;
+  const viewOvertime = useMemo(
+    () => viewEntries.filter((e) => e.category === "overtime").reduce((s, e) => s + e.hours, 0),
+    [viewEntries]
   );
 
   // True only when composing a brand-new entry (not editing an existing
@@ -1015,6 +1049,21 @@ export default function LogbookPage() {
     try { await logout(); } finally { navigate("/login", { replace: true }); }
   }
 
+  // Host clients that actually have reportable (already-started) entries —
+  // these are the only ones worth offering in the PDF "Host client" picker.
+  const exportClientOptions = useMemo(() => {
+    const map = new Map();
+    for (const e of entries) {
+      if (entryProgress.get(e.id)?.status === "upcoming") continue;
+      const id = e.client && clients.some((c) => c.id === e.client) ? e.client : "none";
+      if (!map.has(id)) map.set(id, { id, name: id === "none" ? "Unassigned" : clientName(id), days: 0 });
+      map.get(id).days += 1;
+    }
+    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [entries, entryProgress, clients]);
+  // If the chosen host client was deleted or has no entries any more, fall back to "all".
+  const effectiveExportClientId = exportClientId === "all" || exportClientOptions.some((o) => o.id === exportClientId) ? exportClientId : "all";
+
   async function exportPDF() {
     // Real-time gate: a report is a record of finished duty hours, so it
     // can't be generated while any entry is still mid-shift (started but
@@ -1055,12 +1104,26 @@ export default function LogbookPage() {
 
     // Only entries that have actually happened belong in a report; anything
     // not yet started has produced no real hours.
-    const reportableEntries = entries.filter((e) => entryProgress.get(e.id)?.status !== "upcoming");
+    let reportableEntries = entries.filter((e) => entryProgress.get(e.id)?.status !== "upcoming");
+    // Host-client filter: when one host client is chosen, the PDF only
+    // contains that client's entries, so every figure ties out to it.
+    const selectedClient = effectiveExportClientId === "all" ? null : exportClientOptions.find((o) => o.id === effectiveExportClientId) || null;
+    if (selectedClient) {
+      reportableEntries = reportableEntries.filter((e) =>
+        selectedClient.id === "none" ? !(e.client && clients.some((c) => c.id === e.client)) : e.client === selectedClient.id
+      );
+    }
+    if (reportableEntries.length === 0) {
+      setExporting(false);
+      toast.error("There are no logged entries for that host client yet.", { title: "Nothing to export", key: "pdf-empty" });
+      return;
+    }
     const doc = buildDutyReport({
       jsPDF, autoTable, entries: reportableEntries, clients, studentName, targetHours,
-      exportPeriod, clientName, now: new Date(),
+      exportPeriod, clientName, selectedClient, now: new Date(),
     });
-    doc.save(`OCC-OJT-Duty-Log-${(studentName || "trainee").replace(/\s+/g, "-")}-${todayStr()}.pdf`);
+    const clientSlug = selectedClient ? `-${selectedClient.name.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "")}` : "";
+    doc.save(`OCC-OJT-Duty-Log-${(studentName || "trainee").replace(/\s+/g, "-")}${clientSlug}-${todayStr()}.pdf`);
 
     setExporting(false);
     toast.success("Your detailed duty log PDF has been downloaded.", { title: "Report exported", key: "report-exported" });
@@ -1088,6 +1151,17 @@ export default function LogbookPage() {
       <AppBar title={pageTitle} subtitle="OCC · OJT Duty Log" />
 
       <main className="app-main">
+        {(tab === "log" || tab === "reports") && clients.length > 0 && (
+          <div className="fld view-client">
+            <label htmlFor="view-client">Show progress for</label>
+            <select id="view-client" value={effectiveViewClientId} onChange={(e) => setViewClientId(e.target.value)}>
+              <option value="all">All host clients</option>
+              {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {hasUnassigned && <option value="none">Unassigned</option>}
+            </select>
+            {scoped && <span className="fld-hint">Showing only {viewClientName} — other host clients are not mixed in.</span>}
+          </div>
+        )}
         {tab === "log" && (
           <>
             {/* ---------- hero ---------- */}
@@ -1102,18 +1176,20 @@ export default function LogbookPage() {
                 </button>
               </div>
               <div className="hero-body">
-                <ProgressRing percent={percent} complete={complete}>
-                  <b>{Math.round(percent)}%</b>
-                  <span>{complete ? "Target met" : "done"}</span>
+                <ProgressRing percent={scoped ? viewPercent : percent} complete={scoped ? viewPercent >= 100 : complete}>
+                  <b>{Math.round(scoped ? viewPercent : percent)}%</b>
+                  <span>{(scoped ? viewPercent >= 100 : complete) ? "Target met" : "done"}</span>
                 </ProgressRing>
                 <div className="hero-info">
                   <div>
-                    <div className="big">{formatHours(totalHours)}</div>
-                    <div className="of">of {targetHours}h required</div>
+                    <div className="big">{formatHours(scoped ? viewHours : totalHours)}</div>
+                    <div className="of">{scoped ? `at ${viewClientName} · of ${targetHours}h required` : `of ${targetHours}h required`}</div>
                   </div>
                   <div className="hero-chips">
-                    <span className="hero-chip">{formatHours(remaining)} to go</span>
-                    {overtimeHours > 0 && <span className="hero-chip">{formatHours(overtimeHours)} overtime</span>}
+                    {scoped
+                      ? <span className="hero-chip">{viewShare}% of all your hours</span>
+                      : <span className="hero-chip">{formatHours(remaining)} to go</span>}
+                    {(scoped ? viewOvertime : overtimeHours) > 0 && <span className="hero-chip">{formatHours(scoped ? viewOvertime : overtimeHours)} overtime</span>}
                   </div>
                 </div>
               </div>
@@ -1130,10 +1206,12 @@ export default function LogbookPage() {
             {/* ---------- stats ---------- */}
             <div className="stats" role="list">
               {[
-                { label: "Hours logged", value: formatHours(totalHours), icon: Clock3 },
-                { label: "Still required", value: formatHours(remaining), icon: Hourglass },
-                { label: "Overtime", value: formatHours(overtimeHours), icon: Zap },
-                { label: "Days logged", value: entries.length, icon: CalendarDays },
+                { label: "Hours logged", value: formatHours(scoped ? viewHours : totalHours), icon: Clock3 },
+                scoped
+                  ? { label: "Share of total", value: `${viewShare}%`, icon: Hourglass }
+                  : { label: "Still required", value: formatHours(remaining), icon: Hourglass },
+                { label: "Overtime", value: formatHours(scoped ? viewOvertime : overtimeHours), icon: Zap },
+                { label: "Days logged", value: viewEntries.length, icon: CalendarDays },
               ].map(({ label, value, icon: Icon }) => (
                 <div className="stat" role="listitem" key={label}>
                   <span className="stat-ico" aria-hidden="true"><Icon size={17} strokeWidth={2.2} /></span>
@@ -1231,6 +1309,20 @@ export default function LogbookPage() {
                   <option value="monthly">Monthly summary</option>
                 </select>
               </div>
+              <div className="fld">
+                <label htmlFor="export-client">Host client</label>
+                <select id="export-client" value={effectiveExportClientId} onChange={(e) => setExportClientId(e.target.value)}>
+                  <option value="all">All host clients</option>
+                  {exportClientOptions.map((o) => (
+                    <option key={o.id} value={o.id}>{o.name} ({o.days} {o.days === 1 ? "entry" : "entries"})</option>
+                  ))}
+                </select>
+                <span className="fld-hint">
+                  {effectiveExportClientId === "all"
+                    ? "The report will include every host client."
+                    : "The report will only include entries for this host client."}
+                </span>
+              </div>
               <button type="button" className="btn btn-primary btn-block" onClick={exportPDF} disabled={exporting || blockingExport}>
                 {exporting ? <><span className="spin" /> Preparing report…</> : blockingExport ? "Shift in progress…" : <><FileDown size={18} /> Export PDF report</>}
               </button>
@@ -1247,7 +1339,7 @@ export default function LogbookPage() {
         )}
 
         {tab === "history" && <EntryHistoryPanel entries={entries} clients={clients} now={nowDate} />}
-        {tab === "reports" && <ReportsPanel entries={entries} clients={clients} now={nowDate} blockingExport={blockingExport} />}
+        {tab === "reports" && <ReportsPanel entries={viewEntries} clients={clients} now={nowDate} blockingExport={blockingExport} />}
 
         <Footer />
       </main>

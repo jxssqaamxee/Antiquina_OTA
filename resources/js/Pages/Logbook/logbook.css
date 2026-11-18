@@ -210,3 +210,4 @@
 .timeline-client { display: inline-flex; align-items: center; gap: 5px; }
 .timeline-task { margin-top: 8px; font-size: 12.5px; font-style: italic; color: var(--ink-soft); overflow-wrap: anywhere; }
 .report-sub { font-size: 12.5px; color: var(--ink-soft); margin: -6px 0 12px; line-height: 1.4; }
+.view-client { margin: 0 0 14px; }

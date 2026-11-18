@@ -57,7 +57,14 @@ class LogbookValidator
         $last = $v['lastClientId'] ?? null;
         $lastId = is_string($last) && in_array($last, array_column($clients, 'id'), true) ? $last : null; // stale id -> cleared
 
+        // Which host client the app's progress view / PDF export is scoped to: "all", "none"
+        // (unassigned entries) or a host client id. A stale or unknown id falls back to "all".
+        $clientIds = array_column($clients, 'id');
+        $pick = fn ($x) => ($x === 'none' || (is_string($x) && in_array($x, $clientIds, true))) ? $x : 'all';
+
         return [
+            'viewClientId' => $pick($v['viewClientId'] ?? null),
+            'exportClientId' => $pick($v['exportClientId'] ?? null),
             'studentName' => Text::personName($v['studentName'] ?? '', LogbookRules::MAX_STUDENT_NAME),
             'targetHours' => (int) $target,
             'clients' => $clients,

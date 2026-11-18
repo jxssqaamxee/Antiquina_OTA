@@ -233,7 +233,15 @@ class LogbookStore
             ])->all(),
             'entries' => $entries,
             'lastClientId' => $s->last_client_uid,
+            'viewClientId' => $this->scopeFromColumn($s->view_client_uid, $uidById),
+            'exportClientId' => $this->scopeFromColumn($s->export_client_uid, $uidById),
         ];
+    }
+
+    /** Stored column -> "all" | "none" | a host client id that still exists. */
+    private function scopeFromColumn(?string $v, $uidById): string
+    {
+        return ($v === 'none' || ($v !== null && $uidById->contains($v))) ? $v : 'all';
     }
 
     private function writeLogbook(User $user, UserSetting $s, array $doc): void
@@ -243,6 +251,8 @@ class LogbookStore
             'student_name' => $doc['studentName'],
             'target_hours' => $doc['targetHours'],
             'last_client_uid' => $doc['lastClientId'],
+            'view_client_uid' => ($doc['viewClientId'] ?? 'all') === 'all' ? null : $doc['viewClientId'],
+            'export_client_uid' => ($doc['exportClientId'] ?? 'all') === 'all' ? null : $doc['exportClientId'],
             'logbook_saved_at' => $now,
         ]);
 
@@ -285,7 +295,7 @@ class LogbookStore
     {
         DutyEntry::where('user_id', $user->id)->delete();
         HostClient::where('user_id', $user->id)->delete();
-        $s->update(['student_name' => null, 'target_hours' => LogbookRules::DEFAULT_TARGET_HOURS, 'last_client_uid' => null, 'logbook_saved_at' => null]);
+        $s->update(['student_name' => null, 'target_hours' => LogbookRules::DEFAULT_TARGET_HOURS, 'last_client_uid' => null, 'view_client_uid' => null, 'export_client_uid' => null, 'logbook_saved_at' => null]);
     }
 
     // ------------------------------------------------------------ notifications

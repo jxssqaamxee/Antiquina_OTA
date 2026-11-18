@@ -22,7 +22,7 @@ const TYPE_LABEL = { regular: "Regular", evening: "Evening", overtime: "Overtime
 
 const segText = (a, b) => (a && b ? `${formatTime12(a)} - ${formatTime12(b)}` : null);
 
-export function buildDutyReport({ jsPDF, autoTable, entries, clients, studentName, targetHours, exportPeriod, clientName, now = new Date() }) {
+export function buildDutyReport({ jsPDF, autoTable, entries, clients, studentName, targetHours, exportPeriod, clientName, selectedClient = null, now = new Date() }) {
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();
@@ -32,6 +32,9 @@ export function buildDutyReport({ jsPDF, autoTable, entries, clients, studentNam
   const rows = entries.slice().sort((a, b) => a.date.localeCompare(b.date));
   const totalHours = rows.reduce((s, e) => s + (e.hours || 0), 0);
   const overtime = rows.filter((e) => e.category === "overtime").reduce((s, e) => s + e.hours, 0);
+  // Single host client report: only that host's entries are in `rows`, so
+  // "remaining vs required" (a whole-OJT figure) is replaced with "days logged".
+  const single = !!selectedClient;
   const remaining = Math.max(targetHours - totalHours, 0);
   const percent = targetHours > 0 ? Math.min((totalHours / targetHours) * 100, 100) : 0;
   const completeDays = rows.filter((e) => completionFor(e).met).length;
@@ -72,8 +75,11 @@ export function buildDutyReport({ jsPDF, autoTable, entries, clients, studentNam
 
   // ---- Trainee information ----
   let y = section("Trainee Information", 114);
-  const hostLines = clients.length
-    ? clients.map((c) => { const n = normalizeClient(c); return `${c.name} (${scheduleDaysLabel(n)}, ${formatTime12(n.timeIn)} - ${formatTime12(n.timeOut)})`; })
+  const hostSource = single ? clients.filter((c) => c.id === selectedClient.id) : clients;
+  const hostLines = single && !hostSource.length
+    ? [selectedClient.name]
+    : hostSource.length
+    ? hostSource.map((c) => { const n = normalizeClient(c); return `${c.name} (${scheduleDaysLabel(n)}, ${formatTime12(n.timeIn)} - ${formatTime12(n.timeOut)})`; })
     : ["-"];
   const info = [
     ["Trainee", studentName || "-", "Report type", PERIOD_LABEL[exportPeriod]],
@@ -86,7 +92,7 @@ export function buildDutyReport({ jsPDF, autoTable, entries, clients, studentNam
     txt(doc.splitTextToSize(r[3], CW / 2 - 90)[0], colX[3], y);
     y += 16;
   });
-  font("normal", 8, MUTED); txt("Host client(s)", colX[0], y);
+  font("normal", 8, MUTED); txt(single ? "Host client" : "Host client(s)", colX[0], y);
   font("bold", 9);
   const hostWrapped = hostLines.flatMap((l) => doc.splitTextToSize(l, CW - 80));
   hostWrapped.forEach((l, i) => txt(l, colX[1], y + i * 12));
@@ -95,7 +101,7 @@ export function buildDutyReport({ jsPDF, autoTable, entries, clients, studentNam
   // ---- Summary cards + progress bar ----
   const cards = [
     ["Hours completed", formatHours(totalHours)],
-    ["Hours remaining", formatHours(remaining)],
+    single ? ["Days logged", String(rows.length)] : ["Hours remaining", formatHours(remaining)],
     ["Overtime logged", formatHours(overtime)],
     ["Days complete", `${completeDays} of ${rows.length}`],
   ];
@@ -110,7 +116,7 @@ export function buildDutyReport({ jsPDF, autoTable, entries, clients, studentNam
   doc.setFillColor(226, 231, 226); doc.roundedRect(M, y, CW, 8, 4, 4, "F");
   if (percent > 0) { doc.setFillColor(...OK); doc.roundedRect(M, y, Math.max(CW * (percent / 100), 8), 8, 4, 4, "F"); }
   font("normal", 8, MUTED);
-  txt(`Progress: ${Math.round(percent)}% of ${targetHours}h required`, M, y + 20);
+  txt(single ? `${selectedClient.name}: ${Math.round(percent)}% of the ${targetHours}h required (this host client only)` : `Progress: ${Math.round(percent)}% of ${targetHours}h required`, M, y + 20);
   y += 38;
 
   // ---- Main table ----
@@ -187,24 +193,37 @@ export function buildDutyReport({ jsPDF, autoTable, entries, clients, studentNam
     if (e.pmIn && e.pmOut) part.pm += hoursBetween(e.pmIn, e.pmOut);
     if (e.evIn && e.evOut) part.ev += hoursBetween(e.evIn, e.evOut);
   }
-  const half = (CW - 14) / 2;
-  const startY = y;
-  autoTable(doc, {
-    ...tableBase, startY, margin: { left: M, right: M + half + 14, bottom: 50 }, tableWidth: half,
-    head: [["Host Client", "Days", "Hours"]],
-    body: [...byClient.values()].sort((a, b) => b.hours - a.hours).map((b) => [b.name, b.days, formatHours(b.hours)]),
-    columnStyles: { 1: { halign: "center", cellWidth: 36 }, 2: { halign: "center", cellWidth: 60 } },
-  });
-  const leftEnd = doc.lastAutoTable.finalY;
-  const leftPage = doc.getNumberOfPages();
-  doc.setPage(leftPage);
-  autoTable(doc, {
-    ...tableBase, startY, margin: { left: M + half + 14, right: M, bottom: 50 }, tableWidth: half,
-    head: [["Shift", "Hours"]],
-    body: [["Morning", formatHours(part.am)], ["Afternoon", formatHours(part.pm)], ["Evening", formatHours(part.ev)]],
-    columnStyles: { 1: { halign: "center", cellWidth: 70 } },
-  });
-  y = Math.max(leftEnd, doc.lastAutoTable.finalY) + 36;
+  const shiftBody = [["Morning", formatHours(part.am)], ["Afternoon", formatHours(part.pm)], ["Evening", formatHours(part.ev)]];
+  if (single) {
+    // One host client selected: no per-client split, just that client's shifts.
+    autoTable(doc, {
+      ...tableBase, startY: y, tableWidth: CW / 2,
+      head: [["Shift (" + selectedClient.name + ")", "Hours"]],
+      body: shiftBody,
+      foot: [["Total", formatHours(totalHours)]],
+      columnStyles: { 1: { halign: "center", cellWidth: 70 } },
+    });
+    y = doc.lastAutoTable.finalY + 36;
+  } else {
+    const half = (CW - 14) / 2;
+    const startY = y;
+    autoTable(doc, {
+      ...tableBase, startY, margin: { left: M, right: M + half + 14, bottom: 50 }, tableWidth: half,
+      head: [["Host Client", "Days", "Hours"]],
+      body: [...byClient.values()].sort((a, b) => b.hours - a.hours).map((b) => [b.name, b.days, formatHours(b.hours)]),
+      columnStyles: { 1: { halign: "center", cellWidth: 36 }, 2: { halign: "center", cellWidth: 60 } },
+    });
+    const leftEnd = doc.lastAutoTable.finalY;
+    const leftPage = doc.getNumberOfPages();
+    doc.setPage(leftPage);
+    autoTable(doc, {
+      ...tableBase, startY, margin: { left: M + half + 14, right: M, bottom: 50 }, tableWidth: half,
+      head: [["Shift", "Hours"]],
+      body: shiftBody,
+      columnStyles: { 1: { halign: "center", cellWidth: 70 } },
+    });
+    y = Math.max(leftEnd, doc.lastAutoTable.finalY) + 36;
+  }
 
   // ---- Signatures ----
   y = ensure(y, 80);
