@@ -1391,7 +1391,7 @@ export default function LogbookPage() {
         <Footer />
       </main>
 
-      <MobileTabBar tab={tab} onTab={setTab} onAdd={openNewEntry} historyCount={completedCount} />
+      <MobileTabBar tab={tab} onTab={setTab} onAdd={openNewEntry} historyCount={viewCompletedCount} />
 
       {/* ---------- sheet: add / edit a duty day ---------- */}
       <Sheet
