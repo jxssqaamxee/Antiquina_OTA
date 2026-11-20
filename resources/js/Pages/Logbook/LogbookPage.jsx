@@ -89,7 +89,8 @@ function coverageOptionsFor(category, restrictMorning, clientCov) {
   if (category === "evening") opts = ["ev", "pmev"];
   else if (category === "overtime") opts = ["full", "am", "pm", "ev", "pmev"];
   else opts = ["full", "am", "pm"];
-  if (restrictMorning) opts = opts.filter((k) => k !== "full" && k !== "am");
+  const morningOnlyClient = clientCov && clientCov.am && !clientCov.pm && !clientCov.ev;
+  if (restrictMorning && !morningOnlyClient) opts = opts.filter((k) => k !== "full" && k !== "am");
   if (clientCov) {
     opts = opts.filter((key) => {
       if (key === "full") return clientCov.am && clientCov.pm;
@@ -675,7 +676,8 @@ export default function LogbookPage() {
     }
     if (lunchSwitchedRef.current) return;
     lunchSwitchedRef.current = true;
-    if (draftMode === "am" || draftMode === "full") setShiftMode("pm");
+    const morningOnly = draftClientCoverage && draftClientCoverage.am && !draftClientCoverage.pm && !draftClientCoverage.ev;
+    if (!morningOnly && (draftMode === "am" || draftMode === "full")) setShiftMode("pm");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entrySheet, pastLunchToday]);
 
@@ -714,16 +716,17 @@ export default function LogbookPage() {
       // Afternoon "out": the client's own end time — unless that end time
       // is in the evening, in which case 5:00 PM–onward belongs to the
       // Evening segment instead and Afternoon stops at 5:00 PM.
-      const defPmOut = norm ? (cov && cov.ev ? "17:00" : norm.timeOut) : "17:00";
+      const hasEvSeg = mode === "ev" || mode === "pmev";
+      const defPmOut = norm ? (hasEvSeg ? "17:00" : norm.timeOut) : "17:00";
       // Evening "out" follows the client's own end time when the client
       // actually works evenings; "in" is always the fixed 5:00 PM
       // Afternoon/Evening boundary.
-      const defEvIn = "17:00";
+      const defEvIn = norm && cov && !cov.pm ? norm.timeIn : "17:00";
       const defEvOut = norm && cov && cov.ev ? norm.timeOut : "20:00";
       return {
         ...d,
         amIn: mode === "full" || mode === "am" ? d.amIn || defAmIn : "",
-        amOut: mode === "full" || mode === "am" ? d.amOut || "12:00" : "",
+        amOut: mode === "full" || mode === "am" ? d.amOut || (norm && cov && !cov.pm ? norm.timeOut : "12:00") : "",
         pmIn: mode === "full" || mode === "pm" || mode === "pmev" ? d.pmIn || defPmIn : "",
         pmOut: mode === "full" || mode === "pm" || mode === "pmev" ? d.pmOut || defPmOut : "",
         evIn: mode === "ev" || mode === "pmev" ? d.evIn || defEvIn : "",
@@ -746,8 +749,10 @@ export default function LogbookPage() {
       ...d,
       client: clientId,
       amIn: d.amIn && norm ? norm.timeIn : d.amIn,
+      amOut: d.amOut && norm ? (cov && !cov.pm ? norm.timeOut : "12:00") : d.amOut,
       pmIn: d.pmIn && norm ? (cov && !cov.am ? norm.timeIn : "13:00") : d.pmIn,
-      pmOut: d.pmOut && norm ? (cov && cov.ev ? "17:00" : norm.timeOut) : d.pmOut,
+      pmOut: d.pmOut && norm ? (draftMode === "ev" || draftMode === "pmev" ? "17:00" : norm.timeOut) : d.pmOut,
+      evIn: d.evIn && norm && cov && !cov.pm ? norm.timeIn : d.evIn,
       evOut: d.evOut && norm ? (cov && cov.ev ? norm.timeOut : d.evOut) : d.evOut,
     }));
     // A host client's schedule is set up with specific working days (e.g.
@@ -901,6 +906,8 @@ export default function LogbookPage() {
     }
     setEntryError("");
     const built = { ...draft, client: draft.client || null, hours: hrs };
+    // Clock-out / shift reminders (in-app and push) follow the host client of the day being logged today.
+    if (built.client && built.date === todayStr()) setLastClientId(built.client);
 
     if (editingId) {
       setEntries((prev) =>
@@ -1461,7 +1468,7 @@ export default function LogbookPage() {
               );
             })}
           </div>
-          {pastLunchToday && <span className="fld-hint">It's already past 12:00 PM, so Morning / Whole day isn't available for today's entry.</span>}
+          {pastLunchToday && !(draftClientCoverage && draftClientCoverage.am && !draftClientCoverage.pm && !draftClientCoverage.ev) && <span className="fld-hint">It's already past 12:00 PM, so Morning / Whole day isn't available for today's entry.</span>}
           {!pastLunchToday && draftSelectedClient && draftClientCoverage && !(draftClientCoverage.am && draftClientCoverage.pm) && (
             <span className="fld-hint">
               "{draftSelectedClient.name}"'s hours are {formatTime12(normalizeClient(draftSelectedClient).timeIn)}–{formatTime12(normalizeClient(draftSelectedClient).timeOut)}, so only coverage that fits those hours is shown.
