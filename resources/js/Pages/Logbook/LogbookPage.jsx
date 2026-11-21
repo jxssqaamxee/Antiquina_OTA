@@ -891,6 +891,13 @@ export default function LogbookPage() {
   }
 
   function submitEntry() {
+    // The host client's duty days are fixed: a date outside them can't be saved.
+    if (draftClientDayMismatch) {
+      const msg = `"${draftSelectedClient.name}" is only scheduled ${scheduleDaysLabel(draftSelectedClient)}, not ${draftDateWeekdayLabel}. Pick a duty day, or add ${draftDateWeekdayLabel} to this host client first.`;
+      setEntryError(msg);
+      toast.error(msg, { title: "Can't save this day", key: "day-not-scheduled" });
+      return;
+    }
     const error = validateDraft(draft, editingId);
     if (error) {
       setEntryError(error);
@@ -1410,7 +1417,7 @@ export default function LogbookPage() {
         footer={
           <>
             <button type="button" className="btn" onClick={closeEntrySheet}>Cancel</button>
-            <button type="button" className="btn btn-primary" onClick={submitEntry}>
+            <button type="button" className={"btn btn-primary" + (draftClientDayMismatch ? " is-blocked" : "")} aria-disabled={draftClientDayMismatch ? "true" : undefined} onClick={submitEntry}>
               {editingId ? "Save changes" : <><Plus size={18} /> Add {COVERAGE_META[draftMode].short}</>}
             </button>
           </>
@@ -1439,7 +1446,7 @@ export default function LogbookPage() {
           {clients.length === 0 && <span className="fld-hint warn">You have no host clients yet — add one from the Logbook screen first.</span>}
           {clientNote && <span className="fld-hint warn">{clientNote}</span>}
           {draftClientDayMismatch && (
-            <span className="fld-hint warn">
+            <span className="fld-hint bad" role="alert">
               "{draftSelectedClient.name}" is scheduled {scheduleDaysLabel(draftSelectedClient)}, not {draftDateWeekdayLabel}. If this is right, edit it under Host clients to add {draftDateWeekdayLabel} — or add a separate host client.
             </span>
           )}

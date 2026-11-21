@@ -398,6 +398,8 @@ button { cursor: pointer; }
 .fld-error { color: var(--bad); font-size: 12.5px; font-weight: 600; margin-top: 6px; }
 .fld-hint { color: var(--ink-soft); font-size: 12px; line-height: 1.45; margin-top: 6px; }
 .fld-hint.warn { color: var(--warn); font-weight: 600; }
+.fld-hint.bad { color: var(--bad); font-weight: 700; }
+.btn.is-blocked { opacity: .55; cursor: not-allowed; }
 .fld-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
 .fld-row > .fld { min-width: 0; }
 @media (max-width: 380px) { .fld-row { grid-template-columns: 1fr; } }
