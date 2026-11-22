@@ -14,7 +14,7 @@ class SchemaTest extends TestCase
     public function test_expected_tables_exist_and_dropped_ones_do_not(): void
     {
         foreach (['users', 'password_reset_tokens', 'sessions', 'user_documents', 'user_settings', 'host_clients',
-            'duty_entries', 'user_notifications', 'user_photos', 'push_subscriptions', 'push_reminder_logs'] as $table) {
+            'duty_entries', 'user_notifications', 'user_photos', 'push_subscriptions', 'push_reminder_logs', 'courses', 'academic_years', 'sections', 'student_enrollments', 'coordinator_assignments', 'activity_logs', 'enrollment_progressions', 'duty_entry_reviews', 'training_hour_exceptions', 'host_establishments', 'trainee_placements', 'announcements', 'announcement_recipients'] as $table) {
             $this->assertTrue(Schema::hasTable($table), "missing table $table");
         }
         $this->assertFalse(Schema::hasTable('personal_access_tokens'));

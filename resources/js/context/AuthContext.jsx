@@ -5,6 +5,7 @@ import { hydrate, releaseUser, stopSync } from "../utils/sync";
 import { setTheme } from "../utils/theme";
 import { clearPhotoCache, preloadPhoto } from "../utils/imageCache";
 import { forgetThisDevice } from "../utils/push";
+import { isTrainee } from "../utils/roles";
 
 const AuthContext = createContext(null);
 
@@ -38,7 +39,8 @@ export function AuthProvider({ children }) {
   // An account whose email is not verified yet cannot reach /sync (the API is closed
   // for it), so its documents are pulled the moment it becomes verified (updateUser).
   const establish = useCallback(async (u) => {
-    if (u.email_verified !== false) await hydrate(u.sub);
+    // Only trainees have a logbook to pull; Admin / Coordinator accounts have no /sync (403).
+    if (u.email_verified !== false && isTrainee(u)) await hydrate(u.sub);
     if (u.theme) setTheme(u.theme); // colour theme saved on the account wins over this device's
     writeMe(u);
     preloadPhoto(u.picture); // warm the avatar cache so every screen shows it at once (no await)
@@ -140,7 +142,7 @@ export function AuthProvider({ children }) {
 
   const updateUser = useCallback(async (u) => {
     const justVerified = userRef.current?.email_verified === false && u.email_verified !== false;
-    if (justVerified) await hydrate(u.sub);
+    if (justVerified && isTrainee(u)) await hydrate(u.sub);
     writeMe(u);
     preloadPhoto(u.picture); // a new upload gets a new address: load it before the avatar asks
     setUser(u);

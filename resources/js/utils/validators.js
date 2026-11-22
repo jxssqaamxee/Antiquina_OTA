@@ -119,7 +119,6 @@ export function validateProfile(f) {
   nameErrors(e, "first_name", "First name", f.first_name, true);
   nameErrors(e, "middle_name", "Middle name", f.middle_name, false);
   nameErrors(e, "last_name", "Last name", f.last_name, true);
-  if (!f.course) e.course = "Please choose your course.";
   return e;
 }
 

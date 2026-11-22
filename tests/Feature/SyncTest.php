@@ -48,6 +48,7 @@ class SyncTest extends TestCase
     {
         return [
             'studentName' => $name, 'targetHours' => 486, 'lastClientId' => null,
+            'viewClientId' => 'all', 'exportClientId' => 'all', // canonical defaults the server returns
             'clients' => [], 'entries' => [],
         ];
     }

@@ -24,4 +24,31 @@ class UserFactory extends Factory
             'email_verified_at' => now(),
         ];
     }
+
+    /** An Admin or Coordinator account: staff ID instead of Student ID / course, email already verified. */
+    public function staff(string $role, ?string $staffId = null): static
+    {
+        return $this->state(fn () => [
+            'role' => $role,
+            'staff_id' => $staffId ?? strtoupper(fake()->unique()->bothify('STAFF-####')),
+            'student_id' => null,
+            'course' => null,
+            'email' => fake()->unique()->userName().'@example.com',
+        ]);
+    }
+
+    public function admin(?string $staffId = null): static
+    {
+        return $this->staff('admin', $staffId);
+    }
+
+    public function coordinator(?string $staffId = null): static
+    {
+        return $this->staff('coordinator', $staffId);
+    }
+
+    public function inactive(): static
+    {
+        return $this->state(fn () => ['is_active' => false, 'deactivated_at' => now()]);
+    }
 }

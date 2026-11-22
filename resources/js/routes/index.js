@@ -13,10 +13,14 @@ const ResetPasswordPage = lazy(loaders.reset);
 const LogbookPage = lazy(loaders.logbook);
 const ProfilePage = lazy(loaders.profile);
 const VerifyEmailPage = lazy(loaders.verify);
+const StaffLoginPage = lazy(loaders.staffLogin);
+const AdminDashboard = lazy(loaders.admin);
+const CoordinatorDashboard = lazy(loaders.coordinator);
 
 export const publicRoutes = [{ path: "/", component: SplashPage }];
 export const guestRoutes = [
   { path: "/login", component: LoginPage },
+  { path: "/staff-login", component: StaffLoginPage },
   { path: "/register", component: RegisterPage },
   { path: "/forgot-password", component: ForgotPasswordPage },
   { path: "/reset-password/success", component: ResetPasswordPage },
@@ -29,4 +33,11 @@ export const unverifiedRoutes = [
 export const protectedRoutes = [
   { path: "/logbook", component: LogbookPage },
   { path: "/profile", component: ProfilePage },
+];
+// Management areas (desktop layouts). Each is limited to one role; Laravel checks the role too.
+export const adminRoutes = [
+  { path: "/admin", component: AdminDashboard },
+];
+export const coordinatorRoutes = [
+  { path: "/coordinator", component: CoordinatorDashboard },
 ];

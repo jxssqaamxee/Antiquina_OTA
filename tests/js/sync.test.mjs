@@ -160,4 +160,30 @@ await t("hydrate keeps revision of dirty keys (so a change elsewhere becomes a 4
   assert.equal(rev(), 5);
 });
 
+await t("403 email_unverified: pauses (one request, no retry loop), stays dirty, later edits send nothing; hydrate resumes and pushes", async () => {
+  await hydrateWith({ documents: { [K]: { a: 1 } }, revisions: { [K]: 1 } });
+  mock.put = async () => { throw err(403, { code: "email_unverified" }); };
+  edit({ a: "new account" }); await sync.flush(U);
+  assert.equal(calls.filter((c) => c[0] === "put").length, 1);
+  assert.deepEqual(dirty(), [K]);
+  edit({ a: "second edit" });                       // paused: no timer, no request
+  await new Promise((r) => setTimeout(r, 900));      // longer than the 700 ms debounce
+  assert.equal(calls.filter((c) => c[0] === "put").length, 1);
+  window.dispatchEvent(new Event("pagehide"));       // keepalive path is also silent while paused
+  assert.equal(fetches.length, 0);
+  // Email verified -> the app calls hydrate(): pushing resumes with the saved edit.
+  mock.get = async () => ({ data: { documents: { [K]: { a: 1 } }, revisions: { [K]: 1 } } });
+  mock.put = async () => ({ data: { ok: true, revision: 2 } });
+  await sync.hydrate(U); await sync.flush(U);
+  assert.deepEqual(putBody(1).value, { a: "second edit" });
+  assert.deepEqual(dirty(), []);
+});
+
+await t("403 role_forbidden (staff account) pauses the same way", async () => {
+  mock.put = async () => { throw err(403, { code: "role_forbidden" }); };
+  edit({ a: 1 }); await sync.flush(U);
+  await new Promise((r) => setTimeout(r, 900));
+  assert.equal(calls.filter((c) => c[0] === "put").length, 1);
+});
+
 console.log(`\n${n} scenarios passed`); fs.rmSync(dir, { recursive: true, force: true }); process.exit(process.exitCode || 0);

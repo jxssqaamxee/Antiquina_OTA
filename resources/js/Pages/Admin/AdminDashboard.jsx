@@ -1,0 +1,291 @@
+import React, { useCallback, useEffect, useState } from "react";
+import StaffShell, { StatCard } from "../../Components/staff/StaffShell";
+import { Btn, Card, Chip, Field, Input, Notice, Row, Select, Table, Tabs, statusTone, useAction } from "../../Components/staff/ui";
+import { AnnouncementsPanel, AuditPanel, ReportsPanel } from "../../Components/staff/panels";
+import { adminService as svc } from "../../services/adminService";
+import { errorMessage } from "../../config/axiosConfig";
+
+/** Loads data once and exposes a reload; keeps the first error readable. */
+function useLoad(fn, deps = []) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+  const load = useCallback(() => fn().then((d) => { setData(d); setError(""); }).catch((e) => setError(errorMessage(e))), deps); // eslint-disable-line
+  useEffect(() => { load(); }, [load]);
+  return [data, load, error];
+}
+
+function Overview() {
+  const [data, , error] = useLoad(svc.overview);
+  const a = data?.accounts;
+  return (
+    <>
+      {error && <p role="alert" className="st-error">{error}</p>}
+      <div className="st-flex">
+        <StatCard label="Trainees" value={a?.trainees} />
+        <StatCard label="Coordinators" value={a?.coordinators} />
+        <StatCard label="Administrators" value={a?.admins} />
+        <StatCard label="Deactivated accounts" value={a?.deactivated} />
+      </div>
+    </>
+  );
+}
+
+function Coordinators({ sections }) {
+  const [data, reload] = useLoad(svc.coordinators);
+  const { busy, msg, run } = useAction();
+  const [f, setF] = useState({ staff_id: "", first_name: "", last_name: "", email: "", password: "" });
+  const [pick, setPick] = useState({});
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+
+  const create = async () => {
+    const r = await run(() => svc.createCoordinator(f), "Coordinator created.");
+    if (r) { setF({ staff_id: "", first_name: "", last_name: "", email: "", password: "" }); reload(); }
+  };
+  const assign = async (c) => { if (pick[c.id]) { await run(() => svc.assignCoordinator(c.id, pick[c.id]), "Section assigned."); reload(); } };
+  const unassign = async (c) => { await run(() => svc.unassignCoordinator(c.id), "Assignment ended."); reload(); };
+
+  return (
+    <>
+      <Notice msg={msg} />
+      <Card title="New Coordinator">
+        <Row>
+          <Field label="Staff ID"><Input value={f.staff_id} onChange={set("staff_id")} /></Field>
+          <Field label="First name"><Input value={f.first_name} onChange={set("first_name")} /></Field>
+          <Field label="Last name"><Input value={f.last_name} onChange={set("last_name")} /></Field>
+          <Field label="Email"><Input type="email" value={f.email} onChange={set("email")} /></Field>
+          <Field label="Temporary password"><Input type="password" autoComplete="new-password" value={f.password} onChange={set("password")} /></Field>
+          <Btn kind="primary" disabled={busy} onClick={create}>Create</Btn>
+        </Row>
+      </Card>
+      <Card title="Coordinators">
+        <Table rows={data?.coordinators} cols={[
+          { h: "Staff ID", render: (c) => c.staff_id },
+          { h: "Name", render: (c) => c.name },
+          { h: "Email", render: (c) => c.email },
+          { h: "Status", render: (c) => <Chip tone={c.is_active ? "good" : "bad"}>{c.is_active ? "Active" : "Deactivated"}</Chip> },
+          { h: "Section", render: (c) => c.section?.code || "—" },
+          { h: "Assign", render: (c) => (
+            <Row>
+              <Select value={pick[c.id] || ""} onChange={(e) => setPick({ ...pick, [c.id]: e.target.value })}>
+                <option value="">Choose section…</option>
+                {sections.map((s) => <option key={s.id} value={s.id}>{s.code}</option>)}
+              </Select>
+              <Btn disabled={busy || !pick[c.id]} onClick={() => assign(c)}>{c.section ? "Reassign" : "Assign"}</Btn>
+              {c.section && <Btn kind="danger" disabled={busy} onClick={() => unassign(c)}>End</Btn>}
+            </Row>
+          ) },
+        ]} />
+      </Card>
+    </>
+  );
+}
+
+function Sections({ courses, year, onChanged }) {
+  const [list, reload] = useLoad(() => svc.sections(), []);
+  const { busy, msg, run } = useAction();
+  const [f, setF] = useState({ course_id: "", year_level: "1", count: "1" });
+  const [open, setOpen] = useState(null);
+  const create = async () => {
+    const r = await run(() => svc.createSections({ course_id: Number(f.course_id), year_level: Number(f.year_level), count: Number(f.count) }), "Sections ready.");
+    if (r) { reload(); onChanged(); }
+  };
+  const show = async (s) => setOpen(await svc.section(s.id).catch(() => null));
+  return (
+    <>
+      <Notice msg={msg} />
+      <Card title={`Create sections${year ? ` for ${year.name}` : ""}`}>
+        <Row>
+          <Field label="Course"><Select value={f.course_id} onChange={(e) => setF({ ...f, course_id: e.target.value })}>
+            <option value="">Choose…</option>{courses.map((c) => <option key={c.id} value={c.id}>{c.code}</option>)}
+          </Select></Field>
+          <Field label="Year level"><Select value={f.year_level} onChange={(e) => setF({ ...f, year_level: e.target.value })}>{[1, 2, 3, 4].map((n) => <option key={n}>{n}</option>)}</Select></Field>
+          <Field label="How many (A, B, …)"><Input type="number" min="1" max="12" value={f.count} onChange={(e) => setF({ ...f, count: e.target.value })} style={{ width: 90 }} /></Field>
+          <Btn kind="primary" disabled={busy || !f.course_id} onClick={create}>Create</Btn>
+        </Row>
+      </Card>
+      <Card title="Sections">
+        <Table rows={list?.sections} cols={[
+          { h: "Section", render: (s) => s.code }, { h: "Year", render: (s) => s.year_level }, { h: "Students", render: (s) => s.students },
+          { h: "", render: (s) => <Btn onClick={() => show(s)}>View roster</Btn> },
+        ]} />
+      </Card>
+      {open && (
+        <Card title={`Roster · ${open.section.code}`} actions={<Btn onClick={() => setOpen(null)}>Close</Btn>}>
+          <Table rows={open.students} cols={[{ h: "Student ID", render: (s) => s.student_id }, { h: "Name", render: (s) => s.name }, { h: "Status", render: (s) => <Chip tone={statusTone(s.status)}>{s.status}</Chip> }]} />
+        </Card>
+      )}
+    </>
+  );
+}
+
+function Enrollments({ sections }) {
+  const [un, reloadUn] = useLoad(svc.unassigned);
+  const [all, reloadAll] = useLoad(() => svc.enrollments(), []);
+  const { busy, msg, run } = useAction();
+  const [pick, setPick] = useState({});
+  const place = async (e, transfer) => {
+    const sid = pick[e.id]; if (!sid) return;
+    const r = await run(() => (transfer ? svc.transfer(e.id, Number(sid), "Admin transfer") : svc.assignSection(e.id, Number(sid))), transfer ? "Trainee transferred." : "Section assigned.");
+    if (r) { reloadUn(); reloadAll(); }
+  };
+  const options = (e) => sections.filter((s) => !e.course || s.course_id === e.course.id).map((s) => <option key={s.id} value={s.id}>{s.code}</option>);
+  const picker = (e, label, transfer) => (
+    <Row>
+      <Select value={pick[e.id] || ""} onChange={(ev) => setPick({ ...pick, [e.id]: ev.target.value })}><option value="">Section…</option>{options(e)}</Select>
+      <Btn disabled={busy || !pick[e.id]} onClick={() => place(e, transfer)}>{label}</Btn>
+    </Row>
+  );
+  return (
+    <>
+      <Notice msg={msg} />
+      <Card title={`Unassigned students (${un?.total ?? "…"})`}>
+        <Table empty="Every student has a section." rows={un?.enrollments} cols={[
+          { h: "Student ID", render: (e) => e.student?.student_id }, { h: "Name", render: (e) => e.student?.name },
+          { h: "Course", render: (e) => e.course?.code || "—" }, { h: "Assign", render: (e) => picker(e, "Assign", false) },
+        ]} />
+      </Card>
+      <Card title="Open enrollments">
+        <Table rows={all?.data} cols={[
+          { h: "Student ID", render: (e) => e.student?.student_id }, { h: "Name", render: (e) => e.student?.name },
+          { h: "Section", render: (e) => e.section?.code || "—" }, { h: "Status", render: (e) => <Chip tone={statusTone(e.status)}>{e.status}</Chip> },
+          { h: "Move to", render: (e) => e.section ? picker(e, "Transfer", true) : "—" },
+        ]} />
+      </Card>
+    </>
+  );
+}
+
+function Progression({ years, sections, onChanged }) {
+  const [yearId, setYearId] = useState("");
+  const [plan, setPlan] = useState(null);
+  const [yearSections, setYearSections] = useState([]);
+  const [pick, setPick] = useState({});
+  const { busy, msg, run } = useAction();
+  const [newYear, setNewYear] = useState("");
+
+  const prepare = async () => {
+    const r = await run(() => svc.prepareProgression(yearId));
+    if (!r) return;
+    setPlan(r.proposals); setPick({});
+    const s = await svc.sections({ academic_year_id: yearId }).catch(() => ({ sections: [] }));
+    setYearSections(s.sections);
+  };
+  const confirm = async () => {
+    const items = plan.filter((p) => p.kind === "complete" || pick[p.id]).map((p) => ({ enrollment_id: p.id, kind: p.kind, section_id: p.kind === "complete" ? null : Number(pick[p.id]) }));
+    if (!items.length) return;
+    const r = await run(() => svc.confirmProgression(yearId, items), "Progression applied. Rows left blank were not changed.");
+    if (r) { prepare(); onChanged(); }
+  };
+  const addYear = async () => { if (await run(() => svc.createYear(newYear, false), "Academic year added.")) { setNewYear(""); onChanged(); } };
+  const makeCurrent = async () => { if (await run(() => svc.makeYearCurrent(yearId), "Marked as the current year.")) onChanged(); };
+
+  return (
+    <>
+      <Notice msg={msg} />
+      <Card title="Academic years">
+        <Row>
+          <Field label="New year (e.g. 2027-2028)"><Input value={newYear} onChange={(e) => setNewYear(e.target.value)} placeholder="YYYY-YYYY" /></Field>
+          <Btn disabled={busy || !newYear} onClick={addYear}>Add</Btn>
+          <Field label="Roll over into"><Select value={yearId} onChange={(e) => { setYearId(e.target.value); setPlan(null); }}>
+            <option value="">Choose year…</option>{years.map((y) => <option key={y.id} value={y.id}>{y.name}{y.is_current ? " (current)" : ""}</option>)}
+          </Select></Field>
+          <Btn kind="primary" disabled={busy || !yearId} onClick={prepare}>Preview</Btn>
+          <Btn disabled={busy || !yearId} onClick={makeCurrent}>Make current</Btn>
+        </Row>
+        <p className="st-muted">Order: add the new year, mark it current, create its sections (Sections tab), then preview and confirm here. Preview changes nothing; rows left on "Leave unchanged" keep their old enrollment.</p>
+      </Card>
+      {plan && (
+        <Card title={`Proposed changes (${plan.length})`} actions={<Btn kind="primary" disabled={busy} onClick={confirm}>Confirm selected</Btn>}>
+          <Table empty="No eligible students." rows={plan} cols={[
+            { h: "Student", render: (p) => `${p.student?.name} (${p.student?.student_id})` },
+            { h: "From", render: (p) => `${p.course?.code || ""} ${p.year_level} · ${p.section?.code || "no section"}` },
+            { h: "Action", render: (p) => <Chip tone={p.kind === "complete" ? "good" : undefined}>{p.kind}</Chip> },
+            { h: "Destination section", render: (p) => p.kind === "complete" ? "Completes OJT" : (
+              <Select value={pick[p.id] || ""} onChange={(e) => setPick({ ...pick, [p.id]: e.target.value })}>
+                <option value="">Leave unchanged</option>
+                {yearSections.filter((s) => s.course_id === p.course?.id && s.year_level === p.next_year_level).map((s) => <option key={s.id} value={s.id}>{s.code}</option>)}
+              </Select>) },
+          ]} />
+        </Card>
+      )}
+    </>
+  );
+}
+
+function Training({ sections }) {
+  const [sid, setSid] = useState("");
+  const [roster, setRoster] = useState([]);
+  const [sel, setSel] = useState(null);
+  const [info, setInfo] = useState(null);
+  const [f, setF] = useState({ hours: "", reason: "" });
+  const { busy, msg, run } = useAction();
+  const pickSection = async (id) => { setSid(id); setSel(null); setInfo(null); setRoster(id ? (await svc.section(id)).students : []); };
+  const pickTrainee = async (u) => { setSel(u); setInfo(await svc.traineeHours(u.user_id)); };
+  const save = async () => {
+    const r = await run(() => svc.setHourException(sel.user_id, Number(f.hours), f.reason), "Requirement updated and logged.");
+    if (r) { setInfo(await svc.traineeHours(sel.user_id)); setF({ hours: "", reason: "" }); }
+  };
+  const h = info?.hours;
+  return (
+    <>
+      <Notice msg={msg} />
+      <Card title="Training requirement exceptions">
+        <Row>
+          <Field label="Section"><Select value={sid} onChange={(e) => pickSection(e.target.value)}><option value="">Choose…</option>{sections.map((s) => <option key={s.id} value={s.id}>{s.code}</option>)}</Select></Field>
+          <Field label="Trainee"><Select value={sel?.user_id || ""} onChange={(e) => { const u = roster.find((r) => String(r.user_id) === e.target.value); if (u) pickTrainee(u); }}>
+            <option value="">Choose…</option>{roster.map((r) => <option key={r.user_id} value={r.user_id}>{r.name} ({r.student_id})</option>)}
+          </Select></Field>
+        </Row>
+      </Card>
+      {h && (
+        <Card title={sel.name}>
+          <div className="st-flex st-mb">
+            <StatCard label="Required" value={h.required} /><StatCard label="Verified" value={h.verified} />
+            <StatCard label="Pending review" value={h.pending} /><StatCard label="Draft / rejected" value={h.draft} />
+          </div>
+          <Row>
+            <Field label="New required hours"><Input type="number" min="1" max="2000" value={f.hours} onChange={(e) => setF({ ...f, hours: e.target.value })} style={{ width: 130 }} /></Field>
+            <Field label="Reason (required)"><Input value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} style={{ width: 320 }} /></Field>
+            <Btn kind="primary" disabled={busy || !f.hours || f.reason.trim().length < 5} onClick={save}>Save exception</Btn>
+          </Row>
+          <h3 className="st-h3">History</h3>
+          <Table empty="No exceptions yet." rows={info.exceptions} cols={[
+            { h: "When", render: (x) => new Date(x.created_at).toLocaleString() }, { h: "From", render: (x) => x.previous_hours },
+            { h: "To", render: (x) => x.new_hours }, { h: "Reason", render: (x) => x.reason },
+          ]} />
+        </Card>
+      )}
+    </>
+  );
+}
+
+/** Admin area: one desktop page with tabs. Every action is also enforced by Laravel (role:admin). */
+export default function AdminDashboard() {
+  const [tab, setTab] = useState("overview");
+  const [courses] = useLoad(() => svc.courses().then((d) => d.courses));
+  const [years, reloadYears] = useLoad(() => svc.years().then((d) => d.academic_years));
+  const [secs, reloadSecs] = useLoad(() => svc.sections().then((d) => d.sections));
+  useEffect(() => { document.title = "Admin | OCCDL"; }, []);
+  const year = (years || []).find((y) => y.is_current);
+  const refresh = () => { reloadYears(); reloadSecs(); };
+  const sections = secs || [];
+
+  return (
+    <StaffShell roleLabel="System Administrator">
+      <h1 className="st-h1">Administration</h1>
+      <Tabs value={tab} onChange={setTab} tabs={[
+        ["overview", "Overview"], ["coordinators", "Coordinators"], ["sections", "Sections"], ["enrollments", "Enrollments"],
+        ["progression", "Progression"], ["training", "Training requirements"], ["reports", "Reports"], ["announcements", "Announcements"], ["activity", "Audit log"],
+      ]} />
+      {tab === "overview" && <Overview />}
+      {tab === "coordinators" && <Coordinators sections={sections} />}
+      {tab === "sections" && <Sections courses={courses || []} year={year} onChanged={refresh} />}
+      {tab === "enrollments" && <Enrollments sections={sections} />}
+      {tab === "progression" && <Progression years={years || []} sections={sections} onChanged={refresh} />}
+      {tab === "training" && <Training sections={sections} />}
+      {tab === "reports" && <ReportsPanel svc={svc} sections={sections} courses={courses || []} />}
+      {tab === "announcements" && <AnnouncementsPanel svc={svc} sections={sections} courses={courses || []} />}
+      {tab === "activity" && <AuditPanel svc={svc} />}
+    </StaffShell>
+  );
+}

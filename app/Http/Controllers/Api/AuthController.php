@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\LoginRequest;
 use App\Http\Requests\RegisterRequest;
+use App\Http\Requests\StaffLoginRequest;
 use App\Models\User;
 use App\Services\Auth\SessionLogin;
 use App\Support\Formats;
@@ -43,6 +44,12 @@ class AuthController extends Controller
             'email_verified_at' => null,
         ]);
 
+        try {
+            app(\App\Services\Academic\EnrollmentService::class)->enrollOnRegistration($user);
+        } catch (\Throwable $e) {
+            report($e); // never block registration; Admin sees the student in the unassigned queue
+        }
+
         ProfilePhotoStorage::save($user, $request->file('profile_photo'));
 
         // Sends the 6-digit code + link. Never fails registration if the mail server is down:
@@ -69,7 +76,7 @@ class AuthController extends Controller
             ]);
         }
 
-        $user = User::where('student_id', $data['student_id'])->first();
+        $user = User::where('student_id', $data['student_id'])->where('role', User::ROLE_TRAINEE)->first();
 
         // Same message for "no such ID", "no password set" and "wrong password"
         // so the form never reveals which Student IDs exist.
@@ -80,10 +87,53 @@ class AuthController extends Controller
             throw ValidationException::withMessages(['student_id' => 'Student ID or password is incorrect.']);
         }
 
+        if (! $user->isActive()) {
+            SecurityLog::failure('login_deactivated', ['student_id' => $user->student_id]);
+            throw ValidationException::withMessages(['student_id' => 'This account has been deactivated. Please contact an administrator.']);
+        }
+
         RateLimiter::clear($limiterKey);
         RateLimiter::clear($accountKey);
         SecurityLog::event('login_ok', ['student_id' => $user->student_id, 'user_id' => $user->id], 'info');
 
+
+        return response()->json($this->sessions->start($request, $user, (bool) ($data['remember'] ?? false)));
+    }
+
+
+    /** Admin / Coordinator sign-in (Staff ID + password). Trainees never use this route. */
+    public function staffLogin(StaffLoginRequest $request): JsonResponse
+    {
+        $data = $request->validated();
+
+        $limiterKey = 'staff-login|'.strtolower($data['staff_id']).'|'.$request->ip();
+        $accountKey = 'staff-login-account|'.strtolower($data['staff_id']);
+        if (RateLimiter::tooManyAttempts($limiterKey, 5) || RateLimiter::tooManyAttempts($accountKey, 15)) {
+            $minutes = max(1, (int) ceil(max(RateLimiter::availableIn($limiterKey), RateLimiter::availableIn($accountKey)) / 60));
+            SecurityLog::failure('staff_login_lockout', ['staff_id' => $data['staff_id']]);
+            throw ValidationException::withMessages([
+                'staff_id' => "Too many sign-in attempts. Try again in {$minutes} minute".($minutes === 1 ? '' : 's').'.',
+            ]);
+        }
+
+        $user = User::where('staff_id', $data['staff_id'])->whereIn('role', User::STAFF_ROLES)->first();
+
+        // One message for "no such staff ID", "no password set" and "wrong password".
+        if (! $user || ! $user->password || ! Hash::check($data['password'], $user->password)) {
+            RateLimiter::hit($limiterKey, 300);
+            RateLimiter::hit($accountKey, 1800);
+            SecurityLog::failure('staff_login_failed', ['staff_id' => $data['staff_id']]);
+            throw ValidationException::withMessages(['staff_id' => 'Staff ID or password is incorrect.']);
+        }
+
+        if (! $user->isActive()) {
+            SecurityLog::failure('staff_login_deactivated', ['staff_id' => $user->staff_id]);
+            throw ValidationException::withMessages(['staff_id' => 'This account has been deactivated. Please contact an administrator.']);
+        }
+
+        RateLimiter::clear($limiterKey);
+        RateLimiter::clear($accountKey);
+        SecurityLog::event('staff_login_ok', ['staff_id' => $user->staff_id, 'user_id' => $user->id, 'role' => $user->roleName()], 'info');
 
         return response()->json($this->sessions->start($request, $user, (bool) ($data['remember'] ?? false)));
     }
@@ -97,6 +147,12 @@ class AuthController extends Controller
     public function session(Request $request): JsonResponse
     {
         $user = $request->user();
+
+        // A deactivated account must not look signed in (its session rows are also revoked).
+        if ($user && ! $user->isActive()) {
+            $this->sessions->end($request);
+            $user = null;
+        }
 
         return response()->json(['user' => $user?->toClient()])
             ->header('Cache-Control', 'no-store');

@@ -4,7 +4,6 @@ namespace App\Http\Requests;
 
 use App\Support\Formats;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 class UpdateProfileRequest extends FormRequest
 {
@@ -28,7 +27,6 @@ class UpdateProfileRequest extends FormRequest
             'first_name' => ['required', 'string', 'max:80', 'regex:'.Formats::NAME],
             'middle_name' => ['nullable', 'string', 'max:80', 'regex:'.Formats::NAME],
             'last_name' => ['required', 'string', 'max:80', 'regex:'.Formats::NAME],
-            'course' => ['required', 'string', Rule::in(Formats::courses())],
         ];
     }
 
@@ -40,8 +38,6 @@ class UpdateProfileRequest extends FormRequest
             'middle_name.regex' => 'Middle name can only contain letters, spaces, hyphens and apostrophes.',
             'last_name.required' => 'Last name is required.',
             'last_name.regex' => 'Last name can only contain letters, spaces, hyphens and apostrophes.',
-            'course.required' => 'Please choose your course.',
-            'course.in' => 'Please choose your course from the list.',
         ];
     }
 }

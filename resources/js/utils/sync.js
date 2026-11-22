@@ -154,9 +154,9 @@ export function flush(userId = activeUser) {
           sessionGone = true;
           break;
         }
-        if (status === 403 && e.response?.data?.code === "email_unverified") {
-          // The account's email is not verified yet, so the server closes /sync for it. This is not
-          // an error: pause (no retry loop, no console spam), keep the data dirty, and push it the
+        if (status === 403 && ["email_unverified", "role_forbidden"].includes(e.response?.data?.code)) {
+          // The account's email is not verified yet (or its role has no logbook), so the server closes
+          // /sync for it. This is not an error: pause (no retry loop, no console spam), keep the data dirty, and push it the
           // moment the account is verified (AuthContext.updateUser -> hydrate()).
           paused = true;
           clearTimeout(timer);

@@ -1,0 +1,35 @@
+import api from "../config/axiosConfig";
+
+const d = (p) => p.then((r) => r.data);
+
+/** Admin API calls (all closed to other roles by Laravel). */
+export const adminService = {
+  overview: () => d(api.get("/admin/overview")),
+  courses: () => d(api.get("/admin/courses")),
+  years: () => d(api.get("/admin/academic-years")),
+  createYear: (name, is_current) => d(api.post("/admin/academic-years", { name, is_current })),
+  makeYearCurrent: (id) => d(api.post(`/admin/academic-years/${id}/make-current`)),
+  sections: (params) => d(api.get("/admin/sections", { params })),
+  createSections: (body) => d(api.post("/admin/sections", body)),
+  section: (id) => d(api.get(`/admin/sections/${id}`)),
+  enrollments: (params) => d(api.get("/admin/enrollments", { params })),
+  unassigned: () => d(api.get("/admin/enrollments/unassigned")),
+  assignSection: (enrollmentId, section_id) => d(api.post(`/admin/enrollments/${enrollmentId}/assign-section`, { section_id })),
+  transfer: (enrollmentId, section_id, reason) => d(api.post(`/admin/enrollments/${enrollmentId}/transfer`, { section_id, reason })),
+  prepareProgression: (yearId) => d(api.get(`/admin/academic-years/${yearId}/progression/prepare`)),
+  confirmProgression: (yearId, items) => d(api.post(`/admin/academic-years/${yearId}/progression/confirm`, { items })),
+  coordinators: () => d(api.get("/admin/coordinators")),
+  createCoordinator: (body) => d(api.post("/admin/coordinators", body)),
+  assignCoordinator: (id, section_id) => d(api.post(`/admin/coordinators/${id}/assign-section`, { section_id })),
+  unassignCoordinator: (id) => d(api.delete(`/admin/coordinators/${id}/assignment`)),
+  traineeHours: (userId) => d(api.get(`/admin/trainees/${userId}/hours`)),
+  setHourException: (userId, hours, reason) => d(api.post(`/admin/trainees/${userId}/hour-exception`, { hours, reason })),
+  establishments: () => d(api.get("/admin/establishments")),
+  createEstablishment: (body) => d(api.post("/admin/establishments", body)),
+  activity: () => d(api.get("/admin/activity")),
+  activityFiltered: (action) => d(api.get("/admin/activity", { params: action ? { action } : {} })),
+  report: (params) => d(api.get("/admin/reports/trainees", { params })),
+  reportCsvUrl: (params) => `/api/admin/reports/trainees.csv${params && Object.keys(params).length ? "?" + new URLSearchParams(params) : ""}`,
+  announcements: () => d(api.get("/admin/announcements")),
+  publishAnnouncement: (body) => d(api.post("/admin/announcements", body)),
+};

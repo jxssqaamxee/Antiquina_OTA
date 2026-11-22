@@ -27,7 +27,7 @@ export default function ProfilePage() {
   const { user, updateUser } = useAuth();
   const toast = useToast();
   const config = useConfig();
-  const [form, setForm] = useState({ first_name: user.first_name, middle_name: user.middle_name || "", last_name: user.last_name, course: user.course });
+  const [form, setForm] = useState({ first_name: user.first_name, middle_name: user.middle_name || "", last_name: user.last_name });
   const [pw, setPw] = useState({ current_password: "", password: "", password_confirmation: "" });
   const [msg, setMsg] = useState({ profile: null, password: null });
   const [errs, setErrs] = useState({});
@@ -59,7 +59,7 @@ export default function ProfilePage() {
     if (Object.keys(v).length) {
       setErrs(v);
       setMsg((m) => ({ ...m, profile: { tone: "error", text: "Please fix the highlighted fields." } }));
-      const ids = { first_name: "pf_first", middle_name: "pf_middle", last_name: "pf_last", course: "pf_course" };
+      const ids = { first_name: "pf_first", middle_name: "pf_middle", last_name: "pf_last" };
       const firstBad = Object.keys(ids).find((k) => v[k]);
       if (firstBad) document.getElementById(ids[firstBad])?.focus();
       return;
@@ -67,7 +67,7 @@ export default function ProfilePage() {
     setBusy("profile"); setErrs({});
     try {
       const { data } = await api.put("/profile", {
-        first_name: clean(form.first_name), middle_name: clean(form.middle_name) || null, last_name: clean(form.last_name), course: form.course,
+        first_name: clean(form.first_name), middle_name: clean(form.middle_name) || null, last_name: clean(form.last_name),
       });
       updateUser(data.user);
       setMsg((m) => ({ ...m, profile: { tone: "notice", text: "Profile saved." } }));
@@ -171,13 +171,8 @@ export default function ProfilePage() {
             <LedgerRow index={2} icon={User} htmlFor="pf_last" error={errs.last_name} label={<>Last name {req}</>}>
               <LedgerInput id="pf_last" value={form.last_name} maxLength={80} autoComplete="family-name" aria-required="true" aria-invalid={!!errs.last_name} onChange={setF("last_name")} />
             </LedgerRow>
-            <LedgerRow index={3} icon={GraduationCap} htmlFor="pf_course" error={errs.course} label={<>Course {req}</>}>
-              <LedgerSelect id="pf_course" value={form.course} aria-required="true" aria-invalid={!!errs.course} onChange={setF("course")}>
-                {!courses.some((g) => g.courses.includes(form.course)) && <option value={form.course}>{form.course}</option>}
-                {courses.map((g) => (
-                  <optgroup key={g.college} label={g.college}>{g.courses.map((c) => <option key={c} value={c}>{c}</option>)}</optgroup>
-                ))}
-              </LedgerSelect>
+            <LedgerRow index={3} icon={GraduationCap} htmlFor="pf_course" label="Course" hint="Your course and section are set by the school and can’t be changed here.">
+              <div id="pf_course" className="pf-locked"><Lock size={13} aria-hidden="true" />{user.course}{user.enrollment?.section ? ` · ${user.enrollment.section.code}` : user.enrollment ? " · Section not assigned yet" : ""}</div>
             </LedgerRow>
             <LedgerRow index={4} icon={Mail} htmlFor="pf_email" label="Gmail" hint="Your Gmail and Student ID can’t be changed here.">
               <div id="pf_email" className="pf-locked"><Lock size={13} aria-hidden="true" />{user.email}</div>

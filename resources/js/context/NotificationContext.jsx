@@ -8,6 +8,7 @@ import {
   requestPermission,
 } from "../utils/notifications";
 import { uid } from "../utils/time";
+import { isTrainee } from "../utils/roles";
 import { alertsTurnedOff, disablePush, enablePush, isPushSupported, needsHomeScreenInstall, sendTestPush, syncPush } from "../utils/push";
 
 const HISTORY_KEY = "notifications-v1";
@@ -21,7 +22,8 @@ export function NotificationProvider({ children }) {
   const { user } = useAuth();
   // Same account-scoping as the logbook data — otherwise Trainee B signing
   // in would see Trainee A's notification history (and vice versa).
-  const userId = user?.sub || user?.email || null;
+  // Admin / Coordinator accounts have no logbook sync or push, so they keep no trainee history here.
+  const userId = user && isTrainee(user) ? (user.sub || user.email || null) : null;
 
   // The list is stored together with the account it belongs to, so a render that still
   // holds the previous account's list can never be written into the new account's storage.

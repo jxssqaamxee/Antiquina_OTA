@@ -28,7 +28,6 @@ class ProfileController extends Controller
             'first_name' => Formats::titleCase($data['first_name']),
             'middle_name' => ! empty($data['middle_name']) ? Formats::titleCase($data['middle_name']) : null,
             'last_name' => Formats::titleCase($data['last_name']),
-            'course' => $data['course'],
         ]);
 
         return response()->json(['user' => $user->fresh()->toClient()]);
@@ -56,7 +55,7 @@ class ProfileController extends Controller
             throw ValidationException::withMessages(['current_password' => 'Your current password is incorrect.']);
         }
 
-        $user->update(['password' => $data['password']]);
+        $user->forceFill(['password' => $data['password'], 'must_change_password' => false])->save();
         SecurityLog::event('password_changed', [], 'notice');
         \App\Mail\PasswordChangedMail::notify($user);
 

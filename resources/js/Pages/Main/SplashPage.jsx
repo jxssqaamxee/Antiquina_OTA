@@ -3,6 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import Splash from "../../Components/shared/Splash";
 import { preloadPage } from "../../routes/loaders";
+import { homePath, roleOf } from "../../utils/roles";
+
+// Which page chunk to fetch while the loading screen is up.
+const chunkFor = (u) => (!u ? "login" : u.email_verified === false ? "verify" : ({ admin: "admin", coordinator: "coordinator" }[roleOf(u)] || "logbook"));
 
 // Main loading page at "/" (same idea as sclf_APP's MainPage). The logo on the sign-in pages and in
 // the logbook app bar opens it, so tapping the logo behaves like a refresh: the branded loading
@@ -32,14 +36,13 @@ export default function SplashPage() {
       }
       // Fetch the destination page while the loading screen is still showing.
       const u0 = userRef.current;
-      const target = !u0 ? "login" : u0.email_verified === false ? "verify" : "logbook";
-      await Promise.race([preloadPage(target), new Promise((r) => setTimeout(r, 4000))]);
+      await Promise.race([preloadPage(chunkFor(u0)), new Promise((r) => setTimeout(r, 4000))]);
       if (!live) return;
       const wait = Math.max(0, REDIRECT_DELAY_MS - (Date.now() - openedAt.current));
       timer = setTimeout(() => {
         if (!live) return;
         const u = userRef.current;
-        navigate(!u ? "/login" : u.email_verified === false ? "/verify-email" : "/logbook", { replace: true });
+        navigate(homePath(u), { replace: true });
       }, wait);
     })();
     return () => { live = false; clearTimeout(timer); };

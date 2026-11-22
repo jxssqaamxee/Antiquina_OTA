@@ -315,8 +315,8 @@ class AuthTest extends TestCase
     {
         $user = User::factory()->create();
 
-        $this->signedIn($user)->putJson('/api/profile', ['first_name' => '', 'last_name' => 'X1', 'course' => 'Nope'])
-            ->assertStatus(422)->assertJsonValidationErrors(['first_name', 'last_name', 'course']);
+        $this->signedIn($user)->putJson('/api/profile', ['first_name' => '', 'last_name' => 'X1'])
+            ->assertStatus(422)->assertJsonValidationErrors(['first_name', 'last_name']);
         $this->signedIn($user)->putJson('/api/profile', ['first_name' => 'ana', 'last_name' => 'lim', 'course' => self::COURSE])
             ->assertOk()->assertJsonPath('user.name', 'Ana Lim');
     }

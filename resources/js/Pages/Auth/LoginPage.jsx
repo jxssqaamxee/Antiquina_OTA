@@ -95,7 +95,7 @@ export default function LoginPage() {
       gateName="Opol Community College"
       gateLabel="Login"
       gateDefaultOpen={!!location.state?.registered || !!location.state?.passwordReset || !!verify}
-      footer={<>No record on file? <Link to="/register">Sign up here</Link></>}
+      footer={<>No record on file? <Link to="/register">Sign up here</Link> · <Link to="/staff-login">Staff sign in</Link></>}
     >
       {location.state?.registered && <LedgerBanner tone="notice">Account created. Sign in to continue.</LedgerBanner>}
       {location.state?.passwordReset && <LedgerBanner tone="notice">Your password was reset. Sign in with the new one.</LedgerBanner>}

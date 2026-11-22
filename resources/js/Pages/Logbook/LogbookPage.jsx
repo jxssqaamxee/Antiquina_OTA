@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Plus, Trash2, FileDown, Sun, Sunset, Moon, Pencil, Settings2, Info, Clock3, Hourglass, Zap, CalendarDays, Building2, ChevronRight, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, FileDown, Sun, Sunset, Moon, Pencil, Settings2, Info, Clock3, Hourglass, Zap, CalendarDays, Building2, ChevronRight, AlertTriangle, Lock } from "lucide-react";
 import MobileTabBar from "../../Components/shared/MobileTabBar";
 import AppBar from "../../Components/shared/AppBar";
 import Sheet, { ConfirmSheet } from "../../Components/shared/Sheet";
@@ -18,6 +18,8 @@ import ReportsPanel from "./ReportsPanel";
 import EntryHistoryPanel from "./EntryHistoryPanel";
 import Footer from "../../Components/shared/Footer";
 import { getUserStorage, setUserStorage, isStorageAvailable, getStorage, removeStorage } from "../../utils/storage";
+import api from "../../config/axiosConfig";
+import { flush as flushSync, hydrate as hydrateSync } from "../../utils/sync";
 import logo from "../../assets/images/site-logo.png";
 import { buildDutyReport } from "../../utils/pdfReport";
 import {
@@ -487,6 +489,8 @@ export default function LogbookPage() {
     [entryProgress]
   );
   const totalHours = loggedHours;
+  const verifiedHours = useMemo(() => Math.round(entries.reduce((n, e) => n + (e.status === "approved" ? Number(e.verifiedHours ?? e.hours) || 0 : 0), 0) * 100) / 100, [entries]);
+  const pendingReviewHours = useMemo(() => Math.round(entries.reduce((n, e) => n + (e.status === "submitted" ? Number(e.hours) || 0 : 0), 0) * 100) / 100, [entries]);
   const remaining = Math.max(targetHours - totalHours, 0);
   const percent = targetHours > 0 ? Math.min((totalHours / targetHours) * 100, 100) : 0;
   const complete = percent >= 100;
@@ -811,6 +815,7 @@ export default function LogbookPage() {
   // shift type, and remarks can be corrected — e.g. the OJT coordinator
   // called an early out at 2:06 PM instead of the planned 5:00 PM.
   function startEdit(entry) {
+    if (entry.status === "submitted" || entry.status === "approved") return; // locked by review (the server enforces this too)
     const hasAM = !!(entry.amIn && entry.amOut);
     const hasPM = !!(entry.pmIn && entry.pmOut);
     const hasEV = !!(entry.evIn && entry.evOut);
@@ -932,9 +937,25 @@ export default function LogbookPage() {
   }
 
   function deleteEntry(id) {
+    if (entries.some((x) => x.id === id && (x.status === "submitted" || x.status === "approved"))) return;
     setEntries((prev) => prev.filter((e) => e.id !== id));
     if (id === editingId) cancelEdit();
     toast.info("The logbook entry was removed.", { title: "Entry deleted", key: "entry-deleted" });
+  }
+
+  // Sends one finished entry to the OJT coordinator. Push pending edits first so the server has it,
+  // then adopt the server's copy (it now carries the status).
+  async function submitEntry(id) {
+    try {
+      await flushSync(userId);
+      await api.post(`/logbook/entries/${encodeURIComponent(id)}/submit`);
+      await hydrateSync(userId);
+      applyLogbook(getUserStorage(STORAGE_KEY, userId));
+      toast.success("Your coordinator can now review this entry.", { title: "Submitted", key: "entry-submitted" });
+    } catch (err) {
+      const msg = err?.response?.data?.errors?.entry?.[0] || err?.response?.data?.message || "Could not submit. Check your connection and try again.";
+      toast.warning(msg, { title: "Not submitted", key: "entry-submit-failed" });
+    }
   }
 
   function requestDeleteEntry(id) {
@@ -951,6 +972,7 @@ export default function LogbookPage() {
   }
 
   function requestDeleteClient(id) {
+    if (clients.some((c) => c.id === id && c.managed)) return;
     const count = clientEntryCount(id);
     if (count > 0) {
       const client = clients.find((c) => c.id === id);
@@ -1047,7 +1069,7 @@ export default function LogbookPage() {
 
   function startEditClient(id) {
     const client = clients.find((c) => c.id === id);
-    if (!client) return;
+    if (!client || client.managed) return; // placement-managed schedules are set by your school
     const norm = normalizeClient(client);
     setEditingClientId(id);
     setNewClientName(norm.name);
@@ -1234,6 +1256,9 @@ export default function LogbookPage() {
                   <div>
                     <div className="big">{formatHours(scoped ? viewHours : totalHours)}</div>
                     <div className="of">{scoped ? `at ${viewClientName} · of ${targetHours}h required` : `of ${targetHours}h required`}</div>
+                    {!scoped && (verifiedHours > 0 || pendingReviewHours > 0) && (
+                      <div className="of">{formatHours(verifiedHours)} verified · {formatHours(pendingReviewHours)} awaiting review</div>
+                    )}
                   </div>
                   <div className="hero-chips">
                     {scoped
@@ -1303,7 +1328,7 @@ export default function LogbookPage() {
                           {formatTime12(norm.timeIn)} – {formatTime12(norm.timeOut)}
                         </small>
                       </div>
-                      <div className="client-actions">
+                      {c.managed ? <div className="client-actions"><span className="badge mute"><Lock size={11} /> Set by school</span></div> : <div className="client-actions">
                         <button type="button" className="icon-btn sm" onClick={() => startEditClient(c.id)} aria-label={`Edit ${c.name}`}><Pencil size={15} /></button>
                         <button
                           type="button" className="icon-btn sm danger" onClick={() => requestDeleteClient(c.id)}
@@ -1312,7 +1337,7 @@ export default function LogbookPage() {
                         >
                           <Trash2 size={15} />
                         </button>
-                      </div>
+                      </div>}
                     </div>
                   );
                 })}
@@ -1350,6 +1375,7 @@ export default function LogbookPage() {
                   editing={e.id === editingId}
                   onEdit={startEdit}
                   onDelete={requestDeleteEntry}
+                  onSubmit={submitEntry}
                 />
               ))}
             </div>
@@ -1585,29 +1611,11 @@ export default function LogbookPage() {
           {setupErrors.name ? <span className="fld-error" role="alert">{setupErrors.name}</span> : <span className="fld-hint">Printed on your PDF report.</span>}
         </div>
         <div className="fld">
-          <label htmlFor="s-hours">Required hours <span className="req">*</span></label>
+          <label htmlFor="s-hours">Required hours</label>
           <input
-            id="s-hours" type="text" inputMode="numeric" pattern="[0-9]*" value={targetHoursInput}
-            onChange={(e) => {
-              // Digits only — also strips leading zeros as the user types.
-              const digits = e.target.value.replace(/\D/g, "").replace(/^0+(?=\d)/, "").slice(0, 4);
-              setTargetHoursInput(digits);
-              setTargetHours(digits ? Number(digits) : 0);
-              setHoursNote("");
-            }}
-            onBlur={() => {
-              // Fall back to a default only when left empty / invalid, not the instant a digit is deleted.
-              const problem = targetHoursProblem(targetHoursInput);
-              const parsed = Number(targetHoursInput);
-              const safe = problem ? (parsed > MAX_TARGET_HOURS ? MAX_TARGET_HOURS : 486) : parsed;
-              setHoursNote(problem ? `${problem} It was set to ${safe}.` : "");
-              setTargetHours(safe);
-              setTargetHoursInput(String(safe));
-            }}
+            id="s-hours" type="text" value={targetHoursInput} readOnly aria-readonly="true"
           />
-          {hoursNote
-            ? <span className="fld-hint warn" role="status">{hoursNote}</span>
-            : <span className="fld-hint">Total OJT hours your school requires (e.g. 486).</span>}
+          <span className="fld-hint">Set by your school. Ask your coordinator if it needs to change.</span>
         </div>
       </Sheet>
 

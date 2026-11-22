@@ -27,6 +27,15 @@ class LogbookStore
 
     public function __construct(private LogbookValidator $validator = new LogbookValidator()) {}
 
+    /** The trainee's current logbook document + revision (used by the submit action to hand back the canonical state). */
+    public function currentLogbook(User $user): array
+    {
+        $s = UserSetting::firstOrCreate(['user_id' => $user->id]);
+        $s = $s->fresh();
+
+        return ['revision' => (int) $s->logbook_revision, 'value' => $this->readLogbook($user, $s)];
+    }
+
     /** All documents the user has saved, keyed like the old user_documents rows. */
     public function all(User $user): array
     {
@@ -212,7 +221,11 @@ class LogbookStore
         $uidById = $clients->pluck('client_uid', 'id');
 
         $entries = DutyEntry::where('user_id', $user->id)->orderBy('duty_date')->orderBy('id')->get()
-            ->map(fn (DutyEntry $e) => [
+            ->map(fn (DutyEntry $e) => array_filter([
+                'status' => $e->status !== DutyEntry::DRAFT ? $e->status : null,
+                'verifiedHours' => $e->status === DutyEntry::APPROVED ? $e->verified_hours : null,
+                'reviewReason' => $e->status === DutyEntry::REJECTED ? $e->review_reason : null,
+            ], fn ($v) => $v !== null) + [
                 'id' => $e->entry_uid,
                 'date' => $e->duty_date->format('Y-m-d'),
                 'client' => $e->host_client_id ? ($uidById[$e->host_client_id] ?? null) : null,
@@ -226,11 +239,11 @@ class LogbookStore
 
         return [
             'studentName' => $s->student_name ?? '',
-            'targetHours' => (int) $s->target_hours,
+            'targetHours' => app(\App\Services\Academic\TrainingHourService::class)->requiredHours($user),
             'clients' => $clients->map(fn (HostClient $c) => [
                 'id' => $c->client_uid, 'name' => $c->name, 'type' => $c->type,
                 'days' => array_values($c->days ?? []), 'timeIn' => $c->time_in, 'timeOut' => $c->time_out,
-            ])->all(),
+            ] + ($c->placement_id ? ['managed' => true] : []))->all(),
             'entries' => $entries,
             'lastClientId' => $s->last_client_uid,
             'viewClientId' => $this->scopeFromColumn($s->view_client_uid, $uidById),
@@ -249,7 +262,6 @@ class LogbookStore
         $now = now();
         $s->update([
             'student_name' => $doc['studentName'],
-            'target_hours' => $doc['targetHours'],
             'last_client_uid' => $doc['lastClientId'],
             'view_client_uid' => ($doc['viewClientId'] ?? 'all') === 'all' ? null : $doc['viewClientId'],
             'export_client_uid' => ($doc['exportClientId'] ?? 'all') === 'all' ? null : $doc['exportClientId'],
@@ -258,11 +270,17 @@ class LogbookStore
 
         // Host clients. Free the unique name first so a rename/swap can't collide mid-write.
         $keepUids = array_column($doc['clients'], 'id');
-        HostClient::where('user_id', $user->id)->whereNotIn('client_uid', $keepUids)->delete();
+        $managed = HostClient::where('user_id', $user->id)->whereNotNull('placement_id')->pluck('client_uid')->all(); // set by a placement: read-only here
+        HostClient::where('user_id', $user->id)->whereNull('placement_id')->whereNotIn('client_uid', $keepUids)->delete();
         foreach ($doc['clients'] as $pos => $c) {
-            HostClient::where('user_id', $user->id)->where('client_uid', $c['id'])->update(['name_key' => 'tmp-'.$c['id']]);
+            if (! in_array($c['id'], $managed, true)) {
+                HostClient::where('user_id', $user->id)->where('client_uid', $c['id'])->update(['name_key' => 'tmp-'.$c['id']]);
+            }
         }
         foreach ($doc['clients'] as $pos => $c) {
+            if (in_array($c['id'], $managed, true)) {
+                continue;
+            }
             HostClient::updateOrCreate(
                 ['user_id' => $user->id, 'client_uid' => $c['id']],
                 [
@@ -273,9 +291,15 @@ class LogbookStore
         }
         $idByUid = HostClient::where('user_id', $user->id)->pluck('id', 'client_uid');
 
-        // Duty entries.
-        DutyEntry::where('user_id', $user->id)->whereNotIn('entry_uid', array_column($doc['entries'], 'id'))->delete();
+        // Duty entries. Submitted and approved entries belong to the review process: a push can neither
+        // change nor delete them (the response carries the canonical document, which the app adopts).
+        $locked = DutyEntry::where('user_id', $user->id)->whereIn('status', DutyEntry::LOCKED)->pluck('entry_uid')->all();
+        DutyEntry::where('user_id', $user->id)->whereNotIn('status', DutyEntry::LOCKED)
+            ->whereNotIn('entry_uid', array_column($doc['entries'], 'id'))->delete();
         foreach ($doc['entries'] as $e) {
+            if (in_array($e['id'], $locked, true)) {
+                continue;
+            }
             DutyEntry::updateOrCreate(
                 ['user_id' => $user->id, 'entry_uid' => $e['id']],
                 [
@@ -293,9 +317,9 @@ class LogbookStore
 
     private function clearLogbook(User $user, UserSetting $s): void
     {
-        DutyEntry::where('user_id', $user->id)->delete();
-        HostClient::where('user_id', $user->id)->delete();
-        $s->update(['student_name' => null, 'target_hours' => LogbookRules::DEFAULT_TARGET_HOURS, 'last_client_uid' => null, 'view_client_uid' => null, 'export_client_uid' => null, 'logbook_saved_at' => null]);
+        DutyEntry::where('user_id', $user->id)->whereNotIn('status', DutyEntry::LOCKED)->delete();
+        HostClient::where('user_id', $user->id)->whereNull('placement_id')->delete();
+        $s->update(['student_name' => null, 'last_client_uid' => null, 'view_client_uid' => null, 'export_client_uid' => null, 'logbook_saved_at' => null]);
     }
 
     // ------------------------------------------------------------ notifications
@@ -312,8 +336,14 @@ class LogbookStore
 
     private function writeNotifications(User $user, UserSetting $s, array $list): void
     {
-        UserNotification::where('user_id', $user->id)->whereNotIn('notif_uid', array_column($list, 'id'))->delete();
+        // Server-created notices (source=server) are never deleted by a client push.
+        UserNotification::where('user_id', $user->id)->where('source', 'client')->whereNotIn('notif_uid', array_column($list, 'id'))->delete();
         foreach ($list as $pos => $n) {
+            $existing = UserNotification::where(['user_id' => $user->id, 'notif_uid' => $n['id']])->first();
+            if ($existing?->source === 'server') {
+                $existing->update(['is_read' => $n['read']]); // the person may mark it read; nothing else
+                continue;
+            }
             UserNotification::updateOrCreate(
                 ['user_id' => $user->id, 'notif_uid' => $n['id']],
                 [
@@ -327,7 +357,7 @@ class LogbookStore
 
     private function clearNotifications(User $user, UserSetting $s): void
     {
-        UserNotification::where('user_id', $user->id)->delete();
+        UserNotification::where('user_id', $user->id)->where('source', 'client')->delete();
         $s->update(['notifications_saved_at' => null]);
     }
 

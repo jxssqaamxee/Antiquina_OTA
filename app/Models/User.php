@@ -16,6 +16,18 @@ class User extends Authenticatable implements MustVerifyEmail
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
+    public const ROLE_ADMIN = 'admin';
+    public const ROLE_COORDINATOR = 'coordinator';
+    public const ROLE_TRAINEE = 'trainee';
+
+    /** @var list<string> */
+    public const ROLES = [self::ROLE_ADMIN, self::ROLE_COORDINATOR, self::ROLE_TRAINEE];
+
+    /** @var list<string> accounts that sign in with a staff ID */
+    public const STAFF_ROLES = [self::ROLE_ADMIN, self::ROLE_COORDINATOR];
+
+    // NOTE: role, staff_id, is_active and deactivated_at are deliberately NOT mass-assignable, so no
+    // request body can ever promote an account. Admin code sets them explicitly (forceFill).
     protected $fillable = [
         'student_id', 'first_name', 'middle_name', 'last_name', 'email',
         'course', 'password', 'profile_photo', 'email_verified_at',
@@ -28,7 +40,70 @@ class User extends Authenticatable implements MustVerifyEmail
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'is_active' => 'boolean',
+            'must_change_password' => 'boolean',
+            'deactivated_at' => 'datetime',
         ];
+    }
+
+    /** The account's role. Rows created before roles existed read as trainee. */
+    public function roleName(): string
+    {
+        return in_array($this->role, self::ROLES, true) ? $this->role : self::ROLE_TRAINEE;
+    }
+
+    public function hasRole(string ...$roles): bool
+    {
+        return in_array($this->roleName(), $roles, true);
+    }
+
+    public function isAdmin(): bool
+    {
+        return $this->roleName() === self::ROLE_ADMIN;
+    }
+
+    public function isCoordinator(): bool
+    {
+        return $this->roleName() === self::ROLE_COORDINATOR;
+    }
+
+    public function isTrainee(): bool
+    {
+        return $this->roleName() === self::ROLE_TRAINEE;
+    }
+
+    public function isStaff(): bool
+    {
+        return in_array($this->roleName(), self::STAFF_ROLES, true);
+    }
+
+    /** Only an explicit false deactivates (a row without the column yet counts as active). */
+    public function isActive(): bool
+    {
+        return $this->is_active !== false;
+    }
+
+    /** Blocks sign-in and ends every session on every device. */
+    public function deactivate(): void
+    {
+        $this->forceFill(['is_active' => false, 'deactivated_at' => now()])->save();
+        app(\App\Services\Auth\SessionLogin::class)->revokeAll($this);
+    }
+
+    public function reactivate(): void
+    {
+        $this->forceFill(['is_active' => true, 'deactivated_at' => null])->save();
+    }
+
+    public function enrollments(): HasMany
+    {
+        return $this->hasMany(StudentEnrollment::class);
+    }
+
+    /** The trainee's open enrollment (course, year level, section) or null. */
+    public function currentEnrollment(): ?StudentEnrollment
+    {
+        return $this->enrollments()->open()->with(['course', 'section.course'])->first();
     }
 
     public function documents(): HasMany
@@ -93,6 +168,9 @@ class User extends Authenticatable implements MustVerifyEmail
         return [
             'id' => $this->id,
             'sub' => 'u'.$this->id,
+            'role' => $this->roleName(),
+            'staff_id' => $this->staff_id,
+            'must_change_password' => (bool) $this->must_change_password,
             'student_id' => $this->student_id,
             'first_name' => $this->first_name,
             'middle_name' => $this->middle_name,
@@ -100,6 +178,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'name' => $this->fullName(),
             'email' => $this->email,
             'course' => $this->course,
+            'enrollment' => $this->isTrainee() ? $this->currentEnrollment()?->toClient() : null,
             // Own photo URL (only this account's session can open it), or null -> initials.
             'picture' => $picture = $this->photoUrl(),
             'has_profile_photo' => $picture !== null,
