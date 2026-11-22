@@ -51,11 +51,14 @@ return new class extends Migration
                 $table->string('status', 24)->default('pending_placement')->index();
                 $table->timestamp('started_at')->nullable();
                 $table->timestamp('ended_at')->nullable();      // NULL = the student's current enrollment
-                // Generated: user_id while open, NULL once closed -> at most ONE open enrollment per student.
-                $table->unsignedBigInteger('open_user_id')->nullable()
-                    ->storedAs('CASE WHEN ended_at IS NULL THEN user_id END');
+                // Generated from ended_at ONLY: 1 while the enrollment is open, NULL once closed.
+                // Unique (user_id, is_open) => at most ONE open enrollment per student, any number of closed ones.
+                // (It must not be built from user_id: MySQL refuses a CASCADE foreign key on the base column
+                // of a stored generated column, error 1215. MariaDB allows it, MySQL 8 does not.)
+                $table->unsignedTinyInteger('is_open')->nullable()
+                    ->storedAs('CASE WHEN ended_at IS NULL THEN 1 END');
                 $table->timestamps();
-                $table->unique('open_user_id', 'enrollments_one_open_per_user');
+                $table->unique(['user_id', 'is_open'], 'enrollments_one_open_per_user');
                 $table->index(['section_id', 'ended_at']);
             });
         }

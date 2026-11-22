@@ -17,12 +17,12 @@ return new class extends Migration
                 $table->foreignId('assigned_by')->nullable()->constrained('users')->nullOnDelete();
                 $table->timestamp('started_at')->nullable();
                 $table->timestamp('ended_at')->nullable();   // NULL = current
-                // Generated: the id while the row is open, NULL once ended -> one open row per section / coordinator.
-                $table->unsignedBigInteger('open_section_id')->nullable()->storedAs('CASE WHEN ended_at IS NULL THEN section_id END');
-                $table->unsignedBigInteger('open_coordinator_id')->nullable()->storedAs('CASE WHEN ended_at IS NULL THEN coordinator_id END');
+                // Generated from ended_at ONLY (1 while open, NULL once ended). MySQL refuses a CASCADE foreign key
+                // on the base column of a stored generated column, so the ids are not used to build it.
+                $table->unsignedTinyInteger('is_open')->nullable()->storedAs('CASE WHEN ended_at IS NULL THEN 1 END');
                 $table->timestamps();
-                $table->unique('open_section_id', 'assign_one_open_per_section');
-                $table->unique('open_coordinator_id', 'assign_one_open_per_coordinator');
+                $table->unique(['section_id', 'is_open'], 'assign_one_open_per_section');       // one open coordinator per section
+                $table->unique(['coordinator_id', 'is_open'], 'assign_one_open_per_coordinator'); // one open section per coordinator
             });
         }
         if (! Schema::hasTable('activity_logs')) {
