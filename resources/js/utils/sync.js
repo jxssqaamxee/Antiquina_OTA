@@ -33,6 +33,7 @@ let retryTimer = null;
 let activeUser = null;
 let flushing = null;
 let failures = 0;                  // consecutive failed flushes, drives the backoff
+let paused = false;                // server said "verify your email first" (403 email_unverified): stop pushing
 
 const dirtyKey = (userId) => `sync-dirty::u_${userId}`;
 const rejectedKey = (userId, base) => `sync-rejected::u_${userId}::${base}`;
@@ -93,6 +94,8 @@ export function queueSync(base, userId) {
   activeUser = userId;
   const dirty = readDirty(userId);
   if (!dirty.includes(base)) writeDirty(userId, [...dirty, base]);
+  // Unverified account: keep the change locally (dirty) and push it after verification (hydrate()).
+  if (paused) return;
   clearTimeout(timer);
   timer = setTimeout(() => flush(userId), DEBOUNCE_MS);
 }
@@ -109,6 +112,7 @@ export function flush(userId = activeUser) {
   // current session cookie, so pushing another account's cache would write that
   // person's logbook into the wrong account (shared phone, expired session).
   if (!userId || userId !== activeUser) return Promise.resolve(true);
+  if (paused) return Promise.resolve(true);
   if (flushing) return flushing.then(() => flush(userId));
   flushing = (async () => {
     let allOk = true;
@@ -148,6 +152,15 @@ export function flush(userId = activeUser) {
           // Session ended. axiosConfig already told the app; stop pushing, keep the data dirty
           // so it goes out after the next sign-in.
           sessionGone = true;
+          break;
+        }
+        if (status === 403 && e.response?.data?.code === "email_unverified") {
+          // The account's email is not verified yet, so the server closes /sync for it. This is not
+          // an error: pause (no retry loop, no console spam), keep the data dirty, and push it the
+          // moment the account is verified (AuthContext.updateUser -> hydrate()).
+          paused = true;
+          clearTimeout(timer);
+          clearTimeout(retryTimer);
           break;
         }
         if (status === 409 || status === 412) {
@@ -191,7 +204,7 @@ export function flush(userId = activeUser) {
     }
 
     failures = allOk ? 0 : failures + 1;
-    if (!sessionGone) scheduleRetry(userId, retryAfter);
+    if (!sessionGone && !paused) scheduleRetry(userId, retryAfter);
     return allOk;
   })().finally(() => { flushing = null; });
   return flushing;
@@ -233,6 +246,7 @@ function applyRevision(userId, base, data, docs) {
 export async function hydrate(userId) {
   if (activeUser !== userId) stopSync(); // a different account: drop the old one's timers
   activeUser = userId;
+  paused = false; // hydrate only runs for a verified account: resume pushing
   const dirty = readDirty(userId);
   try {
     const { data } = await api.get("/sync");
@@ -265,6 +279,7 @@ export function stopSync() {
   retryTimer = null;
   activeUser = null;
   failures = 0;
+  paused = false;
 }
 
 /** Sign-out: push anything pending, then wipe this account's local copy (shared phones). */
@@ -293,7 +308,7 @@ export async function releaseUser(userId) {
  * larger stays dirty and is pushed on the next visit.
  */
 function flushOnUnload(userId) {
-  if (typeof fetch === "undefined") return;
+  if (typeof fetch === "undefined" || paused) return;
   const xsrf = (document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/) || [])[1];
   if (!xsrf) return;
   let budget = KEEPALIVE_LIMIT;
