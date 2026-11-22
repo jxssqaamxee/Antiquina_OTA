@@ -137,6 +137,14 @@ yarn-error.log*
 /.github/
 
 # ---------------------------------------------------------------------
+# Internal project notes - kept on this machine only, never pushed
+# ---------------------------------------------------------------------
+/OCCDL-implementation-SKILL.md
+/PRODUCTION-CHECKLIST.md
+/*-SKILL.md
+/*-CHECKLIST.md
+
+# ---------------------------------------------------------------------
 # Editors, AI assistants, OS junk
 # ---------------------------------------------------------------------
 /.idea
