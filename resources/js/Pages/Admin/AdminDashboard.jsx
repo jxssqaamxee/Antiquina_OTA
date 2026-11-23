@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { LayoutDashboard, UserCog, Layers, ClipboardList, TrendingUp, Target, FileBarChart, Megaphone, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, UserCog, Layers, ClipboardList, TrendingUp, Target, FileBarChart, Megaphone, ShieldCheck, Upload } from "lucide-react";
 import AdminShell, { StatCard } from "../../Components/admin/AdminShell";
 import { Btn, Card, Chip, Field, Input, Notice, Row, Select, Table, statusTone, useAction } from "../../Components/admin/ui";
-import { AnnouncementsPanel, AuditPanel, ReportsPanel } from "../../Components/admin/panels";
+import { AnnouncementsPanel, AuditPanel, ReportsPanel, RosterPanel } from "../../Components/admin/panels";
 import { adminService as svc } from "../../services/adminService";
 import { errorMessage } from "../../config/axiosConfig";
 
@@ -277,6 +277,7 @@ const NAV = [
   { key: "coordinators", label: "Coordinators", icon: UserCog },
   { key: "sections", label: "Sections", icon: Layers },
   { key: "enrollments", label: "Enrollments", icon: ClipboardList },
+  { key: "roster", label: "Roster import", icon: Upload },
   { key: "progression", label: "Progression", icon: TrendingUp },
   { key: "training", label: "Training requirements", icon: Target },
   { key: "reports", label: "Reports", icon: FileBarChart },
@@ -302,6 +303,7 @@ export default function AdminDashboard() {
       {tab === "coordinators" && <Coordinators sections={sections} year={year} goTo={setTab} />}
       {tab === "sections" && <Sections courses={courses || []} year={year} onChanged={refresh} goTo={setTab} />}
       {tab === "enrollments" && <Enrollments sections={sections} />}
+      {tab === "roster" && <RosterPanel svc={svc} sections={sections} />}
       {tab === "progression" && <Progression years={years || []} sections={sections} onChanged={refresh} />}
       {tab === "training" && <Training sections={sections} />}
       {tab === "reports" && <ReportsPanel svc={svc} sections={sections} courses={courses || []} />}

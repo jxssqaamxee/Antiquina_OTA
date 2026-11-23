@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { LayoutDashboard, Users, ClipboardCheck, FileBarChart, Megaphone, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, Users, ClipboardCheck, FileBarChart, Megaphone, ShieldCheck, Upload } from "lucide-react";
 import AdminShell, { StatCard } from "../../Components/admin/AdminShell";
 import { Btn, Card, Check, Chip, Field, Input, Notice, Row, Select, Table, statusTone, useAction } from "../../Components/admin/ui";
-import { AnnouncementsPanel, AuditPanel, ReportsPanel } from "../../Components/admin/panels";
+import { AnnouncementsPanel, AuditPanel, ReportsPanel, RosterPanel } from "../../Components/admin/panels";
 import { coordinatorService as svc } from "../../services/coordinatorService";
 import { errorMessage } from "../../config/axiosConfig";
 
@@ -127,6 +127,7 @@ function Trainees() {
 const NAV = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "trainees", label: "Trainees", icon: Users },
+  { key: "roster", label: "Import roster", icon: Upload },
   { key: "approvals", label: "Logbook approvals", icon: ClipboardCheck },
   { key: "reports", label: "Reports", icon: FileBarChart },
   { key: "announcements", label: "Announcements", icon: Megaphone },
@@ -145,6 +146,7 @@ export default function CoordinatorDashboard() {
       {error && <p role="alert" className="st-error">{error}</p>}
       {tab === "dashboard" && <div className="st-flex"><StatCard label="Assigned trainees" value={data?.trainees} /></div>}
       {tab === "trainees" && <Trainees />}
+      {tab === "roster" && <RosterPanel svc={svc} />}
       {tab === "approvals" && <Approvals />}
       {tab === "reports" && <ReportsPanel svc={svc} />}
       {tab === "announcements" && <AnnouncementsPanel svc={svc} fixedSection={data?.section || null} />}

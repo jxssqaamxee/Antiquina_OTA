@@ -26,6 +26,14 @@ export const adminService = {
   setHourException: (userId, hours, reason) => d(api.post(`/admin/trainees/${userId}/hour-exception`, { hours, reason })),
   establishments: () => d(api.get("/admin/establishments")),
   createEstablishment: (body) => d(api.post("/admin/establishments", body)),
+  rosterList: (section_id) => d(api.get("/admin/roster", { params: { section_id } })),
+  rosterImport: (file, { dryRun, assumeCourse, sectionId }) => {
+    const f = new FormData();
+    f.append("file", file); f.append("dry_run", dryRun ? "1" : "0"); f.append("assume_course", assumeCourse ? "1" : "0"); f.append("section_id", sectionId);
+    return d(api.post("/admin/roster/import", f));
+  },
+  rosterCsvUrl: (status, section_id) => `/api/admin/roster.csv?${new URLSearchParams({ section_id, ...(status ? { status } : {}) })}`,
+  rosterRemove: (studentId, section_id) => d(api.delete(`/admin/roster/${studentId}`, { params: { section_id } })),
   activity: () => d(api.get("/admin/activity")),
   activityFiltered: (action) => d(api.get("/admin/activity", { params: action ? { action } : {} })),
   report: (params) => d(api.get("/admin/reports/trainees", { params })),

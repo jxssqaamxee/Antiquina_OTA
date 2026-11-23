@@ -109,3 +109,115 @@ export function AuditPanel({ svc, title = "Audit log" }) {
     </Card>
   );
 }
+
+const ROSTER_RESULT = {
+  added: ["Added", "good"], updated: ["Placed", "good"], unchanged: ["Already listed", undefined],
+  wrong_course: ["Wrong course", "bad"], no_course: ["No course", "bad"], ambiguous_course: ["Course unclear", "bad"],
+  conflicting_course: ["Conflict in file", "bad"], other_section: ["Other section", "warn"], already_registered: ["Has account", "warn"],
+};
+const FROM = { row: "from the file", heading: "from a heading above", assumed: "assumed (section course)" };
+
+/**
+ * Roster = the Student IDs (with their course) that may register. The file is read first and checked
+ * (preview); nothing is saved until the person confirms. `sections` is only given to Admin (picks a section);
+ * a Coordinator always imports into their own section, decided by the server.
+ */
+export function RosterPanel({ svc, sections = [] }) {
+  const isAdmin = sections.length > 0;
+  const [sectionId, setSectionId] = useState("");
+  const [file, setFile] = useState(null);
+  const [assume, setAssume] = useState(false);
+  const [result, setResult] = useState(null);
+  const [list, setList] = useState(null);
+  const [error, setError] = useState("");
+  const [show, setShow] = useState("all");
+  const { busy, msg, run, setMsg } = useAction();
+  const ready = !isAdmin || !!sectionId;
+
+  const load = () => svc.rosterList(sectionId || undefined).then((d) => { setList(d); setError(""); }).catch((e) => { setList(null); setError(errorMessage(e)); });
+  useEffect(() => { if (ready) load(); else setList(null); }, [sectionId]); // eslint-disable-line
+
+  const opts = (dryRun) => ({ dryRun, assumeCourse: assume, sectionId });
+  const check = async () => { const r = await run(() => svc.rosterImport(file, opts(true))); if (r) setResult(r); };
+  const save = async () => {
+    const r = await run(() => svc.rosterImport(file, opts(false)));
+    if (!r) return;
+    setResult(r); setFile(null); load();
+    setMsg({ text: `Saved: ${r.counts.added} added, ${r.counts.updated} placed, ${r.counts.unchanged} already listed.` });
+  };
+  const remove = async (id) => {
+    if (!window.confirm(`Remove ${id} from the roster? They will no longer be able to register.`)) return;
+    if (await run(() => svc.rosterRemove(id, sectionId || undefined), "Removed.")) load();
+  };
+
+  const c = result?.counts;
+  const importable = c ? c.added + c.updated : 0;
+  return (
+    <>
+      <Card title="Import Student IDs and courses">
+        <p className="st-muted">
+          Upload the class list as Excel, Word, PDF (text), CSV, notes or any text file. Every Student ID (like 2021-2-04062) is read together with its
+          course (like “CIT BSIT”). Only students whose course matches {isAdmin ? "the section" : `your section${list?.section ? ` ${list.section.code}` : ""}`} are
+          accepted, and only they can register.
+        </p>
+        <Notice msg={msg} />{error && <p role="alert" className="st-error">{error}</p>}
+        <Row>
+          {isAdmin && (
+            <Field label="Section"><Select value={sectionId} onChange={(e) => { setSectionId(e.target.value); setResult(null); }}>
+              <option value="">Choose…</option>{sections.map((s) => <option key={s.id} value={s.id}>{s.code}</option>)}
+            </Select></Field>
+          )}
+          <Field label="File"><Input type="file" key={file ? "has" : "none"} onChange={(e) => { setFile(e.target.files?.[0] || null); setResult(null); setMsg(null); }} /></Field>
+        </Row>
+        <Row>
+          <Check checked={assume} onChange={(e) => { setAssume(e.target.checked); setResult(null); }}>My file has no course column — use the section’s course for every ID</Check>
+        </Row>
+        <Row>
+          <Btn kind="primary" disabled={busy || !file || !ready} onClick={check}>Check file</Btn>
+          {importable > 0 && <Btn kind="primary" disabled={busy} onClick={save}>{result.dry_run ? `Import ${importable} student${importable === 1 ? "" : "s"}` : "Import again"}</Btn>}
+        </Row>
+
+        {result && (
+          <>
+            <h3 className="st-h3">{result.dry_run ? "Preview — nothing saved yet" : "Result"} · {result.file} → {result.section}</h3>
+            <div className="st-flex st-mb">
+              <StatCard label="Will be added" value={c.added} /><StatCard label="Placed" value={c.updated} />
+              <StatCard label="Already listed" value={c.unchanged} /><StatCard label="Rejected" value={c.rejected} /><StatCard label="Skipped" value={c.skipped} />
+            </div>
+            <Table empty="Nothing to show." rows={result.rows} cols={[
+              { h: "Student ID", render: (r) => r.student_id },
+              { h: "Course read", render: (r) => r.course ? <>{r.course} <span className="st-muted">{FROM[r.course_from] || ""}</span></> : "—" },
+              { h: "Result", render: (r) => { const [t, tone] = ROSTER_RESULT[r.status] || [r.status]; return <Chip tone={tone}>{t}</Chip>; } },
+              { h: "Note", render: (r) => r.message },
+            ]} />
+            {result.truncated && <p className="st-muted">Only the first {result.rows.length} rows are shown; all of them were processed.</p>}
+          </>
+        )}
+      </Card>
+
+      {ready && list && (
+        <Card title={`Roster · ${list.section.code}`} actions={
+          <a href={svc.rosterCsvUrl(show === "all" ? "" : show, sectionId)} download className="st-link-reset"><Btn>Download CSV</Btn></a>
+        }>
+          <div className="st-flex st-mb">
+            <StatCard label="On the list" value={list.total} /><StatCard label="Registered" value={list.registered} /><StatCard label="Not registered yet" value={list.waiting} />
+          </div>
+          <Row>
+            <Field label="Show"><Select value={show} onChange={(e) => setShow(e.target.value)}>
+              <option value="all">All ({list.total})</option>
+              <option value="registered">Registered ({list.registered})</option>
+              <option value="waiting">Not registered yet ({list.waiting})</option>
+            </Select></Field>
+          </Row>
+          <Table empty="No students to show here." rows={list.students.filter((s) => show === "all" || (show === "registered") === s.registered)} cols={[
+            { h: "Student ID", render: (s) => s.student_id }, { h: "Course", render: (s) => s.course || "—" },
+            { h: "Status", render: (s) => s.registered ? <Chip tone="good">Registered{s.name ? ` · ${s.name}` : ""}</Chip> : <Chip tone="warn">Waiting to register</Chip> },
+            { h: "Email", render: (s) => s.email || "—" },
+            { h: "Registered on", render: (s) => s.registered_at ? new Date(s.registered_at).toLocaleDateString() : "—" },
+            { h: "", render: (s) => s.registered ? null : <Btn kind="danger" disabled={busy} onClick={() => remove(s.student_id)}>Remove</Btn> },
+          ]} />
+        </Card>
+      )}
+    </>
+  );
+}

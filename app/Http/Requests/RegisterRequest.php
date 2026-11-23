@@ -2,8 +2,10 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Course;
 use App\Support\Formats;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 
@@ -34,13 +36,28 @@ class RegisterRequest extends FormRequest
         ]);
     }
 
+    /** Roster check. One message for "not listed" and "wrong course" so the form never says which IDs exist. */
+    private function onRoster(): \Closure
+    {
+        return function (string $attribute, mixed $value, \Closure $fail) {
+            $row = DB::table('enrolled_students')->where('student_id', $value)->first();
+            $courseName = $row?->course_id ? Course::whereKey($row->course_id)->value('name') : null;
+
+            // A row without a course (made by the old ID-only import) is matched on the Student ID alone.
+            if (! $row || ($courseName !== null && $courseName !== (string) $this->input('course'))) {
+                $fail('We could not match this Student ID and course to your coordinator’s list. Check both, or contact your coordinator.');
+            }
+        };
+    }
+
     public function rules(): array
     {
         return [
             'student_id' => array_values(array_filter([
                 'required', 'string', 'regex:'.Formats::STUDENT_ID, 'unique:users,student_id',
-                // Only trainees on the enrolled list may register (OCC_ROSTER_ENFORCE=true).
-                config('occ.roster_enforce') ? Rule::exists('enrolled_students', 'student_id') : null,
+                // Only trainees on the coordinators' roster may register (OCC_ROSTER_ENFORCE=true): the Student ID
+                // must be on the list AND the chosen course must be the one the coordinator imported for it.
+                config('occ.roster_enforce') ? $this->onRoster() : null,
             ])),
             'first_name' => ['required', 'string', 'max:80', 'regex:'.Formats::NAME],
             'middle_name' => ['nullable', 'string', 'max:80', 'regex:'.Formats::NAME],
@@ -67,8 +84,7 @@ class RegisterRequest extends FormRequest
         return [
             'student_id.required' => 'Student ID is required.',
             'student_id.regex' => 'Student ID must follow the format YYYY-N-NNNNN, e.g. 2021-2-04062.',
-            'student_id.exists' => 'That Student ID is not on the enrolled list. Please contact your coordinator.',
-            'student_id.unique' => 'That Student ID is already registered. Sign in instead, or contact an administrator.',
+                        'student_id.unique' => 'That Student ID is already registered. Sign in instead, or contact an administrator.',
             'first_name.required' => 'First name is required.',
             'first_name.regex' => 'First name can only contain letters, spaces, hyphens and apostrophes.',
             'middle_name.regex' => 'Middle name can only contain letters, spaces, hyphens and apostrophes.',

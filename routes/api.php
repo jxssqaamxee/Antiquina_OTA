@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\PasswordResetController;
 use App\Http\Controllers\Api\PlacementController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ReportController;
+use App\Http\Controllers\Api\RosterController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\PushController;
 use Illuminate\Support\Facades\Route;
@@ -89,6 +90,11 @@ Route::middleware(['auth', 'session.fresh', 'active', 'email.verified'])->group(
     // Management areas. Each group is closed to every other role; later phases add the real modules.
     Route::prefix('admin')->middleware('role:admin')->group(function () {
         Route::get('/overview', [AdminDashboardController::class, 'show']);
+        // Roster: Student ID + course allowed to register, one list per section (see RosterController).
+        Route::get('/roster', [RosterController::class, 'index']);
+        Route::middleware('throttle:10,1')->get('/roster.csv', [RosterController::class, 'export']);
+        Route::middleware('throttle:10,1')->post('/roster/import', [RosterController::class, 'import']);
+        Route::delete('/roster/{studentId}', [RosterController::class, 'destroy']);
         // Phase 2: academic structure.
         Route::get('/courses', [AdminAcademicController::class, 'courses']);
         Route::get('/academic-years', [AdminAcademicController::class, 'years']);
@@ -126,6 +132,11 @@ Route::middleware(['auth', 'session.fresh', 'active', 'email.verified'])->group(
     });
     Route::prefix('coordinator')->middleware('role:coordinator')->group(function () {
         Route::get('/overview', [CoordinatorDashboardController::class, 'show']);
+        // Roster: Student ID + course allowed to register, one list per section (see RosterController).
+        Route::get('/roster', [RosterController::class, 'index']);
+        Route::middleware('throttle:10,1')->get('/roster.csv', [RosterController::class, 'export']);
+        Route::middleware('throttle:10,1')->post('/roster/import', [RosterController::class, 'import']);
+        Route::delete('/roster/{studentId}', [RosterController::class, 'destroy']);
         Route::get('/trainees', [CoordinatorDashboardController::class, 'trainees']);
         Route::get('/trainees/{id}', [CoordinatorDashboardController::class, 'trainee'])->whereNumber('id');
         Route::get('/activity', [CoordinatorDashboardController::class, 'activity']);
