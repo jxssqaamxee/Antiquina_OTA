@@ -1,13 +1,15 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
-import { Check as CheckIcon, ChevronDown, ChevronUp, KeyRound, LogOut, Menu, Palette, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
+import { Camera, Check as CheckIcon, ChevronDown, ChevronUp, KeyRound, Lock, LogOut, UserRound, Menu, Palette, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import api, { errorMessage } from "../../config/axiosConfig";
 import { useAppTheme } from "../../hooks/useAppTheme";
 import { REGULAR_THEMES, BLACK_THEMES, THEMES, setTheme, saveThemeToAccount } from "../../utils/theme";
 import AvatarPhoto from "../shared/AvatarPhoto";
+import PhotoUploadModal from "../shared/PhotoUploadModal";
+import { clean, filterNameInput, validateProfile } from "../../utils/validators";
 import logo from "../../assets/images/site-logo.png";
 import { Btn, Card, Field, Input, Notice, Row } from "./ui";
 import "../shared/AccountMenu.css";
@@ -24,7 +26,7 @@ const idLine = (user) => (user?.admin_id ? `${user?.role === "admin" ? "Admin" :
  * variant "top"  = the avatar pill in the top bar (drops down).
  * variant "side" = the account row pinned at the bottom of the sidebar (opens beside / above it).
  */
-function AdminAccountMenu({ variant = "top", collapsed = false, forced, onChangePassword, onSignOut, signingOut }) {
+function AdminAccountMenu({ variant = "top", collapsed = false, onEditProfile, onChangePassword, onSignOut, signingOut }) {
   const { user } = useAuth();
   const { theme } = useAppTheme();
   const [open, setOpen] = useState(false);
@@ -108,11 +110,12 @@ function AdminAccountMenu({ variant = "top", collapsed = false, forced, onChange
             <span className="am-head-text"><b>{user?.name || "Account"}</b><small>{idLine(user)}</small></span>
           </div>
 
-          {!forced && (
-            <button type="button" className="am-item" role="menuitem" onClick={() => { close(); onChangePassword(); }}>
-              <KeyRound size={17} /> Change password
-            </button>
-          )}
+          <button type="button" className="am-item" role="menuitem" onClick={() => { close(); onEditProfile(); }}>
+            <UserRound size={17} /> Edit profile
+          </button>
+          <button type="button" className="am-item" role="menuitem" onClick={() => { close(); onChangePassword(); }}>
+            <KeyRound size={17} /> Change password
+          </button>
 
           <button type="button" className="am-item" role="menuitem" aria-haspopup="true" aria-expanded={themesOpen}
             onClick={() => setThemesOpen((v) => !v)}>
@@ -147,10 +150,9 @@ function AdminAccountMenu({ variant = "top", collapsed = false, forced, onChange
 
 /**
  * Change-password form.
- * forced = the account still has the password from .env, so the page shows only this form until it is replaced.
- * Otherwise it opens as a dialog over the page (never inside the dashboard), closed by Cancel, Esc or a click outside.
+ * It opens as a dialog over the page (never inside the dashboard), closed by Cancel, Esc or a click outside.
  */
-function PasswordPanel({ forced, onDone }) {
+function PasswordPanel({ onDone }) {
   const { updateUser } = useAuth();
   const toast = useToast();
   const [f, setF] = useState({ current_password: "", password: "", password_confirmation: "" });
@@ -159,11 +161,10 @@ function PasswordPanel({ forced, onDone }) {
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
 
   useEffect(() => {
-    if (forced) return undefined;
     const onKey = (e) => { if (e.key === "Escape") onDone?.(); };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [forced, onDone]);
+  }, [onDone]);
 
   async function save() {
     setBusy(true); setMsg(null);
@@ -177,8 +178,7 @@ function PasswordPanel({ forced, onDone }) {
   }
 
   const form = (
-    <Card title={forced ? "Set your own password to continue" : "Change password"}>
-      {forced && <p className="st-muted" style={{ marginBottom: 14 }}>This account was created with a password from the server settings. Choose a new one now; the old one stops working.</p>}
+    <Card title="Change password">
       <Notice msg={msg} />
       <div className="st-grid st-pw-grid">
         <Field label="Current password"><Input type="password" autoComplete="current-password" autoFocus value={f.current_password} onChange={set("current_password")} /></Field>
@@ -188,15 +188,97 @@ function PasswordPanel({ forced, onDone }) {
       <p className="st-muted" style={{ marginTop: 12 }}>At least 8 characters with upper and lower case letters and a number.</p>
       <div className="st-flex" style={{ marginTop: 14 }}>
         <Btn kind="primary" disabled={busy || !f.current_password || !f.password} onClick={save}>{busy ? "Saving…" : "Save password"}</Btn>
-        {!forced && <Btn onClick={onDone} disabled={busy}>Cancel</Btn>}
+        <Btn onClick={onDone} disabled={busy}>Cancel</Btn>
       </div>
     </Card>
   );
 
-  if (forced) return form;
   return createPortal(
     <div className="st-modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onDone?.(); }}>
       <div className="st-modal" role="dialog" aria-modal="true" aria-label="Change password">{form}</div>
+    </div>,
+    document.body
+  );
+}
+
+/**
+ * Edit profile dialog (Admin / Coordinator): photo, first / middle / last name.
+ * The Admin ID and email were set when the account was created and stay locked.
+ */
+function ProfilePanel({ onDone }) {
+  const { user, updateUser } = useAuth();
+  const toast = useToast();
+  const [f, setF] = useState({ first_name: user?.first_name || "", middle_name: user?.middle_name || "", last_name: user?.last_name || "" });
+  const [errs, setErrs] = useState({});
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const [photoOpen, setPhotoOpen] = useState(false);
+  const set = (k) => (e) => { setF({ ...f, [k]: filterNameInput(e.target.value) }); setErrs({ ...errs, [k]: undefined }); };
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape" && !photoOpen) onDone?.(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onDone, photoOpen]);
+
+  async function uploadPhoto(file) {
+    const body = new FormData();
+    body.append("photo", file);
+    try {
+      const { data } = await api.post("/profile/photo", body);
+      await updateUser(data.user);
+      toast.success("Photo updated", { key: "photo-updated" });
+    } catch (e) { throw new Error(errorMessage(e, "The photo could not be saved. Please try again.")); }
+  }
+
+  async function removePhoto() {
+    setPhotoOpen(false);
+    try {
+      const { data } = await api.delete("/profile/photo");
+      await updateUser(data.user);
+      toast.success("Photo removed", { key: "photo-updated" });
+    } catch (e) { setMsg({ bad: true, text: errorMessage(e) }); }
+  }
+
+  async function save() {
+    const v = validateProfile(f);
+    if (Object.keys(v).length) { setErrs(v); return; }
+    setBusy(true); setMsg(null);
+    try {
+      const { data } = await api.put("/profile", { first_name: clean(f.first_name), middle_name: clean(f.middle_name) || null, last_name: clean(f.last_name) });
+      await updateUser(data.user);
+      toast.success("Profile saved.", { key: "admin-profile-saved" });
+      onDone?.();
+    } catch (e) { setMsg({ bad: true, text: errorMessage(e) }); } finally { setBusy(false); }
+  }
+
+  return createPortal(
+    <div className="st-modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy && !photoOpen) onDone?.(); }}>
+      <div className="st-modal" role="dialog" aria-modal="true" aria-label="Edit profile">
+        <Card title="Edit profile">
+          <Notice msg={msg} />
+          <div className="st-flex" style={{ marginBottom: 14, alignItems: "center", gap: 14 }}>
+            <button type="button" className="ds-avatar" style={{ width: 72, height: 72, position: "relative" }} onClick={() => setPhotoOpen(true)} aria-label="Change profile photo">
+              <AvatarPhoto user={user} />
+            </button>
+            <Btn onClick={() => setPhotoOpen(true)}><Camera size={15} /> {user?.has_profile_photo ? "Change photo" : "Add photo"}</Btn>
+          </div>
+          <div className="st-grid st-pw-grid">
+            <Field label="First name"><Input value={f.first_name} maxLength={80} autoComplete="given-name" onChange={set("first_name")} />{errs.first_name && <small className="st-muted" role="alert">{errs.first_name}</small>}</Field>
+            <Field label="Middle name"><Input value={f.middle_name} maxLength={80} autoComplete="additional-name" onChange={set("middle_name")} />{errs.middle_name && <small className="st-muted" role="alert">{errs.middle_name}</small>}</Field>
+            <Field label="Last name"><Input value={f.last_name} maxLength={80} autoComplete="family-name" onChange={set("last_name")} />{errs.last_name && <small className="st-muted" role="alert">{errs.last_name}</small>}</Field>
+          </div>
+          <p className="st-muted" style={{ marginTop: 12 }}>
+            <Lock size={12} aria-hidden="true" /> {user?.role === "admin" ? "Admin" : "Coordinator"} ID <b>{user?.admin_id}</b> and email <b>{user?.email}</b> were set when the account was created and can’t be changed here.
+          </p>
+          <div className="st-flex" style={{ marginTop: 14 }}>
+            <Btn kind="primary" disabled={busy} onClick={save}>{busy ? "Saving…" : "Save changes"}</Btn>
+            <Btn onClick={onDone} disabled={busy}>Cancel</Btn>
+          </div>
+        </Card>
+        <PhotoUploadModal open={photoOpen} onClose={() => setPhotoOpen(false)} onAccept={uploadPhoto} title="Profile photo"
+          onRemove={user?.has_profile_photo ? removePhoto : undefined} />
+      </div>
     </div>,
     document.body
   );
@@ -215,12 +297,12 @@ export default function AdminShell({ roleLabel, nav = [], active, onNavigate, ti
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const [showPw, setShowPw] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false); // slide-over on narrow screens
   const [isDesktop, setIsDesktop] = useState(() => (typeof window === "undefined" ? true : window.matchMedia(DESKTOP_QUERY).matches));
   const [collapsed, setCollapsed] = useState(() => {
     try { return window.localStorage.getItem(COLLAPSE_KEY) === "1"; } catch { return false; }
   });
-  const forced = user?.must_change_password === true;
   const railCollapsed = collapsed && isDesktop;
 
   useEffect(() => {
@@ -251,9 +333,9 @@ export default function AdminShell({ roleLabel, nav = [], active, onNavigate, ti
     try { await logout(); } finally { navigate("/admin-login", { replace: true }); }
   }
 
-  const go = (key) => { setShowPw(false); onNavigate?.(key); setSidebarOpen(false); };
+  const go = (key) => { setShowPw(false); setShowProfile(false); onNavigate?.(key); setSidebarOpen(false); };
   const activeItem = nav.find((n) => n.key === active);
-  const menuProps = { forced, signingOut: busy, onSignOut: signOut, onChangePassword: () => setShowPw(true) };
+  const menuProps = { signingOut: busy, onSignOut: signOut, onChangePassword: () => setShowPw(true), onEditProfile: () => setShowProfile(true) };
 
   return (
     <div className="ds-shell ds-layout">
@@ -273,7 +355,7 @@ export default function AdminShell({ roleLabel, nav = [], active, onNavigate, ti
 
         <div className="ds-nav-scroll">
           <ul className="ds-nav">
-            {!forced && nav.map(({ key, label, icon: Icon }) => {
+            {nav.map(({ key, label, icon: Icon }) => {
               const on = key === active;
               return (
                 <li key={key}>
@@ -315,8 +397,7 @@ export default function AdminShell({ roleLabel, nav = [], active, onNavigate, ti
         </header>
 
         <main className="ds-main" id="main-content" tabIndex={-1}>
-          {forced ? <PasswordPanel forced /> : (
-            <>
+          <>
               {(title || subtitle || actions) && (
                 <div className="ds-header">
                   <div className="ds-header-text">
@@ -328,9 +409,9 @@ export default function AdminShell({ roleLabel, nav = [], active, onNavigate, ti
                 </div>
               )}
               {showPw && <PasswordPanel onDone={() => setShowPw(false)} />}
+              {showProfile && <ProfilePanel onDone={() => setShowProfile(false)} />}
               {children}
-            </>
-          )}
+          </>
         </main>
 
         <footer className="ds-footer">

@@ -40,7 +40,7 @@ Route::middleware('throttle:30,1')->post('/password/reset-token/check', [Passwor
 
 // Signed in, but the email may still be unverified: /me, logout and the /email/* calls stay
 // open for unverified accounts (see EnsureEmailVerified); everything else needs a verified email.
-Route::middleware(['auth', 'session.fresh', 'active', 'email.verified'])->group(function () {
+Route::middleware(['auth', 'session.fresh', 'active', 'email.verified', 'setup.complete'])->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     // Own profile photo: only the signed-in owner's session can open it (no shareable links).
     Route::get('/me/photo', [MediaController::class, 'mine']);
@@ -64,10 +64,11 @@ Route::middleware(['auth', 'session.fresh', 'active', 'email.verified'])->group(
         Route::middleware('throttle:3,1')->post('/push/test', [PushController::class, 'test']);
     });
 
-    Route::middleware('role:trainee')->group(function () {
-        Route::put('/profile', [ProfileController::class, 'update']);
-        Route::put('/profile/preferences', [ProfileController::class, 'preferences']);
-    });
+    // Every role edits its own name and photo (Admin / Coordinator keep their admin ID and email locked).
+    Route::put('/profile', [ProfileController::class, 'update']);
+    Route::put('/profile/preferences', [ProfileController::class, 'preferences']);
+    // First-login setup for an Admin / Coordinator account (photo, name, own password).
+    Route::middleware(['role:admin,coordinator', 'throttle:10,1'])->post('/profile/complete-setup', [ProfileController::class, 'completeSetup']);
     Route::put('/profile/password', [ProfileController::class, 'password']);
     Route::middleware('throttle:10,1')->group(function () {
         Route::post('/profile/photo', [ProfileController::class, 'photo']);

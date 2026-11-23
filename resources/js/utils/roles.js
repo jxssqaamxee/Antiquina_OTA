@@ -7,15 +7,19 @@ export const ROLES = { admin: "admin", coordinator: "coordinator", trainee: "tra
 export const roleOf = (user) => (Object.values(ROLES).includes(user?.role) ? user.role : ROLES.trainee);
 export const isTrainee = (user) => roleOf(user) === ROLES.trainee;
 export const hasAdminAccess = (user) => roleOf(user) !== ROLES.trainee;
+/** An Admin / Coordinator account still on the password it was created with: it must finish the first-login setup. */
+export const needsSetup = (user) => hasAdminAccess(user) && user?.must_change_password === true;
+export const SETUP_PATH = "/setup-account";
 
 /** Paths of the management areas. The phone-only gate lets these open on a desktop (see mobileOnly.js). */
-export const ADMIN_PATH_PREFIXES = ["/admin", "/coordinator", "/admin-login"];
+export const ADMIN_PATH_PREFIXES = ["/admin", "/coordinator", "/admin-login", "/setup-account"];
 export const isAdminPath = (path) => ADMIN_PATH_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`));
 
 /** Where a signed-in person belongs. */
 export function homePath(user) {
   if (!user) return "/login";
   if (user.email_verified === false) return "/verify-email";
+  if (needsSetup(user)) return SETUP_PATH;
   switch (roleOf(user)) {
     case ROLES.admin: return "/admin";
     case ROLES.coordinator: return "/coordinator";

@@ -17,6 +17,7 @@ const VerifyEmailPage = lazy(loaders.verify);
 const AdminLoginPage = lazy(loaders.adminLogin);
 const AdminDashboard = lazy(loaders.admin);
 const CoordinatorDashboard = lazy(loaders.coordinator);
+const SetupAccountPage = lazy(loaders.setup);
 
 export const publicRoutes = [{ path: "/", component: SplashPage }];
 export const guestRoutes = [
@@ -43,4 +44,8 @@ export const adminRoutes = [
 ];
 export const coordinatorRoutes = [
   { path: "/coordinator", component: CoordinatorDashboard },
+];
+// First sign-in of an Admin / Coordinator account created with a password someone else knows.
+export const setupRoutes = [
+  { path: "/setup-account", component: SetupAccountPage },
 ];

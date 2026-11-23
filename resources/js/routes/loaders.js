@@ -11,6 +11,7 @@ export const loaders = {
   adminLogin: () => import("../Pages/Auth/AdminLoginPage"),
   admin: () => import("../Pages/Admin/AdminDashboard"),
   coordinator: () => import("../Pages/Coordinator/CoordinatorDashboard"),
+  setup: () => import("../Pages/Setup/SetupAccountPage"),
 };
 
 /** Starts downloading the page the person is about to be sent to, so no loading flash appears on arrival. */

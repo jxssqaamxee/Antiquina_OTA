@@ -288,3 +288,10 @@
 .pf-form .lg-submit { margin-top: 12px; }
 .pf-form .lg-banner { margin-top: 8px; }
 .pf-form-title { margin: 0 0 2px; }
+
+/* Read-only value (Admin ID, email) on the first-login setup and the admin profile dialog. */
+.lg-locked {
+  display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 4px 2px; font-size: 15px; font-weight: 650;
+  color: var(--ink-soft, inherit); overflow-wrap: anywhere;
+}
+.lg-locked svg { flex: none; opacity: .7; }

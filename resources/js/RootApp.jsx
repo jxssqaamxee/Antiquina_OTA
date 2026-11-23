@@ -9,7 +9,7 @@ import Splash from "./Components/shared/Splash";
 import OfflineNotice from "./Components/shared/OfflineNotice";
 import UpdateNotice from "./Components/shared/UpdateNotice";
 import InstallPrompt from "./Components/shared/InstallPrompt";
-import { publicRoutes, guestRoutes, unverifiedRoutes, protectedRoutes, adminRoutes, coordinatorRoutes } from "./routes/index";
+import { publicRoutes, guestRoutes, unverifiedRoutes, protectedRoutes, adminRoutes, coordinatorRoutes, setupRoutes } from "./routes/index";
 
 export default function App() {
   return (
@@ -37,6 +37,9 @@ export default function App() {
               ))}
               {coordinatorRoutes.map(({ path, component: C }) => (
                 <Route key={path} path={path} element={<ProtectedRoute roles={["coordinator"]}><C /></ProtectedRoute>} />
+              ))}
+              {setupRoutes.map(({ path, component: C }) => (
+                <Route key={path} path={path} element={<ProtectedRoute roles={["admin", "coordinator"]}><C /></ProtectedRoute>} />
               ))}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

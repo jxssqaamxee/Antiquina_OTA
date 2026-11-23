@@ -47,6 +47,7 @@ class AdminCoordinatorController extends Controller
             'role' => User::ROLE_COORDINATOR, 'admin_id' => strtoupper($data['admin_id']), 'student_id' => null, 'course' => null,
             'first_name' => Formats::titleCase($data['first_name']), 'last_name' => Formats::titleCase($data['last_name']),
             'email' => strtolower($data['email']), 'password' => $data['password'], 'email_verified_at' => now(),
+            'is_active' => true, 'must_change_password' => true, // the coordinator sets their own photo, name and password at first sign-in
         ])->save();
         $log->record($request->user(), 'coordinator.created', 'coordinator', $u->id);
 

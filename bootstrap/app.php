@@ -32,6 +32,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'session.fresh' => \App\Http\Middleware\EnforceSessionLifetime::class,
             'role' => \App\Http\Middleware\EnsureRole::class,
             'active' => \App\Http\Middleware\EnsureActiveAccount::class,
+            'setup.complete' => \App\Http\Middleware\EnsureProfileSetupComplete::class,
         ]);
 
         // Sign-in is a server-side session (HttpOnly cookie), so /api gets the same cookie,
