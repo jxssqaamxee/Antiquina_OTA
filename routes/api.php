@@ -95,6 +95,7 @@ Route::middleware(['auth', 'session.fresh', 'active', 'email.verified', 'setup.c
         Route::get('/roster', [RosterController::class, 'index']);
         Route::middleware('throttle:10,1')->get('/roster.csv', [RosterController::class, 'export']);
         Route::middleware('throttle:10,1')->post('/roster/import', [RosterController::class, 'import']);
+        Route::middleware('throttle:30,1')->post('/roster/add', [RosterController::class, 'add']);
         Route::delete('/roster/{studentId}', [RosterController::class, 'destroy']);
         // Phase 2: academic structure.
         Route::get('/courses', [AdminAcademicController::class, 'courses']);
@@ -137,6 +138,7 @@ Route::middleware(['auth', 'session.fresh', 'active', 'email.verified', 'setup.c
         Route::get('/roster', [RosterController::class, 'index']);
         Route::middleware('throttle:10,1')->get('/roster.csv', [RosterController::class, 'export']);
         Route::middleware('throttle:10,1')->post('/roster/import', [RosterController::class, 'import']);
+        Route::middleware('throttle:30,1')->post('/roster/add', [RosterController::class, 'add']);
         Route::delete('/roster/{studentId}', [RosterController::class, 'destroy']);
         Route::get('/trainees', [CoordinatorDashboardController::class, 'trainees']);
         Route::get('/trainees/{id}', [CoordinatorDashboardController::class, 'trainee'])->whereNumber('id');

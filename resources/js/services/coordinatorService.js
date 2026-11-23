@@ -26,6 +26,7 @@ export const coordinatorService = {
   endPlacement: (id) => d(api.delete(`/coordinator/placements/${id}`)),
   rosterList: () => d(api.get("/coordinator/roster")),
   rosterImport: (file, { dryRun, assumeCourse }) => d(api.post("/coordinator/roster/import", rosterForm(file, { dryRun, assumeCourse }))),
+  rosterAdd: (student_ids) => d(api.post("/coordinator/roster/add", { student_ids })),
   rosterCsvUrl: (status) => `/api/coordinator/roster.csv${status ? `?status=${status}` : ""}`,
   rosterRemove: (studentId) => d(api.delete(`/coordinator/roster/${studentId}`)),
   activity: () => d(api.get("/coordinator/activity")),

@@ -41,7 +41,7 @@ class Section extends Model
     public function toClient(): array
     {
         return [
-            'id' => $this->id, 'code' => $this->code(), 'course_id' => $this->course_id,
+            'id' => $this->id, 'code' => $this->code(), 'course_id' => $this->course_id, 'course' => $this->course?->code,
             'academic_year_id' => $this->academic_year_id, 'year_level' => $this->year_level,
             'label' => $this->label, 'is_active' => $this->is_active,
         ];

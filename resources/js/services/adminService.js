@@ -32,6 +32,7 @@ export const adminService = {
     f.append("file", file); f.append("dry_run", dryRun ? "1" : "0"); f.append("assume_course", assumeCourse ? "1" : "0"); f.append("section_id", sectionId);
     return d(api.post("/admin/roster/import", f));
   },
+  rosterAdd: (student_ids, section_id) => d(api.post("/admin/roster/add", { student_ids, section_id })),
   rosterCsvUrl: (status, section_id) => `/api/admin/roster.csv?${new URLSearchParams({ section_id, ...(status ? { status } : {}) })}`,
   rosterRemove: (studentId, section_id) => d(api.delete(`/admin/roster/${studentId}`, { params: { section_id } })),
   activity: () => d(api.get("/admin/activity")),

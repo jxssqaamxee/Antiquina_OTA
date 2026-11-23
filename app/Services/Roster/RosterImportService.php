@@ -5,6 +5,7 @@ namespace App\Services\Roster;
 use App\Models\Section;
 use App\Models\User;
 use App\Services\Academic\ActivityLogService;
+use App\Support\Formats;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -16,6 +17,7 @@ use Illuminate\Support\Facades\DB;
 class RosterImportService
 {
     public const MAX_SHOWN = 1000;
+    public const MAX_MANUAL = 200;
 
     public function __construct(
         private RosterFileReader $reader,
@@ -56,11 +58,50 @@ class RosterImportService
             }
         }
 
+        return $this->commit($actor, $section, $byId, [], $dryRun, $fileLabel);
+    }
+
+    /**
+     * Adds Student IDs typed by hand (separated by spaces, commas or new lines). The course is NOT typed:
+     * it is always the section's own course, so a coordinator can only add students of their section.
+     * Same checks and same save path as a file import.
+     *
+     * @throws RosterReadException
+     */
+    public function addManual(User $actor, Section $section, string $text): array
+    {
+        $section->loadMissing('course');
+        $tokens = preg_split('/[\s,;]+/', trim($text), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        if ($tokens === []) {
+            throw new RosterReadException('Type at least one Student ID (like 2021-2-04062).');
+        }
+        if (count($tokens) > self::MAX_MANUAL) {
+            throw new RosterReadException('Add up to '.self::MAX_MANUAL.' Student IDs at a time. For a longer list, import a file.');
+        }
+
+        $byId = [];
+        $invalid = [];
+        foreach ($tokens as $i => $token) {
+            if (preg_match(Formats::STUDENT_ID, $token) !== 1) {
+                $invalid[$token] ??= ['student_id' => mb_substr($token, 0, 40), 'line' => $i + 1, 'status' => 'invalid_id',
+                    'message' => 'Not a valid Student ID. Use the format 2021-2-04062.', 'course' => null, 'course_from' => null];
+
+                continue;
+            }
+            $byId[$token] ??= ['student_id' => $token, 'line' => $i + 1, 'course' => $section->course, 'status' => CourseResolver::FOUND, 'source' => 'manual'];
+        }
+
+        return $this->commit($actor, $section, $byId, array_values($invalid), false, 'typed by hand');
+    }
+
+    /** Checks every ID against the roster and (unless a dry run) saves the ones that pass. */
+    private function commit(User $actor, Section $section, array $byId, array $preRejected, bool $dryRun, string $fileLabel): array
+    {
         $existing = DB::table('enrolled_students')->whereIn('student_id', array_keys($byId))->get()->keyBy('student_id');
         $registered = User::whereIn('student_id', array_keys($byId))->pluck('student_id')->flip();
         $otherSections = Section::with('course')->whereIn('id', $existing->pluck('section_id')->filter()->unique())->get()->keyBy('id');
 
-        $results = [];
+        $results = $preRejected;
         $accept = [];
         foreach ($byId as $id => $row) {
             [$state, $message] = $this->verdict($section, $row, $existing[$id] ?? null, isset($registered[$id]), $otherSections);

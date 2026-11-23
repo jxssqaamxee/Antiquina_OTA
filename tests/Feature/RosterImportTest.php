@@ -318,4 +318,61 @@ class RosterImportTest extends TestCase
         $this->assertStringNotContainsString('2021-2-00701', $waiting);
         $this->signedIn($this->admin)->get('/api/admin/roster.csv?section_id='.$this->b->id)->assertOk();
     }
+
+    // ---- Typed by hand: the course is always the section's own ----
+
+    public function test_coordinator_types_student_ids_and_they_join_their_own_section(): void
+    {
+        $r = $this->signedIn($this->coordA)->postJson('/api/coordinator/roster/add', [
+            'student_ids' => "2021-2-00501, 2021-2-00502\n2021-2-00501 bad-id 2021-2-0050",
+        ])->assertOk();
+
+        $r->assertJsonPath('counts.added', 2)->assertJsonPath('counts.rejected', 2)->assertJsonPath('dry_run', false);
+        $this->assertDatabaseHas('enrolled_students', [
+            'student_id' => '2021-2-00501', 'section_id' => $this->a->id, 'course_id' => $this->a->course_id, 'imported_by' => $this->coordA->id,
+        ]);
+        $this->assertDatabaseHas('enrolled_students', ['student_id' => '2021-2-00502', 'section_id' => $this->a->id]);
+        $this->assertDatabaseCount('enrolled_students', 2);
+        $this->assertSame(['invalid_id'], collect($r->json('rows'))->pluck('status')->unique()->values()->diff(['added'])->values()->all());
+        $this->assertDatabaseHas('activity_logs', ['action' => 'roster.imported', 'section_id' => $this->a->id]);
+    }
+
+    public function test_typed_ids_follow_the_same_rules_as_a_file(): void
+    {
+        $this->signedIn($this->coordA)->postJson('/api/coordinator/roster/add', ['student_ids' => '2021-2-00601'])->assertOk()->assertJsonPath('counts.added', 1);
+        $this->signedIn($this->coordA)->postJson('/api/coordinator/roster/add', ['student_ids' => '2021-2-00601'])->assertOk()->assertJsonPath('counts.unchanged', 1);
+
+        // Already on 4A: 4B cannot take it over.
+        $this->signedIn($this->coordB)->postJson('/api/coordinator/roster/add', ['student_ids' => '2021-2-00601'])
+            ->assertOk()->assertJsonPath('counts.skipped', 1)->assertJsonPath('counts.added', 0);
+        $this->assertDatabaseHas('enrolled_students', ['student_id' => '2021-2-00601', 'section_id' => $this->a->id]);
+
+        // A student who already has an account is not added.
+        User::factory()->create(['student_id' => '2021-2-00602']);
+        $this->signedIn($this->coordA)->postJson('/api/coordinator/roster/add', ['student_ids' => '2021-2-00602'])->assertOk()->assertJsonPath('counts.skipped', 1);
+        $this->assertDatabaseMissing('enrolled_students', ['student_id' => '2021-2-00602']);
+    }
+
+    public function test_a_coordinator_cannot_target_another_section_and_the_admin_must_pick_one(): void
+    {
+        $this->signedIn($this->coordA)->postJson('/api/coordinator/roster/add', ['student_ids' => '2021-2-00701', 'section_id' => $this->b->id])->assertOk();
+        $this->assertDatabaseHas('enrolled_students', ['student_id' => '2021-2-00701', 'section_id' => $this->a->id]);
+
+        $this->signedIn($this->admin)->postJson('/api/admin/roster/add', ['student_ids' => '2021-2-00702'])->assertStatus(422)->assertJsonValidationErrors('section_id');
+        $this->signedIn($this->admin)->postJson('/api/admin/roster/add', ['student_ids' => '2021-2-00702', 'section_id' => $this->b->id])->assertOk()->assertJsonPath('counts.added', 1);
+        $this->assertDatabaseHas('enrolled_students', ['student_id' => '2021-2-00702', 'section_id' => $this->b->id]);
+    }
+
+    public function test_typed_input_limits_and_access(): void
+    {
+        $this->signedIn($this->coordA)->postJson('/api/coordinator/roster/add', ['student_ids' => ''])->assertStatus(422)->assertJsonValidationErrors('student_ids');
+        $this->signedIn($this->coordA)->postJson('/api/coordinator/roster/add', ['student_ids' => ' , ; '])->assertStatus(422)->assertJsonValidationErrors('student_ids');
+
+        $many = implode(' ', array_map(fn ($i) => sprintf('2021-2-%05d', 10000 + $i), range(1, 201)));
+        $this->signedIn($this->coordA)->postJson('/api/coordinator/roster/add', ['student_ids' => $many])->assertStatus(422)->assertJsonValidationErrors('student_ids');
+        $this->assertDatabaseCount('enrolled_students', 0);
+
+        $this->signedIn(User::factory()->create())->postJson('/api/coordinator/roster/add', ['student_ids' => '2021-2-00801'])->assertForbidden();
+        $this->signedIn($this->coordA)->postJson('/api/admin/roster/add', ['student_ids' => '2021-2-00801', 'section_id' => $this->a->id])->assertForbidden();
+    }
 }

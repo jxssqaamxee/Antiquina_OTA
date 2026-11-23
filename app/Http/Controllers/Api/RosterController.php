@@ -67,6 +67,23 @@ class RosterController extends Controller
         return response()->json($result);
     }
 
+    /** Adds Student IDs typed by hand. The course is always the section's course (never typed). */
+    public function add(Request $request, RosterImportService $svc): JsonResponse
+    {
+        $request->validate(['student_ids' => ['required', 'string', 'max:5000']], [
+            'student_ids.required' => 'Type at least one Student ID (like 2021-2-04062).',
+        ]);
+        $section = $this->section($request);
+
+        try {
+            $result = $svc->addManual($request->user(), $section, (string) $request->input('student_ids'));
+        } catch (RosterReadException $e) {
+            throw ValidationException::withMessages(['student_ids' => $e->getMessage()]);
+        }
+
+        return response()->json($result);
+    }
+
     /** @return \Illuminate\Support\Collection<int,array> the section's roster rows with registration status */
     private function rows(Section $section)
     {

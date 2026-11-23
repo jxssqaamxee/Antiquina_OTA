@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { Btn, Card, Check, Chip, Field, Input, Notice, Row, Select, Table, Textarea, useAction } from "./ui";
+import { Lock, Upload } from "lucide-react";
+import { Btn, Card, Check, Chip, Field, Input, Notice, Row, Select, Table, Tabs, Textarea, useAction } from "./ui";
 import { StatCard } from "./AdminShell";
 import { errorMessage } from "../../config/axiosConfig";
 
@@ -114,19 +115,27 @@ const ROSTER_RESULT = {
   added: ["Added", "good"], updated: ["Placed", "good"], unchanged: ["Already listed", undefined],
   wrong_course: ["Wrong course", "bad"], no_course: ["No course", "bad"], ambiguous_course: ["Course unclear", "bad"],
   conflicting_course: ["Conflict in file", "bad"], other_section: ["Other section", "warn"], already_registered: ["Has account", "warn"],
+  invalid_id: ["Invalid ID", "bad"],
 };
-const FROM = { row: "from the file", heading: "from a heading above", assumed: "assumed (section course)" };
+const FROM = { row: "from the file", heading: "from a heading above", assumed: "assumed (section course)", manual: "section course" };
+const ID_FORMAT = /^\d{4}-\d-\d{5}$/;
+const MAX_TYPED = 200;
+const fileSize = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 
 /**
- * Roster = the Student IDs (with their course) that may register. The file is read first and checked
- * (preview); nothing is saved until the person confirms. `sections` is only given to Admin (picks a section);
- * a Coordinator always imports into their own section, decided by the server.
+ * Roster = the Student IDs (with their course) that may register. Two ways in:
+ *   - Upload a file: it is read and checked first (preview); nothing is saved until the person confirms.
+ *   - Type Student IDs: the course is never typed, it is always the section's own course.
+ * `sections` is only given to Admin (picks a section); a Coordinator always works on their own section,
+ * decided by the server.
  */
 export function RosterPanel({ svc, sections = [] }) {
   const isAdmin = sections.length > 0;
   const [sectionId, setSectionId] = useState("");
+  const [mode, setMode] = useState("file");
   const [file, setFile] = useState(null);
   const [assume, setAssume] = useState(false);
+  const [typed, setTyped] = useState("");
   const [result, setResult] = useState(null);
   const [list, setList] = useState(null);
   const [error, setError] = useState("");
@@ -137,13 +146,29 @@ export function RosterPanel({ svc, sections = [] }) {
   const load = () => svc.rosterList(sectionId || undefined).then((d) => { setList(d); setError(""); }).catch((e) => { setList(null); setError(errorMessage(e)); });
   useEffect(() => { if (ready) load(); else setList(null); }, [sectionId]); // eslint-disable-line
 
+  const section = list?.section || sections.find((s) => String(s.id) === String(sectionId)) || null;
+  const sectionCode = section?.code || "";
+  const courseCode = section?.course || sectionCode.split("-")[0] || "";
+
+  const tokens = typed.split(/[\s,;]+/).filter(Boolean);
+  const validTyped = [...new Set(tokens.filter((t) => ID_FORMAT.test(t)))];
+  const badTyped = tokens.filter((t) => !ID_FORMAT.test(t));
+
   const opts = (dryRun) => ({ dryRun, assumeCourse: assume, sectionId });
+  const switchMode = (m) => { setMode(m); setResult(null); setMsg(null); };
   const check = async () => { const r = await run(() => svc.rosterImport(file, opts(true))); if (r) setResult(r); };
   const save = async () => {
     const r = await run(() => svc.rosterImport(file, opts(false)));
     if (!r) return;
     setResult(r); setFile(null); load();
     setMsg({ text: `Saved: ${r.counts.added} added, ${r.counts.updated} placed, ${r.counts.unchanged} already listed.` });
+  };
+  const addTyped = async () => {
+    const r = await run(() => svc.rosterAdd(typed, sectionId || undefined));
+    if (!r) return;
+    setResult(r); load();
+    setTyped(r.rows.filter((x) => !["added", "updated", "unchanged"].includes(x.status)).map((x) => x.student_id).join("\n")); // keep only what still needs fixing
+    setMsg({ text: `Saved: ${r.counts.added} added, ${r.counts.unchanged} already listed${r.counts.rejected + r.counts.skipped ? `, ${r.counts.rejected + r.counts.skipped} need attention (see below)` : ""}.` });
   };
   const remove = async (id) => {
     if (!window.confirm(`Remove ${id} from the roster? They will no longer be able to register.`)) return;
@@ -154,34 +179,86 @@ export function RosterPanel({ svc, sections = [] }) {
   const importable = c ? c.added + c.updated : 0;
   return (
     <>
-      <Card title="Import Student IDs and courses">
-        <p className="st-muted">
-          Upload the class list as Excel, Word, PDF (text), CSV, notes or any text file. Every Student ID (like 2021-2-04062) is read together with its
-          course (like “CIT BSIT”). Only students whose course matches {isAdmin ? "the section" : `your section${list?.section ? ` ${list.section.code}` : ""}`} are
-          accepted, and only they can register.
+      <Card title="Add students to the roster">
+        <p className="st-muted ro-intro">
+          Only students on the roster can register, and only for {isAdmin ? "the section you choose" : "your section"}. Upload the class list, or type the Student IDs yourself.
         </p>
-        <Notice msg={msg} />{error && <p role="alert" className="st-error">{error}</p>}
-        <Row>
+
+        <div className="ro-meta">
           {isAdmin && (
             <Field label="Section"><Select value={sectionId} onChange={(e) => { setSectionId(e.target.value); setResult(null); }}>
-              <option value="">Choose…</option>{sections.map((s) => <option key={s.id} value={s.id}>{s.code}</option>)}
+              <option value="">Choose a section…</option>{sections.map((s) => <option key={s.id} value={s.id}>{s.code}</option>)}
             </Select></Field>
           )}
-          <Field label="File"><Input type="file" key={file ? "has" : "none"} onChange={(e) => { setFile(e.target.files?.[0] || null); setResult(null); setMsg(null); }} /></Field>
-        </Row>
-        <Row>
-          <Check checked={assume} onChange={(e) => { setAssume(e.target.checked); setResult(null); }}>My file has no course column — use the section’s course for every ID</Check>
-        </Row>
-        <Row>
-          <Btn kind="primary" disabled={busy || !file || !ready} onClick={check}>Check file</Btn>
-          {importable > 0 && <Btn kind="primary" disabled={busy} onClick={save}>{result.dry_run ? `Import ${importable} student${importable === 1 ? "" : "s"}` : "Import again"}</Btn>}
-        </Row>
+          {ready && sectionCode && (
+            <>
+              {!isAdmin && <div className="ro-fact"><span>Section</span><b>{sectionCode}</b></div>}
+              <div className="ro-fact"><span>Course</span><b>{courseCode || "—"}</b></div>
+            </>
+          )}
+        </div>
+
+        <Tabs value={mode} onChange={switchMode} tabs={[["file", "Upload a file"], ["type", "Type Student IDs"]]} />
+        <Notice msg={msg} />{error && <p role="alert" className="st-error">{error}</p>}
+
+        {mode === "file" && (
+          <div className="ro-pane">
+            <p className="st-muted">
+              Excel, Word, PDF (text), CSV, notes or any text file. Every Student ID (like 2021-2-04062) is read together with its course
+              (like “CIT BSIT”). Only students whose course matches {courseCode ? <b>{courseCode}</b> : "the section"} are accepted.
+            </p>
+            <div className="ro-field">
+              <span className="ro-label">Class list file</span>
+              <label className={`ro-drop${file ? " has-file" : ""}`}>
+                <input type="file" key={file ? "has" : "none"} onChange={(e) => { setFile(e.target.files?.[0] || null); setResult(null); setMsg(null); }} />
+                <span className="ro-drop-icon" aria-hidden="true"><Upload size={20} /></span>
+                <span className="ro-drop-text">
+                  {file ? <><b>{file.name}</b><small>{fileSize(file.size)} · click to choose a different file</small></>
+                    : <><b>Choose a file</b><small>Excel, Word, PDF, CSV or text · up to 10 MB</small></>}
+                </span>
+              </label>
+            </div>
+            <label className="ro-option">
+              <input type="checkbox" checked={assume} onChange={(e) => { setAssume(e.target.checked); setResult(null); }} />
+              <span><b>My file has no course column</b><small>Use {courseCode ? `${courseCode}` : "the section’s course"} for every Student ID in it.</small></span>
+            </label>
+            <div className="ro-actions">
+              <Btn kind="primary" disabled={busy || !file || !ready} onClick={check}>{busy ? "Checking…" : "Check file"}</Btn>
+              {importable > 0 && <Btn kind="primary" disabled={busy} onClick={save}>{result.dry_run ? `Import ${importable} student${importable === 1 ? "" : "s"}` : "Import again"}</Btn>}
+            </div>
+          </div>
+        )}
+
+        {mode === "type" && (
+          <div className="ro-pane">
+            <p className="st-muted">Type or paste one or more Student IDs, separated by spaces, commas or new lines. They are added to {sectionCode ? <b>{sectionCode}</b> : "the section"} right away.</p>
+            <div className="ro-field">
+              <label className="ro-label" htmlFor="ro-ids">Student IDs</label>
+              <Textarea id="ro-ids" rows={4} value={typed} placeholder={"2021-2-04062\n2021-2-04063, 2021-2-04064"} spellCheck={false} autoComplete="off"
+                onChange={(e) => { setTyped(e.target.value); setResult(null); setMsg(null); }} />
+              <small className={`ro-hint${badTyped.length ? " is-bad" : ""}`}>
+                {!tokens.length ? `Format 2021-2-04062 · up to ${MAX_TYPED} at a time`
+                  : <>{validTyped.length} valid ID{validTyped.length === 1 ? "" : "s"}{badTyped.length > 0 && <> · {badTyped.length} not in the format 2021-2-04062 (<code>{badTyped[0]}</code>{badTyped.length > 1 ? "…" : ""})</>}</>}
+              </small>
+            </div>
+            <div className="ro-field">
+              <span className="ro-label">Course</span>
+              <div className="ro-locked"><Lock size={14} aria-hidden="true" /><b>{courseCode || "—"}</b><small>{isAdmin ? "set by the section you chose" : "set by your section"}, so it can’t be typed</small></div>
+            </div>
+            <div className="ro-actions">
+              <Btn kind="primary" disabled={busy || !ready || !validTyped.length || tokens.length > MAX_TYPED} onClick={addTyped}>
+                {busy ? "Adding…" : `Add ${validTyped.length || ""} student${validTyped.length === 1 ? "" : "s"}`.replace("  ", " ")}
+              </Btn>
+              {typed && <Btn disabled={busy} onClick={() => { setTyped(""); setResult(null); }}>Clear</Btn>}
+            </div>
+          </div>
+        )}
 
         {result && (
           <>
             <h3 className="st-h3">{result.dry_run ? "Preview — nothing saved yet" : "Result"} · {result.file} → {result.section}</h3>
             <div className="st-flex st-mb">
-              <StatCard label="Will be added" value={c.added} /><StatCard label="Placed" value={c.updated} />
+              <StatCard label={result.dry_run ? "Will be added" : "Added"} value={c.added} /><StatCard label="Placed" value={c.updated} />
               <StatCard label="Already listed" value={c.unchanged} /><StatCard label="Rejected" value={c.rejected} /><StatCard label="Skipped" value={c.skipped} />
             </div>
             <Table empty="Nothing to show." rows={result.rows} cols={[
