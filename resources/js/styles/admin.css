@@ -30,10 +30,8 @@ html, body, #app { height: 100%; }
 .ds-sidebar.open { transform: translateX(0); }
 .ds-sidebar-backdrop { position: fixed; inset: 0; z-index: 39; background: rgba(2, 6, 23, .45); opacity: 0; pointer-events: none; transition: opacity .25s ease; }
 .ds-sidebar-backdrop.open { opacity: 1; pointer-events: auto; }
-.ds-sidebar-close { display: none; position: absolute; top: 12px; right: 12px; }
 @media (max-width: 959px) {
   .ds-sidebar { width: min(84vw, 300px); }
-  .ds-sidebar-close { display: inline-flex; }
 }
 @media (min-width: 960px) {
   .ds-sidebar { position: absolute; transform: none; height: auto; }
@@ -246,3 +244,12 @@ textarea.st-inp { min-height: 104px; padding: 12px 14px; resize: vertical; font-
 @media (max-width: 720px) {
   .st-h1 { font-size: 22px; }
 }
+
+/* ---------- change-password dialog ---------- */
+.st-modal-backdrop {
+  position: fixed; inset: 0; z-index: 1100; display: grid; place-items: center; padding: 16px; overflow-y: auto;
+  background: rgba(2, 6, 23, .5); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+}
+.st-modal { width: min(480px, 100%); animation: am-in .15s ease both; color: var(--ink); }
+.st-modal .st-card { margin-bottom: 0; box-shadow: 0 24px 60px -12px var(--shadow); }
+.st-pw-grid { max-width: none; margin-top: 0; }

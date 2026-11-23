@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { Check as CheckIcon, ChevronDown, ChevronUp, KeyRound, LogOut, Menu, Palette, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import { useToast } from "../../context/ToastContext";
 import api, { errorMessage } from "../../config/axiosConfig";
 import { useAppTheme } from "../../hooks/useAppTheme";
 import { REGULAR_THEMES, BLACK_THEMES, THEMES, setTheme, saveThemeToAccount } from "../../utils/theme";
@@ -144,35 +145,60 @@ function AdminAccountMenu({ variant = "top", collapsed = false, forced, onChange
   );
 }
 
-/** Change-password form. `forced` = the account still has the password from .env, so nothing else is shown until it is replaced. */
+/**
+ * Change-password form.
+ * forced = the account still has the password from .env, so the page shows only this form until it is replaced.
+ * Otherwise it opens as a dialog over the page (never inside the dashboard), closed by Cancel, Esc or a click outside.
+ */
 function PasswordPanel({ forced, onDone }) {
   const { updateUser } = useAuth();
+  const toast = useToast();
   const [f, setF] = useState({ current_password: "", password: "", password_confirmation: "" });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+
+  useEffect(() => {
+    if (forced) return undefined;
+    const onKey = (e) => { if (e.key === "Escape") onDone?.(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [forced, onDone]);
+
   async function save() {
     setBusy(true); setMsg(null);
     try {
       const { data } = await api.put("/profile/password", f);
       setF({ current_password: "", password: "", password_confirmation: "" });
-      setMsg({ text: "Password changed. Your other devices were signed out." });
       await updateUser(data.user);
+      toast.success("Your other devices were signed out.", { title: "Password changed", key: "admin-password-changed" });
       onDone?.();
     } catch (e) { setMsg({ bad: true, text: errorMessage(e) }); } finally { setBusy(false); }
   }
-  return (
+
+  const form = (
     <Card title={forced ? "Set your own password to continue" : "Change password"}>
       {forced && <p className="st-muted" style={{ marginBottom: 14 }}>This account was created with a password from the server settings. Choose a new one now; the old one stops working.</p>}
       <Notice msg={msg} />
-      <Row>
-        <Field label="Current password"><Input type="password" autoComplete="current-password" value={f.current_password} onChange={set("current_password")} /></Field>
+      <div className="st-grid st-pw-grid">
+        <Field label="Current password"><Input type="password" autoComplete="current-password" autoFocus value={f.current_password} onChange={set("current_password")} /></Field>
         <Field label="New password"><Input type="password" autoComplete="new-password" value={f.password} onChange={set("password")} /></Field>
         <Field label="Repeat new password"><Input type="password" autoComplete="new-password" value={f.password_confirmation} onChange={set("password_confirmation")} /></Field>
-        <Btn kind="primary" disabled={busy || !f.current_password || !f.password} onClick={save}>Save password</Btn>
-      </Row>
+      </div>
       <p className="st-muted" style={{ marginTop: 12 }}>At least 8 characters with upper and lower case letters and a number.</p>
+      <div className="st-flex" style={{ marginTop: 14 }}>
+        <Btn kind="primary" disabled={busy || !f.current_password || !f.password} onClick={save}>{busy ? "Saving…" : "Save password"}</Btn>
+        {!forced && <Btn onClick={onDone} disabled={busy}>Cancel</Btn>}
+      </div>
     </Card>
+  );
+
+  if (forced) return form;
+  return createPortal(
+    <div className="st-modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onDone?.(); }}>
+      <div className="st-modal" role="dialog" aria-modal="true" aria-label="Change password">{form}</div>
+    </div>,
+    document.body
   );
 }
 
@@ -234,8 +260,6 @@ export default function AdminShell({ roleLabel, nav = [], active, onNavigate, ti
       <div className={`ds-sidebar-backdrop${sidebarOpen ? " open" : ""}`} onClick={() => setSidebarOpen(false)} aria-hidden={!sidebarOpen} />
 
       <nav id="ds-sidebar" className={`ds-sidebar${sidebarOpen ? " open" : ""}${railCollapsed ? " collapsed" : ""}`} aria-label="Sections">
-        <button type="button" className="ds-icon-btn ds-sidebar-close" onClick={() => setSidebarOpen(false)} aria-label="Close menu"><X size={18} /></button>
-
         <div className="ds-brand" title={railCollapsed ? "OCCDL" : undefined}>
           <img src={logo} alt="" />
           <span className="ds-brand-text">
