@@ -8,7 +8,7 @@ export const loaders = {
   logbook: () => import("../Pages/Logbook/LogbookPage"),
   profile: () => import("../Pages/Profile/ProfilePage"),
   verify: () => import("../Pages/Auth/VerifyEmailPage"),
-  staffLogin: () => import("../Pages/Auth/StaffLoginPage"),
+  adminLogin: () => import("../Pages/Auth/AdminLoginPage"),
   admin: () => import("../Pages/Admin/AdminDashboard"),
   coordinator: () => import("../Pages/Coordinator/CoordinatorDashboard"),
 };

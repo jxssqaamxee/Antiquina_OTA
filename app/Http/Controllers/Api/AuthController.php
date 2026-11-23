@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\LoginRequest;
 use App\Http\Requests\RegisterRequest;
-use App\Http\Requests\StaffLoginRequest;
+use App\Http\Requests\AdminLoginRequest;
 use App\Models\User;
 use App\Services\Auth\SessionLogin;
 use App\Support\Formats;
@@ -101,39 +101,39 @@ class AuthController extends Controller
     }
 
 
-    /** Admin / Coordinator sign-in (Staff ID + password). Trainees never use this route. */
-    public function staffLogin(StaffLoginRequest $request): JsonResponse
+    /** Admin / Coordinator sign-in (Admin ID + password). Trainees never use this route. */
+    public function adminLogin(AdminLoginRequest $request): JsonResponse
     {
         $data = $request->validated();
 
-        $limiterKey = 'staff-login|'.strtolower($data['staff_id']).'|'.$request->ip();
-        $accountKey = 'staff-login-account|'.strtolower($data['staff_id']);
+        $limiterKey = 'admin-login|'.strtolower($data['admin_id']).'|'.$request->ip();
+        $accountKey = 'admin-login-account|'.strtolower($data['admin_id']);
         if (RateLimiter::tooManyAttempts($limiterKey, 5) || RateLimiter::tooManyAttempts($accountKey, 15)) {
             $minutes = max(1, (int) ceil(max(RateLimiter::availableIn($limiterKey), RateLimiter::availableIn($accountKey)) / 60));
-            SecurityLog::failure('staff_login_lockout', ['staff_id' => $data['staff_id']]);
+            SecurityLog::failure('admin_login_lockout', ['admin_id' => $data['admin_id']]);
             throw ValidationException::withMessages([
-                'staff_id' => "Too many sign-in attempts. Try again in {$minutes} minute".($minutes === 1 ? '' : 's').'.',
+                'admin_id' => "Too many sign-in attempts. Try again in {$minutes} minute".($minutes === 1 ? '' : 's').'.',
             ]);
         }
 
-        $user = User::where('staff_id', $data['staff_id'])->whereIn('role', User::STAFF_ROLES)->first();
+        $user = User::where('admin_id', $data['admin_id'])->whereIn('role', User::ADMIN_ACCESS_ROLES)->first();
 
-        // One message for "no such staff ID", "no password set" and "wrong password".
+        // One message for "no such ID", "no password set" and "wrong password".
         if (! $user || ! $user->password || ! Hash::check($data['password'], $user->password)) {
             RateLimiter::hit($limiterKey, 300);
             RateLimiter::hit($accountKey, 1800);
-            SecurityLog::failure('staff_login_failed', ['staff_id' => $data['staff_id']]);
-            throw ValidationException::withMessages(['staff_id' => 'Staff ID or password is incorrect.']);
+            SecurityLog::failure('admin_login_failed', ['admin_id' => $data['admin_id']]);
+            throw ValidationException::withMessages(['admin_id' => 'ID or password is incorrect.']);
         }
 
         if (! $user->isActive()) {
-            SecurityLog::failure('staff_login_deactivated', ['staff_id' => $user->staff_id]);
-            throw ValidationException::withMessages(['staff_id' => 'This account has been deactivated. Please contact an administrator.']);
+            SecurityLog::failure('admin_login_deactivated', ['admin_id' => $user->admin_id]);
+            throw ValidationException::withMessages(['admin_id' => 'This account has been deactivated. Please contact an administrator.']);
         }
 
         RateLimiter::clear($limiterKey);
         RateLimiter::clear($accountKey);
-        SecurityLog::event('staff_login_ok', ['staff_id' => $user->staff_id, 'user_id' => $user->id, 'role' => $user->roleName()], 'info');
+        SecurityLog::event('admin_login_ok', ['admin_id' => $user->admin_id, 'user_id' => $user->id, 'role' => $user->roleName()], 'info');
 
         return response()->json($this->sessions->start($request, $user, (bool) ($data['remember'] ?? false)));
     }

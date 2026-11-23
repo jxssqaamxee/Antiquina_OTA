@@ -25,26 +25,26 @@ class UserFactory extends Factory
         ];
     }
 
-    /** An Admin or Coordinator account: staff ID instead of Student ID / course, email already verified. */
-    public function staff(string $role, ?string $staffId = null): static
+    /** An Admin or Coordinator account: admin ID instead of Student ID / course, email already verified. */
+    public function adminAccess(string $role, ?string $adminId = null): static
     {
         return $this->state(fn () => [
             'role' => $role,
-            'staff_id' => $staffId ?? strtoupper(fake()->unique()->bothify('STAFF-####')),
+            'admin_id' => $adminId ?? strtoupper(fake()->unique()->bothify('ADMIN-####')),
             'student_id' => null,
             'course' => null,
             'email' => fake()->unique()->userName().'@example.com',
         ]);
     }
 
-    public function admin(?string $staffId = null): static
+    public function admin(?string $adminId = null): static
     {
-        return $this->staff('admin', $staffId);
+        return $this->adminAccess('admin', $adminId);
     }
 
-    public function coordinator(?string $staffId = null): static
+    public function coordinator(?string $adminId = null): static
     {
-        return $this->staff('coordinator', $staffId);
+        return $this->adminAccess('coordinator', $adminId);
     }
 
     public function inactive(): static

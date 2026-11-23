@@ -29,7 +29,7 @@ class ReportsAnnouncementsTest extends TestCase
     {
         parent::setUp();
         AcademicSeeder::run();
-        $mk = fn ($role, $id) => User::factory()->create(['role' => $role, 'staff_id' => $id, 'student_id' => null, 'course' => null, 'email_verified_at' => now()]);
+        $mk = fn ($role, $id) => User::factory()->create(['role' => $role, 'admin_id' => $id, 'student_id' => null, 'course' => null, 'email_verified_at' => now()]);
         $this->admin = $mk('admin', 'ADMIN-001');
         $this->coord = $mk('coordinator', 'COORD-001');
         $cid = Course::where('code', 'BSIT')->value('id');
@@ -81,7 +81,7 @@ class ReportsAnnouncementsTest extends TestCase
         $this->assertStringContainsString("'=HYPERLINK", $csv);
     }
 
-    public function test_reports_are_closed_to_trainees_and_other_staff(): void
+    public function test_reports_are_closed_to_trainees_and_other_admin(): void
     {
         $this->signedIn($this->mine)->getJson('/api/admin/reports/trainees')->assertForbidden();
         $this->signedIn($this->mine)->getJson('/api/coordinator/reports/trainees')->assertForbidden();

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Btn, Card, Chip, Field, Input, Notice, Row, Select, Table, Textarea, useAction } from "./ui";
-import { StatCard } from "./StaffShell";
+import { StatCard } from "./AdminShell";
 import { errorMessage } from "../../config/axiosConfig";
 
 /** Hours report (verified = approved only). `filters` = optional extra controls for Admin; `svc` is the role's service. */

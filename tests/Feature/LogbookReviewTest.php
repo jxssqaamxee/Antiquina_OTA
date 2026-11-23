@@ -27,8 +27,8 @@ class LogbookReviewTest extends TestCase
     {
         parent::setUp();
         AcademicSeeder::run();
-        $this->admin = User::factory()->create(['role' => 'admin', 'staff_id' => 'ADMIN-001', 'student_id' => null, 'course' => null, 'email_verified_at' => now()]);
-        $this->coord = User::factory()->create(['role' => 'coordinator', 'staff_id' => 'COORD-001', 'student_id' => null, 'course' => null, 'email_verified_at' => now()]);
+        $this->admin = User::factory()->create(['role' => 'admin', 'admin_id' => 'ADMIN-001', 'student_id' => null, 'course' => null, 'email_verified_at' => now()]);
+        $this->coord = User::factory()->create(['role' => 'coordinator', 'admin_id' => 'COORD-001', 'student_id' => null, 'course' => null, 'email_verified_at' => now()]);
         $this->trainee = User::factory()->create(['student_id' => '2024-1-00001', 'email_verified_at' => now()]);
         $this->section = Section::create(['course_id' => Course::where('code', 'BSIT')->value('id'), 'academic_year_id' => AcademicYear::current()->id, 'year_level' => 4, 'label' => 'A']);
         $this->trainee->enrollments()->create(['course_id' => $this->section->course_id, 'academic_year_id' => $this->section->academic_year_id, 'section_id' => $this->section->id, 'year_level' => 4, 'status' => 'active']);

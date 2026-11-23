@@ -895,7 +895,7 @@ export default function LogbookPage() {
     return null;
   }
 
-  function submitEntry() {
+  function saveEntry() {
     // The host client's duty days are fixed: a date outside them can't be saved.
     if (draftClientDayMismatch) {
       const msg = `"${draftSelectedClient.name}" is only scheduled ${scheduleDaysLabel(draftSelectedClient)}, not ${draftDateWeekdayLabel}. Pick a duty day, or add ${draftDateWeekdayLabel} to this host client first.`;
@@ -945,7 +945,7 @@ export default function LogbookPage() {
 
   // Sends one finished entry to the OJT coordinator. Push pending edits first so the server has it,
   // then adopt the server's copy (it now carries the status).
-  async function submitEntry(id) {
+  async function submitEntryForReview(id) {
     try {
       await flushSync(userId);
       await api.post(`/logbook/entries/${encodeURIComponent(id)}/submit`);
@@ -1375,7 +1375,7 @@ export default function LogbookPage() {
                   editing={e.id === editingId}
                   onEdit={startEdit}
                   onDelete={requestDeleteEntry}
-                  onSubmit={submitEntry}
+                  onSubmit={submitEntryForReview}
                 />
               ))}
             </div>
@@ -1443,7 +1443,7 @@ export default function LogbookPage() {
         footer={
           <>
             <button type="button" className="btn" onClick={closeEntrySheet}>Cancel</button>
-            <button type="button" className={"btn btn-primary" + (draftClientDayMismatch ? " is-blocked" : "")} aria-disabled={draftClientDayMismatch ? "true" : undefined} onClick={submitEntry}>
+            <button type="button" className={"btn btn-primary" + (draftClientDayMismatch ? " is-blocked" : "")} aria-disabled={draftClientDayMismatch ? "true" : undefined} onClick={saveEntry}>
               {editingId ? "Save changes" : <><Plus size={18} /> Add {COVERAGE_META[draftMode].short}</>}
             </button>
           </>

@@ -23,10 +23,10 @@ class User extends Authenticatable implements MustVerifyEmail
     /** @var list<string> */
     public const ROLES = [self::ROLE_ADMIN, self::ROLE_COORDINATOR, self::ROLE_TRAINEE];
 
-    /** @var list<string> accounts that sign in with a staff ID */
-    public const STAFF_ROLES = [self::ROLE_ADMIN, self::ROLE_COORDINATOR];
+    /** @var list<string> accounts that sign in with an admin ID */
+    public const ADMIN_ACCESS_ROLES = [self::ROLE_ADMIN, self::ROLE_COORDINATOR];
 
-    // NOTE: role, staff_id, is_active and deactivated_at are deliberately NOT mass-assignable, so no
+    // NOTE: role, admin_id, is_active and deactivated_at are deliberately NOT mass-assignable, so no
     // request body can ever promote an account. Admin code sets them explicitly (forceFill).
     protected $fillable = [
         'student_id', 'first_name', 'middle_name', 'last_name', 'email',
@@ -72,9 +72,9 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->roleName() === self::ROLE_TRAINEE;
     }
 
-    public function isStaff(): bool
+    public function hasAdminAccess(): bool
     {
-        return in_array($this->roleName(), self::STAFF_ROLES, true);
+        return in_array($this->roleName(), self::ADMIN_ACCESS_ROLES, true);
     }
 
     /** Only an explicit false deactivates (a row without the column yet counts as active). */
@@ -169,7 +169,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'id' => $this->id,
             'sub' => 'u'.$this->id,
             'role' => $this->roleName(),
-            'staff_id' => $this->staff_id,
+            'admin_id' => $this->admin_id,
             'must_change_password' => (bool) $this->must_change_password,
             'student_id' => $this->student_id,
             'first_name' => $this->first_name,

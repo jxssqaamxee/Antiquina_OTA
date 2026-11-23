@@ -71,7 +71,7 @@ class Preflight extends Command
                 $this->check(Schema::hasTable($t), "table {$t} exists", 'run php artisan migrate --force');
             }
             if (Schema::hasColumn('users', 'role')) {
-                $this->check(User::where('role', User::ROLE_ADMIN)->where('is_active', true)->exists(), 'an active Admin exists', 'run php artisan staff:create-admin');
+                $this->check(User::where('role', User::ROLE_ADMIN)->where('is_active', true)->exists(), 'an active Admin exists', 'run php artisan admin:create');
                 $this->check(User::where('role', 'trainee')->where(fn ($q) => $q->whereNull('student_id'))->doesntExist(), 'every trainee has a Student ID', 'fix trainee rows that have no student_id');
             }
         } catch (\Throwable $e) {

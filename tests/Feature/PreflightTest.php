@@ -14,7 +14,7 @@ class PreflightTest extends TestCase
         // No Admin yet: that check must fail (exit 1).
         $this->artisan('occ:preflight --local')->assertExitCode(1);
 
-        \App\Models\User::factory()->create(['role' => 'admin', 'staff_id' => 'ADMIN-001', 'student_id' => null, 'course' => null, 'email_verified_at' => now()]);
+        \App\Models\User::factory()->create(['role' => 'admin', 'admin_id' => 'ADMIN-001', 'student_id' => null, 'course' => null, 'email_verified_at' => now()]);
         // Storage/build checks depend on the machine; assert only that the command runs and reports an exit code.
         $code = \Illuminate\Support\Facades\Artisan::call('occ:preflight', ['--local' => true]);
         $this->assertContains($code, [0, 1]);

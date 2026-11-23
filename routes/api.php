@@ -25,7 +25,7 @@ Route::middleware('session.fresh')->get('/session', [AuthController::class, 'ses
 
 Route::middleware('throttle:10,1')->group(function () {
     Route::post('/auth/login', [AuthController::class, 'login']);
-    Route::post('/auth/staff-login', [AuthController::class, 'staffLogin']);
+    Route::post('/auth/admin-login', [AuthController::class, 'adminLogin']);
     Route::post('/auth/register', [AuthController::class, 'register']);
 });
 

@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
-/** Phase 1: Admin / Coordinator / Trainee roles, staff sign-in and backend authorization. */
+/** Phase 1: Admin / Coordinator / Trainee roles, admin sign-in and backend authorization. */
 class RolesTest extends TestCase
 {
     use RefreshDatabase;
@@ -19,13 +19,13 @@ class RolesTest extends TestCase
     {
         parent::setUp();
         Storage::fake('local');
-        RateLimiter::clear('staff-login|admin-001|127.0.0.1');
-        RateLimiter::clear('staff-login-account|admin-001');
+        RateLimiter::clear('admin-login|admin-001|127.0.0.1');
+        RateLimiter::clear('admin-login-account|admin-001');
     }
 
-    // ---- AUTH-01: public registration can never create staff ----
+    // ---- AUTH-01: public registration can never create admin ----
 
-    public function test_registration_cannot_set_a_role_or_staff_id(): void
+    public function test_registration_cannot_set_a_role_or_admin_id(): void
     {
         $this->postJson('/api/auth/register', [
             'student_id' => '2024-1-00099', 'first_name' => 'Maria', 'last_name' => 'Reyes',
@@ -33,21 +33,21 @@ class RolesTest extends TestCase
             'course' => 'BSIT — Bachelor of Science in Information Technology',
             'password' => 'Secret-Pass1', 'password_confirmation' => 'Secret-Pass1',
             'profile_photo' => UploadedFile::fake()->image('me.jpg', 400, 500),
-            'role' => 'admin', 'staff_id' => 'ADMIN-999', 'is_active' => false,
+            'role' => 'admin', 'admin_id' => 'ADMIN-999', 'is_active' => false,
         ])->assertCreated()->assertJsonPath('user.role', 'trainee');
 
-        $this->assertDatabaseHas('users', ['student_id' => '2024-1-00099', 'role' => 'trainee', 'staff_id' => null, 'is_active' => true]);
+        $this->assertDatabaseHas('users', ['student_id' => '2024-1-00099', 'role' => 'trainee', 'admin_id' => null, 'is_active' => true]);
     }
 
     public function test_role_is_not_mass_assignable(): void
     {
         $u = User::create([
             'student_id' => '2024-1-00077', 'first_name' => 'A', 'last_name' => 'B', 'email' => 'x@gmail.com',
-            'course' => 'c', 'password' => 'Secret-Pass1', 'role' => 'admin', 'staff_id' => 'ADMIN-1',
+            'course' => 'c', 'password' => 'Secret-Pass1', 'role' => 'admin', 'admin_id' => 'ADMIN-1',
         ])->fresh();
 
         $this->assertSame('trainee', $u->role);
-        $this->assertNull($u->staff_id);
+        $this->assertNull($u->admin_id);
     }
 
     // ---- AUTH-02 / 03 / 04 ----
@@ -86,7 +86,7 @@ class RolesTest extends TestCase
         $this->signedIn($c)->getJson('/api/coordinator/overview')->assertOk()->assertJsonPath('section', null)->assertJsonPath('trainees', 0);
     }
 
-    public function test_staff_have_no_logbook_sync(): void
+    public function test_admin_have_no_logbook_sync(): void
     {
         $c = User::factory()->coordinator()->create();
 
@@ -95,56 +95,56 @@ class RolesTest extends TestCase
         $this->assertDatabaseMissing('user_settings', ['user_id' => $c->id]);
     }
 
-    public function test_me_reports_the_role_and_staff_id(): void
+    public function test_me_reports_the_role_and_admin_id(): void
     {
         $a = User::factory()->admin('ADMIN-001')->create();
 
         $this->signedIn($a)->getJson('/api/me')->assertOk()
-            ->assertJsonPath('user.role', 'admin')->assertJsonPath('user.staff_id', 'ADMIN-001')->assertJsonPath('user.student_id', null);
+            ->assertJsonPath('user.role', 'admin')->assertJsonPath('user.admin_id', 'ADMIN-001')->assertJsonPath('user.student_id', null);
     }
 
-    // ---- staff sign-in ----
+    // ---- admin sign-in ----
 
-    public function test_staff_sign_in_with_their_staff_id(): void
+    public function test_admin_sign_in_with_their_admin_id(): void
     {
         User::factory()->admin('ADMIN-001')->create();
 
-        $this->postJson('/api/auth/staff-login', ['staff_id' => ' admin-001 ', 'password' => 'password'])
-            ->assertOk()->assertJsonPath('user.role', 'admin')->assertJsonPath('user.staff_id', 'ADMIN-001');
+        $this->postJson('/api/auth/admin-login', ['admin_id' => ' admin-001 ', 'password' => 'password'])
+            ->assertOk()->assertJsonPath('user.role', 'admin')->assertJsonPath('user.admin_id', 'ADMIN-001');
         $this->assertAuthenticated('web');
     }
 
-    public function test_staff_login_rejects_wrong_password_with_a_generic_message(): void
+    public function test_admin_login_rejects_wrong_password_with_a_generic_message(): void
     {
         User::factory()->coordinator('COORD-001')->create();
 
-        $this->postJson('/api/auth/staff-login', ['staff_id' => 'COORD-001', 'password' => 'nope'])
-            ->assertStatus(422)->assertJsonValidationErrors('staff_id');
-        $this->postJson('/api/auth/staff-login', ['staff_id' => 'NOBODY-001', 'password' => 'nope'])
-            ->assertStatus(422)->assertJsonPath('errors.staff_id.0', 'Staff ID or password is incorrect.');
+        $this->postJson('/api/auth/admin-login', ['admin_id' => 'COORD-001', 'password' => 'nope'])
+            ->assertStatus(422)->assertJsonValidationErrors('admin_id');
+        $this->postJson('/api/auth/admin-login', ['admin_id' => 'NOBODY-001', 'password' => 'nope'])
+            ->assertStatus(422)->assertJsonPath('errors.admin_id.0', 'ID or password is incorrect.');
         $this->assertGuest('web');
     }
 
-    public function test_a_trainee_cannot_use_the_staff_login_and_staff_cannot_use_the_student_login(): void
+    public function test_a_trainee_cannot_use_the_admin_login_and_admin_cannot_use_the_student_login(): void
     {
         User::factory()->create(['student_id' => '2024-1-00001']);
         User::factory()->admin('ADMIN-001')->create();
 
-        $this->postJson('/api/auth/staff-login', ['staff_id' => '2024-1-00001', 'password' => 'password'])->assertStatus(422);
+        $this->postJson('/api/auth/admin-login', ['admin_id' => '2024-1-00001', 'password' => 'password'])->assertStatus(422);
         $this->postJson('/api/auth/login', ['student_id' => 'ADMIN-001', 'password' => 'password'])->assertStatus(422);
         $this->assertGuest('web');
     }
 
-    public function test_staff_login_locks_after_repeated_failures(): void
+    public function test_admin_login_locks_after_repeated_failures(): void
     {
         User::factory()->admin('ADMIN-001')->create();
 
         for ($i = 0; $i < 5; $i++) {
-            $this->postJson('/api/auth/staff-login', ['staff_id' => 'ADMIN-001', 'password' => 'wrong'.$i])->assertStatus(422);
+            $this->postJson('/api/auth/admin-login', ['admin_id' => 'ADMIN-001', 'password' => 'wrong'.$i])->assertStatus(422);
         }
 
-        $res = $this->postJson('/api/auth/staff-login', ['staff_id' => 'ADMIN-001', 'password' => 'password'])->assertStatus(422);
-        $this->assertStringContainsString('Too many sign-in attempts', $res->json('errors.staff_id.0'));
+        $res = $this->postJson('/api/auth/admin-login', ['admin_id' => 'ADMIN-001', 'password' => 'password'])->assertStatus(422);
+        $this->assertStringContainsString('Too many sign-in attempts', $res->json('errors.admin_id.0'));
         $this->assertGuest('web');
     }
 
@@ -155,8 +155,8 @@ class RolesTest extends TestCase
         User::factory()->coordinator('COORD-001')->inactive()->create();
         User::factory()->inactive()->create(['student_id' => '2024-1-00002']);
 
-        $this->postJson('/api/auth/staff-login', ['staff_id' => 'COORD-001', 'password' => 'password'])
-            ->assertStatus(422)->assertJsonPath('errors.staff_id.0', fn ($m) => str_contains($m, 'deactivated'));
+        $this->postJson('/api/auth/admin-login', ['admin_id' => 'COORD-001', 'password' => 'password'])
+            ->assertStatus(422)->assertJsonPath('errors.admin_id.0', fn ($m) => str_contains($m, 'deactivated'));
         $this->postJson('/api/auth/login', ['student_id' => '2024-1-00002', 'password' => 'password'])
             ->assertStatus(422)->assertJsonPath('errors.student_id.0', fn ($m) => str_contains($m, 'deactivated'));
         $this->assertGuest('web');
@@ -189,37 +189,37 @@ class RolesTest extends TestCase
         $u = User::factory()->admin('ADMIN-001')->inactive()->create();
         $u->reactivate();
 
-        $this->postJson('/api/auth/staff-login', ['staff_id' => 'ADMIN-001', 'password' => 'password'])->assertOk();
+        $this->postJson('/api/auth/admin-login', ['admin_id' => 'ADMIN-001', 'password' => 'password'])->assertOk();
     }
 
     // ---- first Admin (Artisan) ----
 
     public function test_artisan_creates_a_verified_admin(): void
     {
-        $this->artisan('staff:create-admin', [
-            '--staff-id' => 'admin-001', '--first-name' => 'maria', '--last-name' => 'reyes',
+        $this->artisan('admin:create', [
+            '--admin-id' => 'admin-001', '--first-name' => 'maria', '--last-name' => 'reyes',
             '--email' => 'Maria@Example.com', '--password' => 'Secret-Pass1',
         ])->assertSuccessful();
 
-        $admin = User::where('staff_id', 'ADMIN-001')->firstOrFail();
+        $admin = User::where('admin_id', 'ADMIN-001')->firstOrFail();
         $this->assertSame('admin', $admin->role);
         $this->assertSame('maria@example.com', $admin->email);
         $this->assertNotNull($admin->email_verified_at);
         $this->assertNull($admin->student_id);
         $this->assertNotSame('Secret-Pass1', $admin->password);
 
-        $this->postJson('/api/auth/staff-login', ['staff_id' => 'ADMIN-001', 'password' => 'Secret-Pass1'])->assertOk();
+        $this->postJson('/api/auth/admin-login', ['admin_id' => 'ADMIN-001', 'password' => 'Secret-Pass1'])->assertOk();
     }
 
-    public function test_artisan_refuses_a_duplicate_staff_id_and_a_weak_password(): void
+    public function test_artisan_refuses_a_duplicate_admin_id_and_a_weak_password(): void
     {
         User::factory()->admin('ADMIN-001')->create();
 
-        $this->artisan('staff:create-admin', [
-            '--staff-id' => 'ADMIN-001', '--first-name' => 'A', '--last-name' => 'B', '--email' => 'new@example.com', '--password' => 'Secret-Pass1',
+        $this->artisan('admin:create', [
+            '--admin-id' => 'ADMIN-001', '--first-name' => 'A', '--last-name' => 'B', '--email' => 'new@example.com', '--password' => 'Secret-Pass1',
         ])->assertFailed();
-        $this->artisan('staff:create-admin', [
-            '--staff-id' => 'ADMIN-002', '--first-name' => 'A', '--last-name' => 'B', '--email' => 'new2@example.com', '--password' => 'weak',
+        $this->artisan('admin:create', [
+            '--admin-id' => 'ADMIN-002', '--first-name' => 'A', '--last-name' => 'B', '--email' => 'new2@example.com', '--password' => 'weak',
         ])->assertFailed();
 
         $this->assertSame(1, User::where('role', 'admin')->count());

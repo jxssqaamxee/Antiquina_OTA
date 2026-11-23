@@ -1,4 +1,5 @@
-import { lazy } from "react";
+import { lazy, createElement } from "react";
+import { Navigate } from "react-router-dom";
 // The loading page at "/" is NOT lazy: if it were, the screen would show the loading fallback,
 // then this page's own loading screen, then the fallback again for the next page: several loading
 // screens in a row, which looks like blinking. Now there is a single one.
@@ -13,14 +14,16 @@ const ResetPasswordPage = lazy(loaders.reset);
 const LogbookPage = lazy(loaders.logbook);
 const ProfilePage = lazy(loaders.profile);
 const VerifyEmailPage = lazy(loaders.verify);
-const StaffLoginPage = lazy(loaders.staffLogin);
+const AdminLoginPage = lazy(loaders.adminLogin);
 const AdminDashboard = lazy(loaders.admin);
 const CoordinatorDashboard = lazy(loaders.coordinator);
 
 export const publicRoutes = [{ path: "/", component: SplashPage }];
 export const guestRoutes = [
   { path: "/login", component: LoginPage },
-  { path: "/staff-login", component: StaffLoginPage },
+  { path: "/admin-login", component: AdminLoginPage },
+  // Old bookmark from before the rename.
+  { path: "/staff-login", component: () => createElement(Navigate, { to: "/admin-login", replace: true }) },
   { path: "/register", component: RegisterPage },
   { path: "/forgot-password", component: ForgotPasswordPage },
   { path: "/reset-password/success", component: ResetPasswordPage },

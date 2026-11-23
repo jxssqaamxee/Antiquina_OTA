@@ -27,7 +27,7 @@ class PlacementTest extends TestCase
     {
         parent::setUp();
         AcademicSeeder::run();
-        $mk = fn ($role, $id) => User::factory()->create(['role' => $role, 'staff_id' => $id, 'student_id' => null, 'course' => null, 'email_verified_at' => now()]);
+        $mk = fn ($role, $id) => User::factory()->create(['role' => $role, 'admin_id' => $id, 'student_id' => null, 'course' => null, 'email_verified_at' => now()]);
         $this->admin = $mk('admin', 'ADMIN-001');
         $this->coord = $mk('coordinator', 'COORD-001');
         $sec = Section::create(['course_id' => Course::where('code', 'BSIT')->value('id'), 'academic_year_id' => AcademicYear::current()->id, 'year_level' => 4, 'label' => 'A']);

@@ -29,6 +29,11 @@
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="database"/>
+        <!-- Your real .env holds INITIAL_ADMIN_*; blank them so tests never seed an admin by accident. -->
+        <env name="INITIAL_ADMIN_NAME" value=""/>
+        <env name="INITIAL_ADMIN_EMAIL" value=""/>
+        <env name="INITIAL_ADMIN_PASSWORD" value=""/>
+        <env name="INITIAL_ADMIN_ID" value=""/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>

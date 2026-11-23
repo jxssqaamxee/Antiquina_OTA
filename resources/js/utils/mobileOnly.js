@@ -22,7 +22,7 @@
 // "device mode" pretends to be a phone and is let through (useful for testing).
 
 import { PHONE_MAX_SHORT_SIDE } from "../config/constant";
-import { isStaffPath } from "./roles";
+import { isAdminPath } from "./roles";
 
 const ON = ["true", "1", "on", "yes"];
 
@@ -57,11 +57,11 @@ export function isPhoneDevice() {
 
 /**
  * True when the switch is on AND this device is not a phone, EXCEPT on the management pages
- * (/admin, /coordinator, /staff-login): Admins and Coordinators work on a desktop. The gate runs
+ * (/admin, /coordinator, /admin-login): Admins and Coordinators work on a desktop. The gate runs
  * before anyone signs in, so it can only look at the address, not at the person's role.
  * (It is a screen gate, not security: the API checks the role on every request.)
  */
 export function shouldBlockDevice() {
-  if (typeof window !== "undefined" && isStaffPath(window.location.pathname)) return false;
+  if (typeof window !== "undefined" && isAdminPath(window.location.pathname)) return false;
   return isMobileOnlyEnabled() && !isPhoneDevice();
 }

@@ -30,7 +30,7 @@ class ProgressionTest extends TestCase
 
     private function admin(): User
     {
-        return User::factory()->create(['role' => 'admin', 'staff_id' => 'ADMIN-001', 'student_id' => null, 'course' => null, 'email_verified_at' => now()]);
+        return User::factory()->create(['role' => 'admin', 'admin_id' => 'ADMIN-001', 'student_id' => null, 'course' => null, 'email_verified_at' => now()]);
     }
 
     private function section(AcademicYear $y, int $level, string $label = 'A', string $code = 'BSIT'): Section
@@ -119,7 +119,7 @@ class ProgressionTest extends TestCase
     public function test_progression_is_admin_only(): void
     {
         $t = User::factory()->create(['student_id' => '2024-1-00009', 'email_verified_at' => now()]);
-        $c = User::factory()->create(['role' => 'coordinator', 'staff_id' => 'C-1', 'student_id' => null, 'course' => null, 'email_verified_at' => now()]);
+        $c = User::factory()->create(['role' => 'coordinator', 'admin_id' => 'C-1', 'student_id' => null, 'course' => null, 'email_verified_at' => now()]);
         $real = $this->student('2024-1-00010', $this->section($this->old, 2));
         foreach ([$t, $c] as $who) {
             $this->signedIn($who)->getJson("/api/admin/academic-years/{$this->new->id}/progression/prepare")->assertForbidden();

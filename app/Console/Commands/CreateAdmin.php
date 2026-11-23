@@ -13,16 +13,16 @@ use Illuminate\Validation\Rules\Password;
  * registration page: the first Admin is made here, and later management accounts are created
  * by a signed-in Admin.
  *
- *   php artisan staff:create-admin
- *   php artisan staff:create-admin --staff-id=ADMIN-001 --first-name=Maria --last-name=Reyes --email=maria@example.com
+ *   php artisan admin:create
+ *   php artisan admin:create --admin-id=ADMIN-001 --first-name=Maria --last-name=Reyes --email=maria@example.com
  *
  * The password is asked for interactively (hidden). --password exists for automated deployments only:
  * a value typed on the command line can end up in shell history.
  */
 class CreateAdmin extends Command
 {
-    protected $signature = 'staff:create-admin
-        {--staff-id= : Sign-in ID, e.g. ADMIN-001}
+    protected $signature = 'admin:create
+        {--admin-id= : Sign-in ID, e.g. ADMIN-001}
         {--first-name= : First name}
         {--last-name= : Last name}
         {--email= : Email address (used for password reset)}
@@ -32,7 +32,7 @@ class CreateAdmin extends Command
 
     public function handle(): int
     {
-        $staffId = strtoupper(trim((string) ($this->option('staff-id') ?: $this->ask('Staff ID (e.g. ADMIN-001)'))));
+        $adminId = strtoupper(trim((string) ($this->option('admin-id') ?: $this->ask('Admin ID (e.g. ADMIN-001)'))));
         $first = trim((string) ($this->option('first-name') ?: $this->ask('First name')));
         $last = trim((string) ($this->option('last-name') ?: $this->ask('Last name')));
         $email = strtolower(trim((string) ($this->option('email') ?: $this->ask('Email address'))));
@@ -48,9 +48,9 @@ class CreateAdmin extends Command
         }
 
         $validator = Validator::make(
-            ['staff_id' => $staffId, 'first_name' => $first, 'last_name' => $last, 'email' => $email, 'password' => $password],
+            ['admin_id' => $adminId, 'first_name' => $first, 'last_name' => $last, 'email' => $email, 'password' => $password],
             [
-                'staff_id' => ['required', 'regex:'.Formats::STAFF_ID, 'unique:users,staff_id'],
+                'admin_id' => ['required', 'regex:'.Formats::ADMIN_ID, 'unique:users,admin_id'],
                 'first_name' => ['required', 'string', 'max:80', 'regex:'.Formats::NAME],
                 'last_name' => ['required', 'string', 'max:80', 'regex:'.Formats::NAME],
                 'email' => ['required', 'email', 'max:255', 'unique:users,email'],
@@ -67,10 +67,10 @@ class CreateAdmin extends Command
         }
 
         $user = new User();
-        // forceFill: role / staff_id are not mass-assignable on purpose.
+        // forceFill: role / admin_id are not mass-assignable on purpose.
         $user->forceFill([
             'role' => User::ROLE_ADMIN,
-            'staff_id' => $staffId,
+            'admin_id' => $adminId,
             'student_id' => null,
             'course' => null,
             'first_name' => Formats::titleCase($first),
@@ -81,7 +81,7 @@ class CreateAdmin extends Command
             'is_active' => true,
         ])->save();
 
-        $this->info("Administrator {$staffId} created. Sign in at /staff-login.");
+        $this->info("Administrator {$adminId} created. Sign in at /admin-login.");
 
         return self::SUCCESS;
     }

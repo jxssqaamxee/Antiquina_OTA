@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from "react";
-import StaffShell, { StatCard } from "../../Components/staff/StaffShell";
-import { Btn, Card, Check, Chip, Field, Input, Notice, Row, Select, Table, Tabs, statusTone, useAction } from "../../Components/staff/ui";
-import { AnnouncementsPanel, AuditPanel, ReportsPanel } from "../../Components/staff/panels";
+import { LayoutDashboard, Users, ClipboardCheck, FileBarChart, Megaphone, ShieldCheck } from "lucide-react";
+import AdminShell, { StatCard } from "../../Components/admin/AdminShell";
+import { Btn, Card, Check, Chip, Field, Input, Notice, Row, Select, Table, statusTone, useAction } from "../../Components/admin/ui";
+import { AnnouncementsPanel, AuditPanel, ReportsPanel } from "../../Components/admin/panels";
 import { coordinatorService as svc } from "../../services/coordinatorService";
 import { errorMessage } from "../../config/axiosConfig";
 
@@ -123,23 +124,31 @@ function Trainees() {
   );
 }
 
+const NAV = [
+  { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { key: "trainees", label: "Trainees", icon: Users },
+  { key: "approvals", label: "Logbook approvals", icon: ClipboardCheck },
+  { key: "reports", label: "Reports", icon: FileBarChart },
+  { key: "announcements", label: "Announcements", icon: Megaphone },
+  { key: "activity", label: "Audit log", icon: ShieldCheck },
+];
+
 /** Coordinator area: dashboard, trainees (with entries + placement), approvals, activity. Scope is enforced by Laravel. */
 export default function CoordinatorDashboard() {
   const [tab, setTab] = useState("dashboard");
   const [data, , error] = useLoad(svc.overview);
   useEffect(() => { document.title = "Coordinator | OCCDL"; }, []);
   return (
-    <StaffShell roleLabel="Coordinator">
-      <h1 className="st-h1">{data?.section ? `Section ${data.section.code}` : "Coordinator dashboard"}</h1>
+    <AdminShell roleLabel="Coordinator" nav={NAV} active={tab} onNavigate={setTab}
+      title={tab === "dashboard" ? (data?.section ? `Section ${data.section.code}` : "Coordinator dashboard") : NAV.find((n) => n.key === tab)?.label}
+      subtitle={tab === "dashboard" ? data?.message : (data?.section ? `Section ${data.section.code}` : undefined)}>
       {error && <p role="alert" className="st-error">{error}</p>}
-      {data?.message && <p className="st-sub">{data.message}</p>}
-      <Tabs value={tab} onChange={setTab} tabs={[["dashboard", "Dashboard"], ["trainees", "Trainees"], ["approvals", "Logbook approvals"], ["reports", "Reports"], ["announcements", "Announcements"], ["activity", "Audit log"]]} />
       {tab === "dashboard" && <div className="st-flex"><StatCard label="Assigned trainees" value={data?.trainees} /></div>}
       {tab === "trainees" && <Trainees />}
       {tab === "approvals" && <Approvals />}
       {tab === "reports" && <ReportsPanel svc={svc} />}
       {tab === "announcements" && <AnnouncementsPanel svc={svc} fixedSection={data?.section || null} />}
       {tab === "activity" && <AuditPanel svc={svc} title="Audit log (my section)" />}
-    </StaffShell>
+    </AdminShell>
   );
 }

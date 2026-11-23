@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { errorMessage } from "../../config/axiosConfig";
 
-// Admin / Coordinator building blocks, styled by styles/staff.css + theme.css (sclf_APP look).
+// Admin / Coordinator building blocks, styled by styles/admin.css + theme.css (sclf_APP look).
 
 export const Card = ({ title, children, actions }) => (
   <section className="st-card">

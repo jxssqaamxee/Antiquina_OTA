@@ -56,7 +56,7 @@ class RegisterRequest extends FormRequest
                 },
             ],
             'course' => ['required', 'string', Rule::in(Formats::courses())],
-            // Required so staff can verify who you are.
+            // Required so admin can verify who you are.
             'profile_photo' => ['required', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
             'password' => ['required', 'string', 'max:100', 'confirmed', Password::defaults()],
         ];

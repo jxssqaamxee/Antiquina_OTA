@@ -25,9 +25,10 @@ class AdminSeederTest extends TestCase
 
     protected function tearDown(): void
     {
+        // Back to blank (what phpunit.xml sets), not unset: unset would let the real .env values leak into later tests.
         foreach (array_keys(self::VARS) as $k) {
-            putenv($k);
-            unset($_ENV[$k], $_SERVER[$k]);
+            putenv("$k=");
+            $_ENV[$k] = $_SERVER[$k] = '';
         }
         parent::tearDown();
     }
@@ -38,7 +39,7 @@ class AdminSeederTest extends TestCase
         (new AdminSeeder)->run();
         $a = User::where('email', 'admin@example.com')->firstOrFail();
         $this->assertSame('admin', $a->role);
-        $this->assertSame('ADMIN-00001', $a->staff_id);
+        $this->assertSame('ADMIN-00001', $a->admin_id);
         $this->assertSame('Maria Santos', $a->first_name);
         $this->assertSame('Reyes', $a->last_name);
         $this->assertTrue($a->must_change_password);

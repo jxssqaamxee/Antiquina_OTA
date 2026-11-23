@@ -24,9 +24,9 @@ class CoordinatorScopeTest extends TestCase
         AcademicSeeder::run();
     }
 
-    private function staff(string $role, string $id): User
+    private function adminAccess(string $role, string $id): User
     {
-        return User::factory()->create(['role' => $role, 'staff_id' => $id, 'student_id' => null, 'course' => null, 'email_verified_at' => now()]);
+        return User::factory()->create(['role' => $role, 'admin_id' => $id, 'student_id' => null, 'course' => null, 'email_verified_at' => now()]);
     }
 
     private function section(string $label, int $level = 4): Section
@@ -45,12 +45,12 @@ class CoordinatorScopeTest extends TestCase
 
     public function test_admin_creates_a_coordinator_who_is_never_a_trainee(): void
     {
-        $a = $this->staff('admin', 'ADMIN-001');
+        $a = $this->adminAccess('admin', 'ADMIN-001');
         $this->signedIn($a)->postJson('/api/admin/coordinators', [
-            'staff_id' => 'coord-001', 'first_name' => 'Ana', 'last_name' => 'Lim', 'email' => 'ana.lim@example.com',
+            'admin_id' => 'coord-001', 'first_name' => 'Ana', 'last_name' => 'Lim', 'email' => 'ana.lim@example.com',
             'password' => 'Secret-Pass1', 'role' => 'admin',
-        ])->assertCreated()->assertJsonPath('coordinator.staff_id', 'COORD-001');
-        $this->assertSame('coordinator', User::where('staff_id', 'COORD-001')->value('role'));
+        ])->assertCreated()->assertJsonPath('coordinator.admin_id', 'COORD-001');
+        $this->assertSame('coordinator', User::where('admin_id', 'COORD-001')->value('role'));
         $this->assertDatabaseHas('activity_logs', ['action' => 'coordinator.created']);
     }
 
@@ -61,8 +61,8 @@ class CoordinatorScopeTest extends TestCase
         $mine = $this->student('2024-1-00001', $a4);
         $theirs = $this->student('2024-1-00002', $b4);
         $this->student('2024-1-00003', null);
-        $c = $this->staff('coordinator', 'COORD-001');
-        app(CoordinatorAssignmentService::class)->assign($this->staff('admin', 'ADMIN-001'), $c, $a4);
+        $c = $this->adminAccess('coordinator', 'COORD-001');
+        app(CoordinatorAssignmentService::class)->assign($this->adminAccess('admin', 'ADMIN-001'), $c, $a4);
 
         $this->signedIn($c)->getJson('/api/coordinator/overview')->assertOk()->assertJsonPath('trainees', 1)->assertJsonPath('section.code', 'BSIT-4A');
         $ids = collect($this->signedIn($c)->getJson('/api/coordinator/trainees')->json('trainees'))->pluck('id')->all();
@@ -77,14 +77,14 @@ class CoordinatorScopeTest extends TestCase
     public function test_unassigned_coordinator_sees_nobody(): void
     {
         $this->student('2024-1-00001', $this->section('A'));
-        $c = $this->staff('coordinator', 'COORD-001');
+        $c = $this->adminAccess('coordinator', 'COORD-001');
         $this->signedIn($c)->getJson('/api/coordinator/trainees')->assertOk()->assertJsonCount(0, 'trainees');
     }
 
     public function test_reassignment_keeps_history_and_frees_the_old_section(): void
     {
-        $admin = $this->staff('admin', 'ADMIN-001');
-        $c = $this->staff('coordinator', 'COORD-001');
+        $admin = $this->adminAccess('admin', 'ADMIN-001');
+        $c = $this->adminAccess('coordinator', 'COORD-001');
         $s1 = $this->section('A');
         $s2 = $this->section('B');
 
@@ -99,9 +99,9 @@ class CoordinatorScopeTest extends TestCase
 
     public function test_a_new_coordinator_replaces_the_old_one_on_a_section(): void
     {
-        $admin = $this->staff('admin', 'ADMIN-001');
-        $c1 = $this->staff('coordinator', 'COORD-001');
-        $c2 = $this->staff('coordinator', 'COORD-002');
+        $admin = $this->adminAccess('admin', 'ADMIN-001');
+        $c1 = $this->adminAccess('coordinator', 'COORD-001');
+        $c2 = $this->adminAccess('coordinator', 'COORD-002');
         $s = $this->section('A');
         $svc = app(CoordinatorAssignmentService::class);
         $svc->assign($admin, $c1, $s);
@@ -115,14 +115,14 @@ class CoordinatorScopeTest extends TestCase
     {
         $s = $this->section('A');
         $row = ['section_id' => $s->id, 'started_at' => now()];
-        CoordinatorAssignment::create($row + ['coordinator_id' => $this->staff('coordinator', 'COORD-001')->id]);
+        CoordinatorAssignment::create($row + ['coordinator_id' => $this->adminAccess('coordinator', 'COORD-001')->id]);
         $this->expectException(\Illuminate\Database\QueryException::class);
-        CoordinatorAssignment::create($row + ['coordinator_id' => $this->staff('coordinator', 'COORD-002')->id]);
+        CoordinatorAssignment::create($row + ['coordinator_id' => $this->adminAccess('coordinator', 'COORD-002')->id]);
     }
 
     public function test_only_admin_can_manage_coordinators_and_logs_are_append_only(): void
     {
-        $c = $this->staff('coordinator', 'COORD-001');
+        $c = $this->adminAccess('coordinator', 'COORD-001');
         $t = $this->student('2024-1-00001', null);
         foreach ([$c, $t] as $who) {
             $this->signedIn($who)->getJson('/api/admin/coordinators')->assertForbidden();

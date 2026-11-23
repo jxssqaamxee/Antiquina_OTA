@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from "react";
-import StaffShell, { StatCard } from "../../Components/staff/StaffShell";
-import { Btn, Card, Chip, Field, Input, Notice, Row, Select, Table, Tabs, statusTone, useAction } from "../../Components/staff/ui";
-import { AnnouncementsPanel, AuditPanel, ReportsPanel } from "../../Components/staff/panels";
+import { LayoutDashboard, UserCog, Layers, ClipboardList, TrendingUp, Target, FileBarChart, Megaphone, ShieldCheck } from "lucide-react";
+import AdminShell, { StatCard } from "../../Components/admin/AdminShell";
+import { Btn, Card, Chip, Field, Input, Notice, Row, Select, Table, statusTone, useAction } from "../../Components/admin/ui";
+import { AnnouncementsPanel, AuditPanel, ReportsPanel } from "../../Components/admin/panels";
 import { adminService as svc } from "../../services/adminService";
 import { errorMessage } from "../../config/axiosConfig";
 
@@ -30,16 +31,16 @@ function Overview() {
   );
 }
 
-function Coordinators({ sections }) {
+function Coordinators({ sections, year, goTo }) {
   const [data, reload] = useLoad(svc.coordinators);
   const { busy, msg, run } = useAction();
-  const [f, setF] = useState({ staff_id: "", first_name: "", last_name: "", email: "", password: "" });
+  const [f, setF] = useState({ admin_id: "", first_name: "", last_name: "", email: "", password: "" });
   const [pick, setPick] = useState({});
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
 
   const create = async () => {
     const r = await run(() => svc.createCoordinator(f), "Coordinator created.");
-    if (r) { setF({ staff_id: "", first_name: "", last_name: "", email: "", password: "" }); reload(); }
+    if (r) { setF({ admin_id: "", first_name: "", last_name: "", email: "", password: "" }); reload(); }
   };
   const assign = async (c) => { if (pick[c.id]) { await run(() => svc.assignCoordinator(c.id, pick[c.id]), "Section assigned."); reload(); } };
   const unassign = async (c) => { await run(() => svc.unassignCoordinator(c.id), "Assignment ended."); reload(); };
@@ -49,7 +50,7 @@ function Coordinators({ sections }) {
       <Notice msg={msg} />
       <Card title="New Coordinator">
         <Row>
-          <Field label="Staff ID"><Input value={f.staff_id} onChange={set("staff_id")} /></Field>
+          <Field label="Coordinator ID"><Input value={f.admin_id} onChange={set("admin_id")} /></Field>
           <Field label="First name"><Input value={f.first_name} onChange={set("first_name")} /></Field>
           <Field label="Last name"><Input value={f.last_name} onChange={set("last_name")} /></Field>
           <Field label="Email"><Input type="email" value={f.email} onChange={set("email")} /></Field>
@@ -58,8 +59,14 @@ function Coordinators({ sections }) {
         </Row>
       </Card>
       <Card title="Coordinators">
+        {sections.length === 0 && (
+          <p className="st-notice is-bad" role="status">
+            {year ? "There are no sections yet, so there is nothing to choose. Create sections first." : "There is no current academic year yet, so no sections exist. Add an academic year and make it current first."}{" "}
+            <Btn onClick={() => goTo(year ? "sections" : "progression")}>{year ? "Go to Sections" : "Go to Progression"}</Btn>
+          </p>
+        )}
         <Table rows={data?.coordinators} cols={[
-          { h: "Staff ID", render: (c) => c.staff_id },
+          { h: "Coordinator ID", render: (c) => c.admin_id },
           { h: "Name", render: (c) => c.name },
           { h: "Email", render: (c) => c.email },
           { h: "Status", render: (c) => <Chip tone={c.is_active ? "good" : "bad"}>{c.is_active ? "Active" : "Deactivated"}</Chip> },
@@ -67,7 +74,7 @@ function Coordinators({ sections }) {
           { h: "Assign", render: (c) => (
             <Row>
               <Select value={pick[c.id] || ""} onChange={(e) => setPick({ ...pick, [c.id]: e.target.value })}>
-                <option value="">Choose section…</option>
+                <option value="">{sections.length ? "Choose section…" : "No sections available"}</option>
                 {sections.map((s) => <option key={s.id} value={s.id}>{s.code}</option>)}
               </Select>
               <Btn disabled={busy || !pick[c.id]} onClick={() => assign(c)}>{c.section ? "Reassign" : "Assign"}</Btn>
@@ -80,7 +87,7 @@ function Coordinators({ sections }) {
   );
 }
 
-function Sections({ courses, year, onChanged }) {
+function Sections({ courses, year, onChanged, goTo }) {
   const [list, reload] = useLoad(() => svc.sections(), []);
   const { busy, msg, run } = useAction();
   const [f, setF] = useState({ course_id: "", year_level: "1", count: "1" });
@@ -93,6 +100,12 @@ function Sections({ courses, year, onChanged }) {
   return (
     <>
       <Notice msg={msg} />
+      {!year && (
+        <p className="st-notice is-bad" role="status">
+          Sections belong to the current academic year, and none is set yet.{" "}
+          <Btn onClick={() => goTo("progression")}>Add an academic year</Btn>
+        </p>
+      )}
       <Card title={`Create sections${year ? ` for ${year.name}` : ""}`}>
         <Row>
           <Field label="Course"><Select value={f.course_id} onChange={(e) => setF({ ...f, course_id: e.target.value })}>
@@ -259,7 +272,19 @@ function Training({ sections }) {
   );
 }
 
-/** Admin area: one desktop page with tabs. Every action is also enforced by Laravel (role:admin). */
+const NAV = [
+  { key: "overview", label: "Overview", icon: LayoutDashboard },
+  { key: "coordinators", label: "Coordinators", icon: UserCog },
+  { key: "sections", label: "Sections", icon: Layers },
+  { key: "enrollments", label: "Enrollments", icon: ClipboardList },
+  { key: "progression", label: "Progression", icon: TrendingUp },
+  { key: "training", label: "Training requirements", icon: Target },
+  { key: "reports", label: "Reports", icon: FileBarChart },
+  { key: "announcements", label: "Announcements", icon: Megaphone },
+  { key: "activity", label: "Audit log", icon: ShieldCheck },
+];
+
+/** Admin area: one desktop page, one sidebar entry per section. Every action is also enforced by Laravel (role:admin). */
 export default function AdminDashboard() {
   const [tab, setTab] = useState("overview");
   const [courses] = useLoad(() => svc.courses().then((d) => d.courses));
@@ -271,21 +296,17 @@ export default function AdminDashboard() {
   const sections = secs || [];
 
   return (
-    <StaffShell roleLabel="System Administrator">
-      <h1 className="st-h1">Administration</h1>
-      <Tabs value={tab} onChange={setTab} tabs={[
-        ["overview", "Overview"], ["coordinators", "Coordinators"], ["sections", "Sections"], ["enrollments", "Enrollments"],
-        ["progression", "Progression"], ["training", "Training requirements"], ["reports", "Reports"], ["announcements", "Announcements"], ["activity", "Audit log"],
-      ]} />
+    <AdminShell roleLabel="System Administrator" nav={NAV} active={tab} onNavigate={setTab}
+      title={NAV.find((n) => n.key === tab)?.label} subtitle={year ? `Current academic year: ${year.name}` : undefined}>
       {tab === "overview" && <Overview />}
-      {tab === "coordinators" && <Coordinators sections={sections} />}
-      {tab === "sections" && <Sections courses={courses || []} year={year} onChanged={refresh} />}
+      {tab === "coordinators" && <Coordinators sections={sections} year={year} goTo={setTab} />}
+      {tab === "sections" && <Sections courses={courses || []} year={year} onChanged={refresh} goTo={setTab} />}
       {tab === "enrollments" && <Enrollments sections={sections} />}
       {tab === "progression" && <Progression years={years || []} sections={sections} onChanged={refresh} />}
       {tab === "training" && <Training sections={sections} />}
       {tab === "reports" && <ReportsPanel svc={svc} sections={sections} courses={courses || []} />}
       {tab === "announcements" && <AnnouncementsPanel svc={svc} sections={sections} courses={courses || []} />}
       {tab === "activity" && <AuditPanel svc={svc} />}
-    </StaffShell>
+    </AdminShell>
   );
 }

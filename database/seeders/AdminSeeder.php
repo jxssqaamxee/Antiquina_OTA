@@ -26,14 +26,14 @@ class AdminSeeder extends Seeder
         $email = strtolower(trim((string) env('INITIAL_ADMIN_EMAIL')));
         $password = (string) env('INITIAL_ADMIN_PASSWORD');
         $name = trim((string) env('INITIAL_ADMIN_NAME', 'System Administrator'));
-        $staffId = strtoupper(trim((string) env('INITIAL_ADMIN_ID', 'ADMIN-001')));
+        $adminId = strtoupper(trim((string) env('INITIAL_ADMIN_ID', 'ADMIN-001')));
 
         if ($email === '' || $password === '') {
             $this->command?->warn('Skipping initial admin: INITIAL_ADMIN_EMAIL / INITIAL_ADMIN_PASSWORD not set in .env');
 
             return;
         }
-        if (! filter_var($email, FILTER_VALIDATE_EMAIL) || ! preg_match(Formats::STAFF_ID, $staffId)) {
+        if (! filter_var($email, FILTER_VALIDATE_EMAIL) || ! preg_match(Formats::ADMIN_ID, $adminId)) {
             $this->command?->error('Skipping initial admin: INITIAL_ADMIN_EMAIL or INITIAL_ADMIN_ID is not valid.');
 
             return;
@@ -57,8 +57,8 @@ class AdminSeeder extends Seeder
 
             return;
         }
-        if (User::where('staff_id', $staffId)->where('email', '!=', $email)->exists()) {
-            $this->command?->error("Staff ID {$staffId} is already used by another account.");
+        if (User::where('admin_id', $adminId)->where('email', '!=', $email)->exists()) {
+            $this->command?->error("Admin ID {$adminId} is already used by another account.");
 
             return;
         }
@@ -68,13 +68,13 @@ class AdminSeeder extends Seeder
         $first = count($parts) ? implode(' ', $parts) : $name;
 
         $admin = $user ?? new User();
-        $admin->forceFill([ // role / staff_id are not mass-assignable on purpose
-            'role' => User::ROLE_ADMIN, 'staff_id' => $staffId, 'student_id' => null, 'course' => null,
+        $admin->forceFill([ // role / admin_id are not mass-assignable on purpose
+            'role' => User::ROLE_ADMIN, 'admin_id' => $adminId, 'student_id' => null, 'course' => null,
             'first_name' => Formats::titleCase($first), 'last_name' => Formats::titleCase($last), 'email' => $email,
             'password' => $password, 'email_verified_at' => $user?->email_verified_at ?? now(),
             'is_active' => true, 'must_change_password' => true,
         ])->save();
 
-        $this->command?->info("Initial administrator ready: {$email} (sign in at /staff-login and change the password).");
+        $this->command?->info("Initial administrator ready: {$email} (sign in at /admin-login and change the password).");
     }
 }

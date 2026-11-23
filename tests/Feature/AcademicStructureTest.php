@@ -30,7 +30,7 @@ class AcademicStructureTest extends TestCase
 
     private function admin(): User
     {
-        return User::factory()->create(['role' => 'admin', 'staff_id' => 'ADMIN-001', 'student_id' => null, 'course' => null, 'email_verified_at' => now()]);
+        return User::factory()->create(['role' => 'admin', 'admin_id' => 'ADMIN-001', 'student_id' => null, 'course' => null, 'email_verified_at' => now()]);
     }
 
     private function trainee(string $sid, string $course = self::BSIT): User
@@ -128,7 +128,7 @@ class AcademicStructureTest extends TestCase
     public function test_academic_endpoints_are_admin_only(): void
     {
         $t = $this->trainee('2024-1-00001');
-        $c = User::factory()->create(['role' => 'coordinator', 'staff_id' => 'C-1', 'student_id' => null, 'course' => null, 'email_verified_at' => now()]);
+        $c = User::factory()->create(['role' => 'coordinator', 'admin_id' => 'C-1', 'student_id' => null, 'course' => null, 'email_verified_at' => now()]);
         foreach (['/api/admin/courses', '/api/admin/sections', '/api/admin/enrollments', '/api/admin/enrollments/unassigned', '/api/admin/academic-years'] as $url) {
             $this->signedIn($t)->getJson($url)->assertForbidden();
             $this->signedIn($c)->getJson($url)->assertForbidden();

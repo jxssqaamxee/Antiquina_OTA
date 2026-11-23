@@ -21,7 +21,7 @@ class AdminCoordinatorController extends Controller
         $a = CoordinatorAssignment::open()->where('coordinator_id', $u->id)->with('section.course')->first();
 
         return [
-            'id' => $u->id, 'staff_id' => $u->staff_id, 'name' => $u->fullName(), 'email' => $u->email,
+            'id' => $u->id, 'admin_id' => $u->admin_id, 'name' => $u->fullName(), 'email' => $u->email,
             'is_active' => $u->isActive(),
             'section' => $a?->section ? ['id' => $a->section->id, 'code' => $a->section->code()] : null,
         ];
@@ -34,17 +34,17 @@ class AdminCoordinatorController extends Controller
 
     public function store(Request $request, ActivityLogService $log): JsonResponse
     {
-        $request->merge(['staff_id' => strtoupper(trim((string) $request->input('staff_id')))]);
+        $request->merge(['admin_id' => strtoupper(trim((string) $request->input('admin_id')))]);
         $data = $request->validate([
-            'staff_id' => ['required', 'regex:'.Formats::STAFF_ID, 'unique:users,staff_id'],
+            'admin_id' => ['required', 'regex:'.Formats::ADMIN_ID, 'unique:users,admin_id'],
             'first_name' => ['required', 'string', 'max:80', 'regex:'.Formats::NAME],
             'last_name' => ['required', 'string', 'max:80', 'regex:'.Formats::NAME],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'max:100', Password::defaults()],
         ]);
         $u = new User();
-        $u->forceFill([ // role / staff_id are not mass-assignable on purpose
-            'role' => User::ROLE_COORDINATOR, 'staff_id' => strtoupper($data['staff_id']), 'student_id' => null, 'course' => null,
+        $u->forceFill([ // role / admin_id are not mass-assignable on purpose
+            'role' => User::ROLE_COORDINATOR, 'admin_id' => strtoupper($data['admin_id']), 'student_id' => null, 'course' => null,
             'first_name' => Formats::titleCase($data['first_name']), 'last_name' => Formats::titleCase($data['last_name']),
             'email' => strtolower($data['email']), 'password' => $data['password'], 'email_verified_at' => now(),
         ])->save();

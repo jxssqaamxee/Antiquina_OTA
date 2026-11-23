@@ -14,8 +14,8 @@ final class Formats
     /** School student IDs: YYYY-N-NNNNN, e.g. 2021-2-04062. */
     public const STUDENT_ID = '/^\d{4}-\d-\d{5}$/';
 
-    /** Staff (Admin / Coordinator) sign-in ID, e.g. ADMIN-001 or COORD-BSIT-4A. Stored upper-case. */
-    public const STAFF_ID = '/^[A-Z0-9][A-Z0-9\-_.]{2,31}$/';
+    /** Admin (Admin / Coordinator) sign-in ID, e.g. ADMIN-001 or COORD-BSIT-4A. Stored upper-case. */
+    public const ADMIN_ID = '/^[A-Z0-9][A-Z0-9\-_.]{2,31}$/';
 
     /** Letters, spaces, hyphens and apostrophes only; must start with a letter. */
     public const NAME = '/^[\pL][\pL\s\'\-]*$/u';

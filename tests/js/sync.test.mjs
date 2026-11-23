@@ -179,7 +179,7 @@ await t("403 email_unverified: pauses (one request, no retry loop), stays dirty,
   assert.deepEqual(dirty(), []);
 });
 
-await t("403 role_forbidden (staff account) pauses the same way", async () => {
+await t("403 role_forbidden (admin account) pauses the same way", async () => {
   mock.put = async () => { throw err(403, { code: "role_forbidden" }); };
   edit({ a: 1 }); await sync.flush(U);
   await new Promise((r) => setTimeout(r, 900));

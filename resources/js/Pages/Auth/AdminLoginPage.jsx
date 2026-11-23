@@ -9,15 +9,15 @@ import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import { homePath } from "../../utils/roles";
 
-// Staff IDs are letters, digits, dashes, dots and underscores, shown upper-case (e.g. ADMIN-001).
-const filterStaffId = (v) => String(v || "").toUpperCase().replace(/[^A-Z0-9\-_.]/g, "").slice(0, 32);
+// Admin and Coordinator IDs are letters, digits, dashes, dots and underscores, shown upper-case (e.g. ADMIN-001).
+const filterAdminId = (v) => String(v || "").toUpperCase().replace(/[^A-Z0-9\-_.]/g, "").slice(0, 32);
 
 /** Admin / Coordinator sign-in. Trainees sign in at /login with their Student ID. */
-export default function StaffLoginPage() {
+export default function AdminLoginPage() {
   const { signIn } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
-  const [staffId, setStaffId] = useState("");
+  const [adminId, setAdminId] = useState("");
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
   const [remember, setRemember] = useState(false);
@@ -25,13 +25,13 @@ export default function StaffLoginPage() {
   const [error, setError] = useState("");
   const [errors, setErrors] = useState({});
 
-  useEffect(() => { document.title = "Staff sign in | OCCDL"; }, []);
+  useEffect(() => { document.title = "Admin / Coordinator sign in | OCCDL"; }, []);
 
   async function submit(e) {
     e.preventDefault();
     setError(""); setErrors({});
     const v = {};
-    if (staffId.length < 3) v.staff_id = "Enter your Staff ID.";
+    if (adminId.length < 3) v.admin_id = "Enter your Admin or Coordinator ID.";
     if (!password) v.password = "Enter your password.";
     if (Object.keys(v).length) {
       setErrors(v);
@@ -40,29 +40,29 @@ export default function StaffLoginPage() {
     }
     setBusy(true);
     try {
-      const { data } = await api.post("/auth/staff-login", { staff_id: staffId, password, remember });
+      const { data } = await api.post("/auth/admin-login", { admin_id: adminId, password, remember });
       await signIn(data, remember);
       navigate(homePath(data.user), { replace: true });
     } catch (err) {
       setErrors(fieldErrors(err));
       const message = errorMessage(err);
       setError(message);
-      toast.error(message, { title: "Sign in failed", key: "staff-login-error" });
+      toast.error(message, { title: "Sign in failed", key: "admin-login-error" });
       setBusy(false);
     }
   }
 
   return (
     <AuthShell
-      docType="STAFF ACCESS"
+      docType="ADMIN ACCESS"
       caseSeed="STF"
-      title={<>Staff <span className="accent">sign in</span></>}
-      subtitle="Administrators and Coordinators sign in with their Staff ID."
+      title={<>Admin / Coordinator <span className="accent">sign in</span></>}
+      subtitle="Administrators sign in with their Admin ID and Coordinators with their Coordinator ID."
       railHeadline="Manage on-the-job training."
       railNote="Coordinators see only their own section. Every management action is checked on the server."
       gate
       gateName="Opol Community College"
-      gateLabel="Staff"
+      gateLabel="Admin"
       gateDefaultOpen
       footer={<>Trainee? <Link to="/login">Sign in with your Student ID</Link></>}
     >
@@ -70,16 +70,16 @@ export default function StaffLoginPage() {
 
       <form onSubmit={submit} noValidate>
         <LedgerRow
-          index={1} icon={IdCard} htmlFor="staff_id" error={errors.staff_id}
-          label={<>Staff ID <span className="lg-required" aria-hidden="true">*</span></>}
+          index={1} icon={IdCard} htmlFor="admin_id" error={errors.admin_id}
+          label={<>Admin / Coordinator ID <span className="lg-required" aria-hidden="true">*</span></>}
           hint="Given to you by the system administrator, e.g. ADMIN-001"
         >
           <LedgerInput
-            id="staff_id" value={staffId} autoComplete="username" maxLength={32}
+            id="admin_id" value={adminId} autoComplete="username" maxLength={32}
             autoCapitalize="characters" autoCorrect="off" spellCheck={false}
             enterKeyHint="next" placeholder="ADMIN-001"
-            aria-required="true" aria-invalid={!!errors.staff_id}
-            onChange={(e) => { setStaffId(filterStaffId(e.target.value)); setError(""); setErrors((x) => ({ ...x, staff_id: undefined })); }}
+            aria-required="true" aria-invalid={!!errors.admin_id}
+            onChange={(e) => { setAdminId(filterAdminId(e.target.value)); setError(""); setErrors((x) => ({ ...x, admin_id: undefined })); }}
           />
         </LedgerRow>
 
