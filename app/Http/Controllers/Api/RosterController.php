@@ -90,7 +90,7 @@ class RosterController extends Controller
         $courses = DB::table('courses')->pluck('code', 'id');
 
         return DB::table('enrolled_students as e')
-            ->leftJoin('users as u', 'u.student_id', '=', 'e.student_id')
+            ->leftJoin('users as u', fn ($j) => $j->on('u.student_id', '=', 'e.student_id')->whereNotNull('u.email_verified_at')) // an unverified account does not count as registered
             ->where('e.section_id', $section->id)
             ->orderBy('e.student_id')->limit(3000)
             ->get(['e.student_id', 'e.course_id', 'e.source_file', 'u.id as user_id', 'u.first_name', 'u.last_name', 'u.email', 'u.created_at as registered_at'])

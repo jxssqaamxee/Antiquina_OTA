@@ -26,7 +26,7 @@ class CoordinatorAccessService
     {
         $sectionId = $this->section($coordinator)?->id;
 
-        return User::query()->where('role', User::ROLE_TRAINEE)->whereIn('id',
+        return User::query()->where('role', User::ROLE_TRAINEE)->whereNotNull('email_verified_at')->whereIn('id',
             StudentEnrollment::open()->where('section_id', $sectionId ?? 0)->select('user_id'));
     }
 

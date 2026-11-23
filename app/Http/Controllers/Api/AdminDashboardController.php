@@ -20,7 +20,8 @@ class AdminDashboardController extends Controller
             'accounts' => [
                 'admins' => (int) ($byRole[User::ROLE_ADMIN] ?? 0),
                 'coordinators' => (int) ($byRole[User::ROLE_COORDINATOR] ?? 0),
-                'trainees' => (int) ($byRole[User::ROLE_TRAINEE] ?? 0),
+                'trainees' => User::where('role', User::ROLE_TRAINEE)->whereNotNull('email_verified_at')->count(),
+                'unverified' => User::where('role', User::ROLE_TRAINEE)->whereNull('email_verified_at')->count(),
                 'deactivated' => User::where('is_active', false)->count(),
             ],
         ]);

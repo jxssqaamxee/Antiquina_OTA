@@ -41,6 +41,7 @@ class EmailVerificationController extends Controller
 
         if (! $user->hasVerifiedEmail()) {
             $user->markEmailAsVerified();
+            self::enrollWhenVerified($user);
         }
 
         return redirect('/login?verify=ok');
@@ -74,6 +75,7 @@ class EmailVerificationController extends Controller
         }
 
         $user->markEmailAsVerified();
+        self::enrollWhenVerified($user);
 
         return response()->json([
             'message' => 'Your email is verified.',
@@ -156,6 +158,22 @@ class EmailVerificationController extends Controller
      * Send the email without ever failing the caller. If the mail server is down,
      * registering must still succeed; the person can press "Resend".
      */
+    /**
+     * A trainee is placed in their section (and so becomes visible to the coordinator / admin) only after the
+     * email is verified. Never blocks verification: an Admin still sees the student in the unassigned queue.
+     */
+    public static function enrollWhenVerified(User $user): void
+    {
+        if (! $user->isTrainee()) {
+            return;
+        }
+        try {
+            app(\App\Services\Academic\EnrollmentService::class)->enrollOnRegistration($user);
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    }
+
     public static function send(User $user): bool
     {
         try {

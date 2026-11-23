@@ -264,11 +264,22 @@ class RosterImportTest extends TestCase
 
         // ID + course match -> registered, enrolled in the importing coordinator's section.
         $this->postJson('/api/auth/register', $form())->assertCreated();
-        $enrollment = User::where('student_id', '2021-2-04062')->first()->currentEnrollment();
+        $this->app['auth']->guard('web')->logout();
+
+        // Unverified: the coordinator sees nobody, and the roster still says "not registered yet".
+        $this->assertNull(User::where('student_id', '2021-2-04062')->first()->currentEnrollment());
+        $this->signedIn($this->coordA)->getJson('/api/coordinator/trainees')->assertOk()->assertJsonCount(0, 'trainees');
+        $this->signedIn($this->coordA)->getJson('/api/coordinator/roster')->assertOk()->assertJsonPath('registered', 0)->assertJsonPath('waiting', 1);
+        $this->app['auth']->guard('web')->logout();
+
+        // Verified -> enrolled in the importing coordinator's section.
+        $u = User::where('student_id', '2021-2-04062')->first();
+        $u->markEmailAsVerified();
+        \App\Http\Controllers\Api\EmailVerificationController::enrollWhenVerified($u);
+        $enrollment = $u->currentEnrollment();
         $this->assertSame('active', $enrollment->status);
         $this->assertSame($this->a->id, $enrollment->section_id);
 
-        $this->app['auth']->guard('web')->logout();
         $mine = $this->signedIn($this->coordA)->getJson('/api/coordinator/trainees')->assertOk();
         $this->assertSame(['2021-2-04062'], collect($mine->json('trainees'))->pluck('student_id')->all());
         $this->signedIn($this->coordB)->getJson('/api/coordinator/trainees')->assertOk()->assertJsonCount(0, 'trainees');

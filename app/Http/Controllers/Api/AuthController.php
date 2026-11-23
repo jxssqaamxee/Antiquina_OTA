@@ -44,11 +44,8 @@ class AuthController extends Controller
             'email_verified_at' => null,
         ]);
 
-        try {
-            app(\App\Services\Academic\EnrollmentService::class)->enrollOnRegistration($user);
-        } catch (\Throwable $e) {
-            report($e); // never block registration; Admin sees the student in the unassigned queue
-        }
+        // No enrollment yet: the student joins their section (and shows up for the coordinator / admin)
+        // only once the email is verified, see EmailVerificationController::enrollWhenVerified().
 
         ProfilePhotoStorage::save($user, $request->file('profile_photo'));
 

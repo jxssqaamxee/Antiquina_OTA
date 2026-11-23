@@ -172,6 +172,10 @@ class AcademicStructureTest extends TestCase
                 'profile_photo' => UploadedFile::fake()->image('me.jpg', 400, 500),
             ])->assertCreated();
             $this->app['auth']->guard('web')->logout();
+            $u = User::where('student_id', $sid)->first();
+            $this->assertNull($u->currentEnrollment()); // nothing is placed until the email is verified
+            $u->markEmailAsVerified();
+            \App\Http\Controllers\Api\EmailVerificationController::enrollWhenVerified($u);
         }
         $this->assertSame('active', User::where('student_id', '2024-1-00077')->first()->currentEnrollment()->status);
         $this->assertSame($sec->id, User::where('student_id', '2024-1-00077')->first()->currentEnrollment()->section_id);
