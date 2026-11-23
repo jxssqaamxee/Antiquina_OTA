@@ -58,21 +58,30 @@ export default function SetupAccountPage() {
     setErrors((x) => ({ ...x, [k]: undefined }));
   };
 
-  const meta = step === 1
-    ? {
+  const META = [
+    {
       title: <>Welcome, let&rsquo;s confirm <span className="accent">you</span></>,
-      subtitle: `This ${roleLabel} account was created for you. Add your photo and your name.`,
-      railHeadline: "One last entry before you’re in.",
+      subtitle: `This ${roleLabel} account was set up for you. Add your photo and your name.`,
+      railHeadline: "One last entry before you\u2019re in.",
       railNote: "Your photo, name and password replace the details entered when the account was created.",
-    }
-    : {
+    },
+    {
+      title: <>Your <span className="accent">sign-in</span> details</>,
+      subtitle: `These were set when the ${roleLabel} account was created. Check they are yours.`,
+      railHeadline: "Stay reachable on campus.",
+      railNote: "Your ID and email are locked: they are how you sign in, so only the person who created the account can change them.",
+    },
+    {
       title: <>Secure your <span className="accent">account</span></>,
-      subtitle: "Last step: choose a password only you know.",
+      subtitle: "Last step: choose a password only you know, and you\u2019re in.",
       railHeadline: "Last entry on the form.",
       railNote: "This replaces the password you were given. Nobody else will see your new one.",
-    };
+    },
+  ];
+  const TOTAL = META.length;
+  const meta = META[step - 1];
 
-  const tabs = ["Identity", "Security"].map((label, i) => {
+  const tabs = ["Identity", "Account", "Security"].map((label, i) => {
     const n = i + 1;
     const done = n < step;
     return (
@@ -99,6 +108,7 @@ export default function SetupAccountPage() {
       setStep(2);
       return;
     }
+    if (step < TOTAL) { setStep(step + 1); return; }
 
     const v = {};
     const p = passwordProblem(form.password);
@@ -183,17 +193,22 @@ export default function SetupAccountPage() {
                   aria-invalid={!!errors.last_name} onChange={set("last_name")} />
               </LedgerRow>
 
-              <LedgerRow index={4} icon={IdCard} htmlFor="su_id" label={isAdmin ? "Admin ID" : "Coordinator ID"}
+            </>
+          )}
+
+          {step === 2 && (
+            <>
+              <LedgerRow index={1} icon={IdCard} htmlFor="su_id" label={isAdmin ? "Admin ID" : "Coordinator ID"}
                 hint="Set when the account was created. It can’t be changed here.">
                 <div id="su_id" className="lg-locked"><Lock size={13} aria-hidden="true" />{user?.admin_id}</div>
               </LedgerRow>
-              <LedgerRow index={5} icon={Mail} htmlFor="su_email" label="Email" hint="Your sign-in email can’t be changed here.">
+              <LedgerRow index={2} icon={Mail} htmlFor="su_email" label="Email" hint="Your sign-in email can’t be changed here.">
                 <div id="su_email" className="lg-locked"><Lock size={13} aria-hidden="true" />{user?.email}</div>
               </LedgerRow>
             </>
           )}
 
-          {step === 2 && (
+          {step === 3 && (
             <>
               <LedgerRow index={1} icon={Lock} htmlFor="su_pw" error={errors.password} label={<>New password {req}</>}>
                 <LedgerPasswordInput id="su_pw" show={showPw} onToggle={() => setShowPw((v) => !v)} autoComplete="new-password" maxLength={100}
@@ -211,8 +226,8 @@ export default function SetupAccountPage() {
         </div>
 
         <div className="lg-actions-row" style={{ marginTop: 10 }}>
-          {step > 1 && <LedgerGhostButton onClick={() => { setErrors({}); setBanner(""); setStep(1); }}>Back</LedgerGhostButton>}
-          <LedgerButton disabled={busy}>{step === 1 ? "Next Entry" : busy ? "Saving…" : "Complete Setup & Continue"}</LedgerButton>
+          {step > 1 && <LedgerGhostButton onClick={() => { setErrors({}); setBanner(""); setStep(step - 1); }}>Back</LedgerGhostButton>}
+          <LedgerButton disabled={busy}>{step < TOTAL ? "Next Entry" : busy ? "Saving…" : "Complete Setup & Continue"}</LedgerButton>
         </div>
       </form>
 
