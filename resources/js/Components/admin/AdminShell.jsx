@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { clearPersistedUi } from "../../hooks/usePersistedTab";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { Camera, Check as CheckIcon, ChevronDown, ChevronUp, KeyRound, Lock, LogOut, UserRound, Menu, Palette, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
@@ -330,7 +331,7 @@ export default function AdminShell({ roleLabel, nav = [], active, onNavigate, ti
 
   async function signOut() {
     setBusy(true);
-    try { await logout(); } finally { navigate("/admin-login", { replace: true }); }
+    try { await logout(); clearPersistedUi(); } finally { navigate("/administrator", { replace: true }); }
   }
 
   const go = (key) => { setShowPw(false); setShowProfile(false); onNavigate?.(key); setSidebarOpen(false); };

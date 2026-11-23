@@ -30,7 +30,7 @@ class AdminLoginRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'admin_id.required' => 'Enter your Admin or Coordinator ID.',
+            'admin_id.required' => 'Enter your Administrator ID.',
             'admin_id.regex' => 'ID may only contain letters, numbers, dashes, dots and underscores.',
             'password.required' => 'Enter your password.',
         ];

@@ -109,7 +109,7 @@ class RolesTest extends TestCase
     {
         User::factory()->admin('ADMIN-001')->create();
 
-        $this->postJson('/api/auth/admin-login', ['admin_id' => ' admin-001 ', 'password' => 'password'])
+        $this->postJson('/api/auth/administrator', ['admin_id' => ' admin-001 ', 'password' => 'password'])
             ->assertOk()->assertJsonPath('user.role', 'admin')->assertJsonPath('user.admin_id', 'ADMIN-001');
         $this->assertAuthenticated('web');
     }
@@ -118,9 +118,9 @@ class RolesTest extends TestCase
     {
         User::factory()->coordinator('COORD-001')->create();
 
-        $this->postJson('/api/auth/admin-login', ['admin_id' => 'COORD-001', 'password' => 'nope'])
+        $this->postJson('/api/auth/administrator', ['admin_id' => 'COORD-001', 'password' => 'nope'])
             ->assertStatus(422)->assertJsonValidationErrors('admin_id');
-        $this->postJson('/api/auth/admin-login', ['admin_id' => 'NOBODY-001', 'password' => 'nope'])
+        $this->postJson('/api/auth/administrator', ['admin_id' => 'NOBODY-001', 'password' => 'nope'])
             ->assertStatus(422)->assertJsonPath('errors.admin_id.0', 'ID or password is incorrect.');
         $this->assertGuest('web');
     }
@@ -130,7 +130,7 @@ class RolesTest extends TestCase
         User::factory()->create(['student_id' => '2024-1-00001']);
         User::factory()->admin('ADMIN-001')->create();
 
-        $this->postJson('/api/auth/admin-login', ['admin_id' => '2024-1-00001', 'password' => 'password'])->assertStatus(422);
+        $this->postJson('/api/auth/administrator', ['admin_id' => '2024-1-00001', 'password' => 'password'])->assertStatus(422);
         $this->postJson('/api/auth/login', ['student_id' => 'ADMIN-001', 'password' => 'password'])->assertStatus(422);
         $this->assertGuest('web');
     }
@@ -140,10 +140,10 @@ class RolesTest extends TestCase
         User::factory()->admin('ADMIN-001')->create();
 
         for ($i = 0; $i < 5; $i++) {
-            $this->postJson('/api/auth/admin-login', ['admin_id' => 'ADMIN-001', 'password' => 'wrong'.$i])->assertStatus(422);
+            $this->postJson('/api/auth/administrator', ['admin_id' => 'ADMIN-001', 'password' => 'wrong'.$i])->assertStatus(422);
         }
 
-        $res = $this->postJson('/api/auth/admin-login', ['admin_id' => 'ADMIN-001', 'password' => 'password'])->assertStatus(422);
+        $res = $this->postJson('/api/auth/administrator', ['admin_id' => 'ADMIN-001', 'password' => 'password'])->assertStatus(422);
         $this->assertStringContainsString('Too many sign-in attempts', $res->json('errors.admin_id.0'));
         $this->assertGuest('web');
     }
@@ -155,7 +155,7 @@ class RolesTest extends TestCase
         User::factory()->coordinator('COORD-001')->inactive()->create();
         User::factory()->inactive()->create(['student_id' => '2024-1-00002']);
 
-        $this->postJson('/api/auth/admin-login', ['admin_id' => 'COORD-001', 'password' => 'password'])
+        $this->postJson('/api/auth/administrator', ['admin_id' => 'COORD-001', 'password' => 'password'])
             ->assertStatus(422)->assertJsonPath('errors.admin_id.0', fn ($m) => str_contains($m, 'deactivated'));
         $this->postJson('/api/auth/login', ['student_id' => '2024-1-00002', 'password' => 'password'])
             ->assertStatus(422)->assertJsonPath('errors.student_id.0', fn ($m) => str_contains($m, 'deactivated'));
@@ -189,7 +189,7 @@ class RolesTest extends TestCase
         $u = User::factory()->admin('ADMIN-001')->inactive()->create();
         $u->reactivate();
 
-        $this->postJson('/api/auth/admin-login', ['admin_id' => 'ADMIN-001', 'password' => 'password'])->assertOk();
+        $this->postJson('/api/auth/administrator', ['admin_id' => 'ADMIN-001', 'password' => 'password'])->assertOk();
     }
 
     // ---- first Admin (Artisan) ----
@@ -208,7 +208,7 @@ class RolesTest extends TestCase
         $this->assertNull($admin->student_id);
         $this->assertNotSame('Secret-Pass1', $admin->password);
 
-        $this->postJson('/api/auth/admin-login', ['admin_id' => 'ADMIN-001', 'password' => 'Secret-Pass1'])->assertOk();
+        $this->postJson('/api/auth/administrator', ['admin_id' => 'ADMIN-001', 'password' => 'Secret-Pass1'])->assertOk();
     }
 
     public function test_artisan_refuses_a_duplicate_admin_id_and_a_weak_password(): void

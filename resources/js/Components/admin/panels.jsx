@@ -3,10 +3,11 @@ import { Lock, Upload } from "lucide-react";
 import { Btn, Card, Check, Chip, Field, Input, Notice, Row, Select, Table, Tabs, Textarea, useAction } from "./ui";
 import { StatCard } from "./AdminShell";
 import { errorMessage } from "../../config/axiosConfig";
+import usePersistedState from "../../hooks/usePersistedState";
 
 /** Hours report (verified = approved only). `filters` = optional extra controls for Admin; `svc` is the role's service. */
-export function ReportsPanel({ svc, sections = [], courses = [] }) {
-  const [f, setF] = useState({ section_id: "", course_id: "" });
+export function ReportsPanel({ svc, sections = [], courses = [], scope = "admin" }) {
+  const [f, setF] = usePersistedState(`${scope}.reports`, { section_id: "", course_id: "" });
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const params = Object.fromEntries(Object.entries(f).filter(([, v]) => v));
@@ -41,10 +42,10 @@ export function ReportsPanel({ svc, sections = [], courses = [] }) {
 }
 
 /** Compose + history. Admin may pick all / course / section; a Coordinator is fixed to their own section (`fixedSection`). */
-export function AnnouncementsPanel({ svc, sections = [], courses = [], fixedSection = null }) {
+export function AnnouncementsPanel({ svc, sections = [], courses = [], fixedSection = null, scope = "admin" }) {
   const [list, setList] = useState(null);
   const { busy, msg, run } = useAction();
-  const [f, setF] = useState({ audience_type: fixedSection ? "section" : "all", course_id: "", section_id: fixedSection?.id || "", title: "", body: "" });
+  const [f, setF] = usePersistedState(`${scope}.announcement`, { audience_type: fixedSection ? "section" : "all", course_id: "", section_id: fixedSection?.id || "", title: "", body: "" });
   const load = () => svc.announcements().then(setList).catch(() => setList({ announcements: [] }));
   useEffect(() => { load(); }, []); // eslint-disable-line
   const send = async () => {
@@ -129,17 +130,17 @@ const fileSize = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Ma
  * `sections` is only given to Admin (picks a section); a Coordinator always works on their own section,
  * decided by the server.
  */
-export function RosterPanel({ svc, sections = [] }) {
+export function RosterPanel({ svc, sections = [], scope = "admin" }) {
   const isAdmin = sections.length > 0;
-  const [sectionId, setSectionId] = useState("");
-  const [mode, setMode] = useState("file");
+  const [sectionId, setSectionId] = usePersistedState(`${scope}.roster.section`, "");
+  const [mode, setMode] = usePersistedState(`${scope}.roster.mode`, "file");
   const [file, setFile] = useState(null);
-  const [assume, setAssume] = useState(false);
-  const [typed, setTyped] = useState("");
+  const [assume, setAssume] = usePersistedState(`${scope}.roster.assume`, false);
+  const [typed, setTyped] = usePersistedState(`${scope}.roster.typed`, "");
   const [result, setResult] = useState(null);
   const [list, setList] = useState(null);
   const [error, setError] = useState("");
-  const [show, setShow] = useState("all");
+  const [show, setShow] = usePersistedState(`${scope}.roster.show`, "all");
   const { busy, msg, run, setMsg } = useAction();
   const ready = !isAdmin || !!sectionId;
 

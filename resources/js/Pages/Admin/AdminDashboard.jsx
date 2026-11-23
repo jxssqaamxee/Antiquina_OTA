@@ -5,6 +5,8 @@ import { Btn, Card, Chip, Field, Input, Notice, Row, Select, Table, statusTone, 
 import { AnnouncementsPanel, AuditPanel, ReportsPanel, RosterPanel } from "../../Components/admin/panels";
 import { adminService as svc } from "../../services/adminService";
 import { errorMessage } from "../../config/axiosConfig";
+import usePersistedTab from "../../hooks/usePersistedTab";
+import usePersistedState from "../../hooks/usePersistedState";
 
 /** Loads data once and exposes a reload; keeps the first error readable. */
 function useLoad(fn, deps = []) {
@@ -34,7 +36,7 @@ function Overview() {
 function Coordinators({ sections, year, goTo }) {
   const [data, reload] = useLoad(svc.coordinators);
   const { busy, msg, run } = useAction();
-  const [f, setF] = useState({ admin_id: "", first_name: "", last_name: "", email: "", password: "" });
+  const [f, setF] = usePersistedState("admin.coordinator", { admin_id: "", first_name: "", last_name: "", email: "", password: "" }, { omit: ["password"] });
   const [pick, setPick] = useState({});
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
 
@@ -90,7 +92,7 @@ function Coordinators({ sections, year, goTo }) {
 function Sections({ courses, year, onChanged, goTo }) {
   const [list, reload] = useLoad(() => svc.sections(), []);
   const { busy, msg, run } = useAction();
-  const [f, setF] = useState({ course_id: "", year_level: "1", count: "1" });
+  const [f, setF] = usePersistedState("admin.sections", { course_id: "", year_level: "1", count: "1" });
   const [open, setOpen] = useState(null);
   const create = async () => {
     const r = await run(() => svc.createSections({ course_id: Number(f.course_id), year_level: Number(f.year_level), count: Number(f.count) }), "Sections ready.");
@@ -169,12 +171,12 @@ function Enrollments({ sections }) {
 }
 
 function Progression({ years, sections, onChanged }) {
-  const [yearId, setYearId] = useState("");
+  const [yearId, setYearId] = usePersistedState("admin.progression.year", "");
   const [plan, setPlan] = useState(null);
   const [yearSections, setYearSections] = useState([]);
   const [pick, setPick] = useState({});
   const { busy, msg, run } = useAction();
-  const [newYear, setNewYear] = useState("");
+  const [newYear, setNewYear] = usePersistedState("admin.progression.newYear", "");
 
   const prepare = async () => {
     const r = await run(() => svc.prepareProgression(yearId));
@@ -230,7 +232,7 @@ function Training({ sections }) {
   const [roster, setRoster] = useState([]);
   const [sel, setSel] = useState(null);
   const [info, setInfo] = useState(null);
-  const [f, setF] = useState({ hours: "", reason: "" });
+  const [f, setF] = usePersistedState("admin.training", { hours: "", reason: "" });
   const { busy, msg, run } = useAction();
   const pickSection = async (id) => { setSid(id); setSel(null); setInfo(null); setRoster(id ? (await svc.section(id)).students : []); };
   const pickTrainee = async (u) => { setSel(u); setInfo(await svc.traineeHours(u.user_id)); };
@@ -287,7 +289,7 @@ const NAV = [
 
 /** Admin area: one desktop page, one sidebar entry per section. Every action is also enforced by Laravel (role:admin). */
 export default function AdminDashboard() {
-  const [tab, setTab] = useState("overview");
+  const [tab, setTab] = usePersistedTab("admin", NAV.map((n) => n.key), "overview");
   const [courses] = useLoad(() => svc.courses().then((d) => d.courses));
   const [years, reloadYears] = useLoad(() => svc.years().then((d) => d.academic_years));
   const [secs, reloadSecs] = useLoad(() => svc.sections().then((d) => d.sections));
@@ -303,11 +305,11 @@ export default function AdminDashboard() {
       {tab === "coordinators" && <Coordinators sections={sections} year={year} goTo={setTab} />}
       {tab === "sections" && <Sections courses={courses || []} year={year} onChanged={refresh} goTo={setTab} />}
       {tab === "enrollments" && <Enrollments sections={sections} />}
-      {tab === "roster" && <RosterPanel svc={svc} sections={sections} />}
+      {tab === "roster" && <RosterPanel svc={svc} sections={sections} scope="admin" />}
       {tab === "progression" && <Progression years={years || []} sections={sections} onChanged={refresh} />}
       {tab === "training" && <Training sections={sections} />}
-      {tab === "reports" && <ReportsPanel svc={svc} sections={sections} courses={courses || []} />}
-      {tab === "announcements" && <AnnouncementsPanel svc={svc} sections={sections} courses={courses || []} />}
+      {tab === "reports" && <ReportsPanel svc={svc} sections={sections} courses={courses || []} scope="admin" />}
+      {tab === "announcements" && <AnnouncementsPanel svc={svc} sections={sections} courses={courses || []} scope="admin" />}
       {tab === "activity" && <AuditPanel svc={svc} />}
     </AdminShell>
   );

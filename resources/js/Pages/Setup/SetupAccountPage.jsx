@@ -141,7 +141,7 @@ export default function SetupAccountPage() {
   async function wrongAccount(e) {
     e.preventDefault();
     await logout();
-    navigate("/admin-login", { replace: true });
+    navigate("/administrator", { replace: true });
   }
 
   const shownPhoto = photoUrl || user?.picture || "";

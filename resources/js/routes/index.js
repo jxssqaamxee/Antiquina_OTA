@@ -22,9 +22,11 @@ const SetupAccountPage = lazy(loaders.setup);
 export const publicRoutes = [{ path: "/", component: SplashPage }];
 export const guestRoutes = [
   { path: "/login", component: LoginPage },
-  { path: "/admin-login", component: AdminLoginPage },
-  // Old bookmark from before the rename.
-  { path: "/staff-login", component: () => createElement(Navigate, { to: "/admin-login", replace: true }) },
+  // One address for both Admins and Coordinators, and the address the staff app installs from (see PwaManifestController::staff).
+  { path: "/administrator", component: AdminLoginPage },
+  // Old bookmarks / installed shortcuts from before the rename.
+  { path: "/admin-login", component: () => createElement(Navigate, { to: "/administrator", replace: true }) },
+  { path: "/staff-login", component: () => createElement(Navigate, { to: "/administrator", replace: true }) },
   { path: "/register", component: RegisterPage },
   { path: "/forgot-password", component: ForgotPasswordPage },
   { path: "/reset-password/success", component: ResetPasswordPage },

@@ -17,6 +17,8 @@
         'true', '1', 'on', 'yes' => 'true',
         default => 'false',
     };
+    // Management addresses install the STAFF app (own name + start page /administrator); everything else the trainee app.
+    $occStaff = request()->is('administrator', 'administrator/*', 'admin', 'admin/*', 'coordinator', 'coordinator/*', 'admin-login', 'staff-login', 'setup-account');
 @endphp
 <!DOCTYPE html>
 <html lang="en" data-mobile-only="{{ $occMobileOnly }}" data-inspect-protection="{{ $occInspect }}" style="background:#ffffff; overscroll-behavior-y: none; -webkit-text-size-adjust: 100%;">
@@ -51,11 +53,11 @@
     <!-- PWA -->
     <!-- Served by PwaManifestController: its theme_color follows the saved theme (cookie), so the cookie
          must be sent with the manifest request (use-credentials). -->
-    <link rel="manifest" href="{{ route('pwa.manifest', [], false) }}" crossorigin="use-credentials">
-    <meta name="application-name" content="OCCDL">
+    <link rel="manifest" href="{{ route($occStaff ? 'pwa.manifest.staff' : 'pwa.manifest', [], false) }}" crossorigin="use-credentials">
+    <meta name="application-name" content="{{ $occStaff ? 'OCCDL Administrator' : 'OCCDL' }}">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-title" content="OCCDL">
+    <meta name="apple-mobile-web-app-title" content="{{ $occStaff ? 'OCCDL Admin' : 'OCCDL' }}">
     <!-- Favicons / home-screen icons: identical files and markup to SCLF (public/images). -->
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32.png">

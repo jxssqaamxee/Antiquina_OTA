@@ -16,6 +16,8 @@ use Illuminate\Support\Facades\Route;
 Route::get('/manifest.json', PwaManifestController::class)->withoutMiddleware('web')->name('pwa.manifest');
 // Old address, kept so a page cached by an earlier version still finds a valid manifest.
 Route::get('/manifest.webmanifest', PwaManifestController::class)->withoutMiddleware('web');
+// Staff (Administrator / Coordinator) app: installs from /administrator, opens on /administrator.
+Route::get('/manifest-administrator.json', [PwaManifestController::class, 'staff'])->withoutMiddleware('web')->name('pwa.manifest.staff');
 
 // Link from the verification email. Must come before the catch-all route below. The name
 // 'verification.verify' is what Laravel's VerifyEmail notification uses to build the signed URL.
@@ -25,4 +27,4 @@ Route::get('/email/verify/{id}/{hash}', [EmailVerificationController::class, 've
     ->name('verification.verify');
 
 // Everything that is not /api, /up or a real file is the React single-page app.
-Route::view('/{any?}', 'app')->where('any', '^(?!api/|up$|email/|manifest\\.(json|webmanifest)$).*');
+Route::view('/{any?}', 'app')->where('any', '^(?!api/|up$|email/|manifest(-administrator)?\\.(json|webmanifest)$).*');

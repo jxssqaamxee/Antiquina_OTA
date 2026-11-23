@@ -65,4 +65,26 @@ class PwaManifestTest extends TestCase
             ->assertSee('href="/manifest.json"', false)
             ->assertSee('href="/images/apple-touch-icon.png"', false);
     }
+
+    public function test_staff_app_installs_from_administrator_as_its_own_app(): void
+    {
+        $staff = $this->get('/manifest-administrator.json')->assertOk()
+            ->assertJsonPath('id', '/administrator')
+            ->assertJsonPath('short_name', 'OCCDL Admin')
+            ->assertJsonPath('theme_color', '#01215f');
+        $this->assertStringStartsWith('/administrator', $staff->json('start_url'));
+        $this->assertNotSame($this->get('/manifest.json')->json('id'), $staff->json('id')); // separate installs
+
+        $this->get('/manifest.json')->assertJsonPath('start_url', '/?source=pwa');
+    }
+
+    public function test_the_page_points_to_the_right_manifest_for_its_address(): void
+    {
+        foreach (['/administrator', '/admin', '/coordinator', '/setup-account'] as $path) {
+            $this->get($path)->assertOk()->assertSee('href="/manifest-administrator.json"', false)->assertSee('content="OCCDL Admin"', false);
+        }
+        foreach (['/', '/login'] as $path) {
+            $this->get($path)->assertOk()->assertSee('href="/manifest.json"', false);
+        }
+    }
 }

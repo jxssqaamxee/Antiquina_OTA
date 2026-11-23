@@ -12,7 +12,7 @@ import { homePath } from "../../utils/roles";
 // Admin and Coordinator IDs are letters, digits, dashes, dots and underscores, shown upper-case (e.g. ADMIN-001).
 const filterAdminId = (v) => String(v || "").toUpperCase().replace(/[^A-Z0-9\-_.]/g, "").slice(0, 32);
 
-/** Admin / Coordinator sign-in. Trainees sign in at /login with their Student ID. */
+/** Admin / Coordinator sign-in only: no link to the trainee page. */
 export default function AdminLoginPage() {
   const { signIn } = useAuth();
   const toast = useToast();
@@ -25,13 +25,13 @@ export default function AdminLoginPage() {
   const [error, setError] = useState("");
   const [errors, setErrors] = useState({});
 
-  useEffect(() => { document.title = "Admin / Coordinator sign in | OCCDL"; }, []);
+  useEffect(() => { document.title = "Administrator sign in | OCCDL"; }, []);
 
   async function submit(e) {
     e.preventDefault();
     setError(""); setErrors({});
     const v = {};
-    if (adminId.length < 3) v.admin_id = "Enter your Admin or Coordinator ID.";
+    if (adminId.length < 3) v.admin_id = "Enter your Administrator ID.";
     if (!password) v.password = "Enter your password.";
     if (Object.keys(v).length) {
       setErrors(v);
@@ -40,7 +40,7 @@ export default function AdminLoginPage() {
     }
     setBusy(true);
     try {
-      const { data } = await api.post("/auth/admin-login", { admin_id: adminId, password, remember });
+      const { data } = await api.post("/auth/administrator", { admin_id: adminId, password, remember });
       await signIn(data, remember);
       navigate(homePath(data.user), { replace: true });
     } catch (err) {
@@ -56,7 +56,7 @@ export default function AdminLoginPage() {
     <AuthShell
       docType="ADMIN ACCESS"
       caseSeed="STF"
-      title={<>Admin / Coordinator <span className="accent">sign in</span></>}
+      title={<>Administrator <span className="accent">sign in</span></>}
       subtitle="Administrators sign in with their Admin ID and Coordinators with their Coordinator ID."
       railHeadline="Manage on-the-job training."
       railNote="Coordinators see only their own section. Every management action is checked on the server."
@@ -64,14 +64,13 @@ export default function AdminLoginPage() {
       gateName="Opol Community College"
       gateLabel="Admin"
       gateDefaultOpen
-      footer={<>Trainee? <Link to="/login">Sign in with your Student ID</Link></>}
     >
       <LedgerBanner>{error}</LedgerBanner>
 
       <form onSubmit={submit} noValidate>
         <LedgerRow
           index={1} icon={IdCard} htmlFor="admin_id" error={errors.admin_id}
-          label={<>Admin / Coordinator ID <span className="lg-required" aria-hidden="true">*</span></>}
+          label={<>Administrator ID <span className="lg-required" aria-hidden="true">*</span></>}
           hint="Given to you by the system administrator, e.g. ADMIN-001"
         >
           <LedgerInput

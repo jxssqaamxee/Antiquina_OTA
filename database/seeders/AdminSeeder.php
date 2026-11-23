@@ -75,6 +75,6 @@ class AdminSeeder extends Seeder
             'is_active' => true, 'must_change_password' => true,
         ])->save();
 
-        $this->command?->info("Initial administrator ready: {$email} (sign in at /admin-login and change the password).");
+        $this->command?->info("Initial administrator ready: {$email} (sign in at /administrator and change the password).");
     }
 }

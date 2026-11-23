@@ -81,7 +81,7 @@ class CreateAdmin extends Command
             'is_active' => true,
         ])->save();
 
-        $this->info("Administrator {$adminId} created. Sign in at /admin-login.");
+        $this->info("Administrator {$adminId} created. Sign in at /administrator.");
 
         return self::SUCCESS;
     }

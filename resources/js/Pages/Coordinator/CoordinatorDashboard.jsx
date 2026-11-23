@@ -5,6 +5,8 @@ import { Btn, Card, Check, Chip, Field, Input, Notice, Row, Select, Table, statu
 import { AnnouncementsPanel, AuditPanel, ReportsPanel, RosterPanel } from "../../Components/admin/panels";
 import { coordinatorService as svc } from "../../services/coordinatorService";
 import { errorMessage } from "../../config/axiosConfig";
+import usePersistedTab from "../../hooks/usePersistedTab";
+import usePersistedState from "../../hooks/usePersistedState";
 
 function useLoad(fn) {
   const [data, setData] = useState(null);
@@ -53,8 +55,8 @@ const DAYS = [[1, "Mon"], [2, "Tue"], [3, "Wed"], [4, "Thu"], [5, "Fri"], [6, "S
 function Placement({ trainee }) {
   const [ests, reloadEsts] = useLoad(svc.establishments);
   const { busy, msg, run } = useAction();
-  const [f, setF] = useState({ establishment_id: "", days: [1, 2, 3, 4, 5], time_in: "08:00", time_out: "17:00", supervisor_name: "" });
-  const [n, setN] = useState({ name: "", type: "public", address: "" });
+  const [f, setF] = usePersistedState(`coord.placement.${trainee.id}`, { establishment_id: "", days: [1, 2, 3, 4, 5], time_in: "08:00", time_out: "17:00", supervisor_name: "" });
+  const [n, setN] = usePersistedState("coord.establishment", { name: "", type: "public", address: "" });
   const toggle = (d) => setF({ ...f, days: f.days.includes(d) ? f.days.filter((x) => x !== d) : [...f.days, d].sort() });
   const addEst = async () => { const r = await run(() => svc.createEstablishment(n), "Establishment added."); if (r) { setN({ name: "", type: "public", address: "" }); reloadEsts(); } };
   const place = () => run(() => svc.place(trainee.id, { ...f, establishment_id: Number(f.establishment_id), supervisor_name: f.supervisor_name || null }), "Placement saved. The trainee's schedule is now managed here.");
@@ -136,7 +138,7 @@ const NAV = [
 
 /** Coordinator area: dashboard, trainees (with entries + placement), approvals, activity. Scope is enforced by Laravel. */
 export default function CoordinatorDashboard() {
-  const [tab, setTab] = useState("dashboard");
+  const [tab, setTab] = usePersistedTab("coordinator", NAV.map((n) => n.key), "dashboard");
   const [data, , error] = useLoad(svc.overview);
   useEffect(() => { document.title = "Coordinator | OCCDL"; }, []);
   return (
@@ -146,10 +148,10 @@ export default function CoordinatorDashboard() {
       {error && <p role="alert" className="st-error">{error}</p>}
       {tab === "dashboard" && <div className="st-flex"><StatCard label="Assigned trainees" value={data?.trainees} /></div>}
       {tab === "trainees" && <Trainees />}
-      {tab === "roster" && <RosterPanel svc={svc} />}
+      {tab === "roster" && <RosterPanel svc={svc} scope="coord" />}
       {tab === "approvals" && <Approvals />}
-      {tab === "reports" && <ReportsPanel svc={svc} />}
-      {tab === "announcements" && <AnnouncementsPanel svc={svc} fixedSection={data?.section || null} />}
+      {tab === "reports" && <ReportsPanel svc={svc} scope="coord" />}
+      {tab === "announcements" && <AnnouncementsPanel svc={svc} fixedSection={data?.section || null} scope="coord" />}
       {tab === "activity" && <AuditPanel svc={svc} title="Audit log (my section)" />}
     </AdminShell>
   );

@@ -57,7 +57,7 @@ export function isPhoneDevice() {
 
 /**
  * True when the switch is on AND this device is not a phone, EXCEPT on the management pages
- * (/admin, /coordinator, /admin-login): Admins and Coordinators work on a desktop. The gate runs
+ * (/admin, /coordinator, /administrator): Admins and Coordinators work on a desktop. The gate runs
  * before anyone signs in, so it can only look at the address, not at the person's role.
  * (It is a screen gate, not security: the API checks the role on every request.)
  */
