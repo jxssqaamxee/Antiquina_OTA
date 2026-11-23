@@ -4,7 +4,7 @@
 //    and then offline.html, so an installed app still opens with no signal.
 //  - /api/* is NEVER cached (private, per-user data); the app keeps its own
 //    offline copy of the logbook and syncs when the connection returns.
-const VERSION = "occ-v8"; // bumped: icons now served from /images like SCLF
+const VERSION = "occ-v9"; // bumped: drops cached page chunks from older builds
 const SHELL = `${VERSION}-shell`;
 const ASSETS = `${VERSION}-assets`;
 const PRECACHE = ["/offline.html", "/images/icon-192.png", "/images/icon-512.png"];

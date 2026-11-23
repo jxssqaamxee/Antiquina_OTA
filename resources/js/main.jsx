@@ -11,6 +11,24 @@ import { shouldBlockDevice } from "./utils/mobileOnly";
 // sign-in check, API call, service worker, install prompt or page chunk loads,
 // and the web-app manifest is removed so a desktop browser never offers to
 // install it. false = normal app everywhere.
+// A tab opened before a deploy still points at page chunks (VerifyEmailPage-xxxx.js ...) the new build no longer
+// has: the server answers with an HTML page and the screen goes blank. Reload ONCE to pick up the new build
+// (the guard stops a reload loop if the server really is missing the file).
+const RELOAD_KEY = "occ-chunk-reload";
+const reloadForNewBuild = () => {
+  try {
+    if (window.sessionStorage.getItem(RELOAD_KEY) === "1") return;
+    window.sessionStorage.setItem(RELOAD_KEY, "1");
+  } catch { /* storage blocked: reload anyway, once per page load */ }
+  window.location.reload();
+};
+window.addEventListener("vite:preloadError", (e) => { e.preventDefault?.(); reloadForNewBuild(); });
+window.addEventListener("unhandledrejection", (e) => {
+  const m = String(e.reason?.message || e.reason || "");
+  if (/dynamically imported module|Importing a module script failed|error loading dynamically imported module/i.test(m)) { e.preventDefault(); reloadForNewBuild(); }
+});
+window.addEventListener("load", () => setTimeout(() => { try { window.sessionStorage.removeItem(RELOAD_KEY); } catch { /* ignore */ } }, 5000));
+
 const root = ReactDOM.createRoot(document.getElementById("app"));
 
 if (shouldBlockDevice()) {
