@@ -27,6 +27,32 @@ class ProfilePhotoStorage
     /** JPEG bytes of the upload, or a 422 on the given form field when it is not a readable picture. */
     public static function reencode(UploadedFile $file, string $field = 'photo'): string
     {
+        if (! function_exists('imagecreatefromstring') || ! function_exists('imagejpeg')) {
+            // The host's PHP has no usable GD. Try Imagick, then accept a plain JPG/PNG/WebP as-is, so setup is never blocked.
+            \Illuminate\Support\Facades\Log::warning('Profile photo: PHP GD is not enabled; using the fallback. Enable extension=gd for resizing and EXIF stripping.');
+            $path = (string) $file->getRealPath();
+            if (class_exists(\Imagick::class)) {
+                try {
+                    $im = new \Imagick($path);
+                    $im->setIteratorIndex(0);
+                    $im->autoOrient();
+                    $im->setImageBackgroundColor('white');
+                    $im = $im->mergeImageLayers(\Imagick::LAYERMETHOD_FLATTEN);
+                    $im->thumbnailImage(self::MAX_SIDE, self::MAX_SIDE, true);
+                    $im->setImageFormat('jpeg');
+                    $im->setImageCompressionQuality(85);
+                    $im->stripImage();
+
+                    return $im->getImageBlob();
+                } catch (\Throwable) {
+                }
+            }
+            $info = @getimagesize($path);
+            if ($info && in_array($info[2], [IMAGETYPE_JPEG, IMAGETYPE_PNG, IMAGETYPE_WEBP], true) && $file->getSize() <= 5 * 1024 * 1024) {
+                return (string) file_get_contents($path);
+            }
+            throw ValidationException::withMessages([$field => 'The server cannot process this picture type. Use a JPG, PNG or WebP photo under 5 MB.']);
+        }
         $bytes = self::shrink((string) $file->getRealPath());
         if ($bytes === null) {
             throw ValidationException::withMessages([$field => 'That picture could not be read. Use a different JPG, PNG or WebP photo.']);
@@ -52,7 +78,7 @@ class ProfilePhotoStorage
     {
         $old = $user->profile_photo;
         $bytes = self::reencode($file, $field);
-        $mime = 'image/jpeg';
+        $mime = @getimagesizefromstring($bytes)['mime'] ?? 'image/jpeg'; // PNG/WebP only stay as-is in the no-GD fallback
         $path = self::DIRECTORY.'/'.bin2hex(random_bytes(20)).'.jpg';
 
         // Both writes or neither: the stored picture and the pointer to it can never disagree.
