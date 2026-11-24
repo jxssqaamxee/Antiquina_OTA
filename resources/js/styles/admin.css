@@ -311,3 +311,15 @@ textarea.st-inp { min-height: 104px; padding: 12px 14px; resize: vertical; font-
 /* The avatar can be a <button>: drop its default padding/border (it left blue strips beside the photo) and fill the bubble. */
 .ds-avatar { padding: 0; border: 0; }
 .ds-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* ---------- KPI tiles ---------- */
+.st-kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; margin-top: 14px; }
+.st-kpi small { display: block; margin-top: 2px; font-size: 11.5px; color: var(--ink-soft); opacity: .85; }
+.st-kpi.is-warn b { color: #b45309; }
+.st-kpi.is-bad b { color: #b91c1c; }
+.st-kpi-progress { background: var(--surface); border: 1.5px solid var(--edge); border-radius: 18px; padding: 16px 20px; margin-top: 14px; }
+.st-kpi-progress-top { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+.st-kpi-progress-top b { font-size: 30px; font-weight: 800; color: var(--accent-text); }
+.st-kpi-progress-top span { font-size: 12.5px; font-weight: 700; color: var(--ink-soft); }
+.st-kpi-bar { height: 10px; border-radius: 99px; background: var(--edge); overflow: hidden; }
+.st-kpi-bar i { display: block; height: 100%; border-radius: 99px; background: var(--accent-text); transition: width .4s ease; }

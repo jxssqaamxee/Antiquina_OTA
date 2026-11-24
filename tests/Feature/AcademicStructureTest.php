@@ -152,7 +152,7 @@ class AcademicStructureTest extends TestCase
     public function test_profile_update_ignores_course(): void
     {
         $u = $this->trainee('2024-1-00001');
-        $this->signedIn($u)->putJson('/api/profile', ['first_name' => 'Ana', 'last_name' => 'Lim', 'course' => 'BEED — Bachelor of Elementary Education'])->assertOk();
+        $this->signedIn($u)->putJson('/api/profile', ['first_name' => 'Ana', 'last_name' => 'Lim', 'course' => 'BEED — Bachelor of Elementary Education'])->assertForbidden();
         $this->assertSame(self::BSIT, $u->fresh()->course);
     }
 

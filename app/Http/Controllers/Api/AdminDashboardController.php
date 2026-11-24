@@ -6,10 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 
-/** Admin home. Phase 1 only reports account counts; later phases add enrollment and OJT statistics. */
+/** Admin home. Account counts plus school-wide OJT KPIs (KpiService). */
 class AdminDashboardController extends Controller
 {
-    public function show(): JsonResponse
+    public function show(\App\Services\Academic\KpiService $kpis): JsonResponse
     {
         $byRole = User::query()
             ->selectRaw('role, count(*) as total')
@@ -17,6 +17,7 @@ class AdminDashboardController extends Controller
             ->pluck('total', 'role');
 
         return response()->json([
+            'kpis' => $kpis->admin(),
             'accounts' => [
                 'admins' => (int) ($byRole[User::ROLE_ADMIN] ?? 0),
                 'coordinators' => (int) ($byRole[User::ROLE_COORDINATOR] ?? 0),

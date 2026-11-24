@@ -72,3 +72,38 @@ export function useAction() {
   };
   return { busy, msg, run, setMsg };
 }
+
+/** KPI tiles for the Overview pages. `k` is the `kpis` object from /api/{admin|coordinator}/overview. */
+export function KpiGrid({ k, scope = "admin" }) {
+  if (!k) return null;
+  const pct = Math.max(0, Math.min(100, Number(k.avg_percent) || 0));
+  const tiles = [
+    { label: "Trainees", value: k.trainees, hint: `${k.completed} completed OJT` },
+    { label: "Verified hours", value: k.verified_hours, hint: `of ${k.required_hours} required` },
+    { label: "Awaiting review", value: k.awaiting_review, hint: "entries submitted", tone: k.awaiting_review ? "warn" : "" },
+    { label: "Rejected entries", value: k.rejected_entries, hint: "need trainee correction", tone: k.rejected_entries ? "bad" : "" },
+    { label: "Placed in host", value: k.placed, hint: `${k.unplaced} not placed yet`, tone: k.unplaced ? "warn" : "" },
+    { label: "No verified hours", value: k.not_started, hint: "not started yet", tone: k.not_started ? "warn" : "" },
+  ];
+  if (scope === "admin") {
+    tiles.push(
+      { label: "Unassigned students", value: k.unassigned, hint: "no section yet", tone: k.unassigned ? "warn" : "" },
+      { label: "Idle coordinators", value: k.coordinators_unassigned, hint: "no section assigned", tone: k.coordinators_unassigned ? "warn" : "" },
+    );
+  }
+  return (
+    <>
+      <div className="st-kpi-progress" role="group" aria-label="Average OJT completion">
+        <div className="st-kpi-progress-top"><b>{pct}%</b><span>Average OJT completion</span></div>
+        <div className="st-kpi-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}><i style={{ width: `${pct}%` }} /></div>
+      </div>
+      <div className="st-kpi-grid">
+        {tiles.map((t) => (
+          <div key={t.label} className={`st-stat st-kpi ${t.tone ? `is-${t.tone}` : ""}`}>
+            <b>{t.value ?? "—"}</b><span>{t.label}</span><small>{t.hint}</small>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}

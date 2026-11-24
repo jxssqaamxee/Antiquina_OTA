@@ -318,7 +318,7 @@ class AuthTest extends TestCase
         $this->signedIn($user)->putJson('/api/profile', ['first_name' => '', 'last_name' => 'X1'])
             ->assertStatus(422)->assertJsonValidationErrors(['first_name', 'last_name']);
         $this->signedIn($user)->putJson('/api/profile', ['first_name' => 'ana', 'last_name' => 'lim', 'course' => self::COURSE])
-            ->assertOk()->assertJsonPath('user.name', 'Ana Lim');
+            ->assertForbidden()->assertJsonPath('code', 'profile_locked'); // read-only: only an administrator edits details
     }
 
     // ---- Profile photo -----------------------------------------------------

@@ -21,16 +21,12 @@ class ProfileController extends Controller
 {
     public function update(UpdateProfileRequest $request): JsonResponse
     {
-        $data = $request->validated();
-
-        $user = $request->user();
-        $user->update([
-            'first_name' => Formats::titleCase($data['first_name']),
-            'middle_name' => ! empty($data['middle_name']) ? Formats::titleCase($data['middle_name']) : null,
-            'last_name' => Formats::titleCase($data['last_name']),
-        ]);
-
-        return response()->json(['user' => $user->fresh()->toClient()]);
+        // Account details are read-only for every user (same as sclf_APP): only an Administrator can change them,
+        // from the admin Users screen (PUT /api/admin/users/{id}).
+        return response()->json([
+            'message' => 'Only an administrator can change account details.',
+            'code' => 'profile_locked',
+        ], 403);
     }
 
     /** Account preferences saved on the server (colour theme), so they follow the person to any device. */

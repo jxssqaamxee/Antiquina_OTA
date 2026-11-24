@@ -165,25 +165,23 @@ class FirstLoginSetupTest extends TestCase
         $this->postJson('/api/profile/complete-setup', [])->assertUnauthorized();
     }
 
-    public function test_after_setup_admin_and_coordinator_can_edit_their_name_but_not_id_or_email(): void
+    public function test_after_setup_admin_and_coordinator_cannot_edit_their_own_details(): void
     {
         foreach (['admin', 'coordinator'] as $role) {
             $u = User::factory()->adminAccess($role, strtoupper($role).'-77')->create();
-            $email = $u->email;
+            $first = $u->first_name;
 
             $this->signedIn($u)->putJson('/api/profile', [
                 'first_name' => 'juan', 'middle_name' => 'dela', 'last_name' => 'cruz', 'admin_id' => 'X-1', 'email' => 'x@example.com',
-            ])->assertOk()->assertJsonPath('user.name', 'Juan Dela Cruz');
+            ])->assertForbidden()->assertJsonPath('code', 'profile_locked');
 
-            $u->refresh();
-            $this->assertSame(strtoupper($role).'-77', $u->admin_id);
-            $this->assertSame($email, $u->email);
+            $this->assertSame($first, $u->fresh()->first_name);
         }
     }
 
     public function test_a_normal_trainee_is_never_gated(): void
     {
         $t = User::factory()->create();
-        $this->signedIn($t)->putJson('/api/profile', ['first_name' => 'Ana', 'last_name' => 'Lim'])->assertOk();
+        $this->signedIn($t)->putJson('/api/profile', ['first_name' => 'Ana', 'last_name' => 'Lim'])->assertForbidden(); // gated by role, not by the setup rule
     }
 }

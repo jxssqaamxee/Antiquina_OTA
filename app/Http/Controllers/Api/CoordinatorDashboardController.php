@@ -12,12 +12,13 @@ class CoordinatorDashboardController extends Controller
 {
     public function __construct(private CoordinatorAccessService $scope) {}
 
-    public function show(Request $request): JsonResponse
+    public function show(Request $request, \App\Services\Academic\KpiService $kpis): JsonResponse
     {
         $section = $this->scope->section($request->user());
 
         return response()->json([
             'section' => $section ? $section->toClient() : null,
+            'kpis' => $section ? $kpis->trainees($section->id) : null,
             'trainees' => $section ? $this->scope->traineesQuery($request->user())->count() : 0,
             'message' => $section ? null : 'No section has been assigned to you yet. Please contact an administrator.',
         ]);

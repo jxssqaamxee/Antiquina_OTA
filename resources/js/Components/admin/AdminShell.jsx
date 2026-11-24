@@ -11,7 +11,6 @@ import { REGULAR_THEMES, BLACK_THEMES, THEMES, setTheme, saveThemeToAccount } fr
 import AvatarPhoto from "../shared/AvatarPhoto";
 import PhotoUploadModal from "../shared/PhotoUploadModal";
 import DeveloperCredit from "../shared/DeveloperCredit";
-import { clean, filterNameInput, validateProfile } from "../../utils/validators";
 import logo from "../../assets/images/site-logo.png";
 import { Btn, Card, Field, Input, Notice, Row } from "./ui";
 import "../shared/AccountMenu.css";
@@ -151,6 +150,8 @@ function AdminAccountMenu({ variant = "top", collapsed = false, onEditProfile, o
  * Change-password form.
  * It opens as a dialog over the page (never inside the dashboard), closed by Cancel, Esc or a click outside.
  */
+const EMPTY_PW = { current_password: "", password: "", password_confirmation: "" };
+
 function PasswordPanel({ onDone, inline = false }) {
   const { updateUser } = useAuth();
   const toast = useToast();
@@ -158,8 +159,17 @@ function PasswordPanel({ onDone, inline = false }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  // Inline (Profile Settings > Security) it starts CLOSED, so nothing can be typed or autofilled by mistake.
+  const [open, setOpen] = useState(!inline);
+  const dirty = !!(f.current_password || f.password || f.password_confirmation);
+  const cancel = () => {
+    if (!inline) { onDone?.(); return; }
+    if (dirty && !window.confirm("You started changing your password. Close it and discard what you typed?")) return;
+    setF(EMPTY_PW); setMsg(null); setOpen(false);
+  };
 
   useEffect(() => {
+    if (inline) return undefined;
     const onKey = (e) => { if (e.key === "Escape") onDone?.(); };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -172,6 +182,7 @@ function PasswordPanel({ onDone, inline = false }) {
       setF({ current_password: "", password: "", password_confirmation: "" });
       await updateUser(data.user);
       toast.success("Your other devices were signed out.", { title: "Password changed", key: "admin-password-changed" });
+      if (inline) setOpen(false);
       onDone?.();
     } catch (e) { setMsg({ bad: true, text: errorMessage(e) }); } finally { setBusy(false); }
   }
@@ -187,11 +198,18 @@ function PasswordPanel({ onDone, inline = false }) {
       <p className="st-muted" style={{ marginTop: 12 }}>At least 8 characters with upper and lower case letters and a number.</p>
       <div className="st-flex" style={{ marginTop: 14 }}>
         <Btn kind="primary" disabled={busy || !f.current_password || !f.password} onClick={save}>{busy ? "Saving…" : "Save password"}</Btn>
-        {!inline && <Btn onClick={onDone} disabled={busy}>Cancel</Btn>}
+        <Btn onClick={cancel} disabled={busy}>Cancel</Btn>
       </div>
     </>
   );
-  if (inline) return body;
+  if (inline) {
+    return open ? body : (
+      <div className="st-flex" style={{ justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+        <div><b>Password</b><div className="st-muted" style={{ letterSpacing: ".12em" }}>••••••••••••</div></div>
+        <Btn onClick={() => setOpen(true)}><Lock size={15} /> Change password</Btn>
+      </div>
+    );
+  }
 
   return createPortal(
     <div className="st-modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onDone?.(); }}>
@@ -219,12 +237,8 @@ const InfoItem = ({ icon: Icon, label, value }) => (
 function ProfileSettings() {
   const { user, updateUser } = useAuth();
   const toast = useToast();
-  const [f, setF] = useState({ first_name: user?.first_name || "", middle_name: user?.middle_name || "", last_name: user?.last_name || "" });
-  const [errs, setErrs] = useState({});
-  const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
   const [photoOpen, setPhotoOpen] = useState(false);
-  const set = (k) => (e) => { setF({ ...f, [k]: filterNameInput(e.target.value) }); setErrs({ ...errs, [k]: undefined }); };
   const roleLabel = user?.role === "admin" ? "Administrator" : "Coordinator";
 
   async function uploadPhoto(file) {
@@ -246,17 +260,6 @@ function ProfileSettings() {
     } catch (e) { setMsg({ bad: true, text: errorMessage(e) }); }
   }
 
-  async function save() {
-    const v = validateProfile(f);
-    if (Object.keys(v).length) { setErrs(v); return; }
-    setBusy(true); setMsg(null);
-    try {
-      const { data } = await api.put("/profile", { first_name: clean(f.first_name), middle_name: clean(f.middle_name) || null, last_name: clean(f.last_name) });
-      await updateUser(data.user);
-      toast.success("Profile saved.", { key: "admin-profile-saved" });
-    } catch (e) { setMsg({ bad: true, text: errorMessage(e) }); } finally { setBusy(false); }
-  }
-
   return (
     <>
       <div className="st-card" style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
@@ -274,6 +277,7 @@ function ProfileSettings() {
         <Btn onClick={() => setPhotoOpen(true)}><Camera size={15} /> {user?.has_profile_photo ? "Change photo" : "Add photo"}</Btn>
       </div>
 
+      <Notice msg={msg} />
       <Card title="Account details">
         <p className="ds-card-desc">Information tied to your OCCDL account.</p>
         <div className="ds-info-grid">
@@ -283,21 +287,8 @@ function ProfileSettings() {
           <InfoItem icon={ShieldCheck} label="Role" value={<span className="ds-chip ds-chip-accent">{roleLabel}</span>} />
         </div>
         <p className="st-muted" style={{ marginTop: 12 }}>
-          <Lock size={12} aria-hidden="true" /> The {roleLabel} ID and email were set when the account was created and can’t be changed here.
+          <Lock size={12} aria-hidden="true" /> These details can only be changed by an administrator.
         </p>
-      </Card>
-
-      <Card title="Personal information">
-        <p className="ds-card-desc">Update how your name appears.</p>
-        <Notice msg={msg} />
-        <div className="st-grid st-pw-grid">
-          <Field label="First name"><Input value={f.first_name} maxLength={80} autoComplete="given-name" onChange={set("first_name")} />{errs.first_name && <small className="st-muted" role="alert">{errs.first_name}</small>}</Field>
-          <Field label="Middle name"><Input value={f.middle_name} maxLength={80} autoComplete="additional-name" onChange={set("middle_name")} />{errs.middle_name && <small className="st-muted" role="alert">{errs.middle_name}</small>}</Field>
-          <Field label="Last name"><Input value={f.last_name} maxLength={80} autoComplete="family-name" onChange={set("last_name")} />{errs.last_name && <small className="st-muted" role="alert">{errs.last_name}</small>}</Field>
-        </div>
-        <div className="st-flex" style={{ marginTop: 14 }}>
-          <Btn kind="primary" disabled={busy} onClick={save}>{busy ? "Saving…" : "Save changes"}</Btn>
-        </div>
       </Card>
 
       <Card title="Security">

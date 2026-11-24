@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AdminAcademicController;
 use App\Http\Controllers\Api\AdminCoordinatorController;
+use App\Http\Controllers\Api\AdminUserController;
 use App\Http\Controllers\Api\AdminDashboardController;
 use App\Http\Controllers\Api\AdminProgressionController;
 use App\Http\Controllers\Api\AdminTrainingController;
@@ -120,6 +121,9 @@ Route::middleware(['auth', 'session.fresh', 'active', 'email.verified', 'setup.c
         // Phase 5: required-hours exceptions.
         Route::get('/trainees/{user}/hours', [AdminTrainingController::class, 'show'])->whereNumber('user');
         Route::post('/trainees/{user}/hour-exception', [AdminTrainingController::class, 'setException'])->whereNumber('user');
+        // Account details of every user: only the Administrator can change them (Profile Settings is read-only).
+        Route::get('/users', [AdminUserController::class, 'index']);
+        Route::put('/users/{user}', [AdminUserController::class, 'update'])->whereNumber('user');
         // Phase 3: coordinators.
         Route::get('/coordinators', [AdminCoordinatorController::class, 'index']);
         Route::post('/coordinators', [AdminCoordinatorController::class, 'store']);

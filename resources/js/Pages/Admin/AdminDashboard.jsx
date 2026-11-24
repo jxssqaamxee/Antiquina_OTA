@@ -1,12 +1,13 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { LayoutDashboard, UserCog, Layers, ClipboardList, TrendingUp, Target, FileBarChart, Megaphone, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, UserCog, Layers, ClipboardList, Users as UsersIcon, TrendingUp, Target, FileBarChart, Megaphone, ShieldCheck } from "lucide-react";
 import AdminShell, { StatCard } from "../../Components/admin/AdminShell";
-import { Btn, Card, Chip, Field, Input, Notice, Row, Select, Table, statusTone, useAction } from "../../Components/admin/ui";
+import { Btn, Card, Chip, KpiGrid, Field, Input, Notice, Row, Select, Table, statusTone, useAction } from "../../Components/admin/ui";
 import { AnnouncementsPanel, AuditPanel, ReportsPanel } from "../../Components/admin/panels";
 import { adminService as svc } from "../../services/adminService";
 import { errorMessage } from "../../config/axiosConfig";
 import usePersistedTab from "../../hooks/usePersistedTab";
 import usePersistedState from "../../hooks/usePersistedState";
+import { filterNameInput } from "../../utils/validators";
 
 /** Loads data once and exposes a reload; keeps the first error readable. */
 function useLoad(fn, deps = []) {
@@ -23,12 +24,67 @@ function Overview() {
   return (
     <>
       {error && <p role="alert" className="st-error">{error}</p>}
+      <KpiGrid k={data?.kpis} scope="admin" />
+      <h3 className="st-h3" style={{ marginTop: 22 }}>Accounts</h3>
       <div className="st-flex">
         <StatCard label="Trainees" value={a?.trainees} />
         <StatCard label="Coordinators" value={a?.coordinators} />
         <StatCard label="Administrators" value={a?.admins} />
         <StatCard label="Deactivated accounts" value={a?.deactivated} />
       </div>
+    </>
+  );
+}
+
+/** Every account's details (name, email): only the Administrator can change them. Profile Settings is read-only. */
+function Users() {
+  const [q, setQ] = usePersistedState("admin.users.q", "");
+  const [role, setRole] = usePersistedState("admin.users.role", "");
+  const [rows, setRows] = useState(null);
+  const [error, setError] = useState("");
+  const [edit, setEdit] = useState(null);
+  const { busy, msg, run } = useAction();
+  const load = useCallback(() => svc.users({ q: q || undefined, role: role || undefined }).then((d) => { setRows(d.users); setError(""); }).catch((e) => setError(errorMessage(e))), [q, role]);
+  useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [load]);
+  const set = (k) => (e) => setEdit({ ...edit, [k]: k === "email" ? e.target.value : filterNameInput(e.target.value) });
+  const save = async () => {
+    const r = await run(() => svc.updateUser(edit.id, { first_name: edit.first_name, middle_name: edit.middle_name || null, last_name: edit.last_name, email: edit.email }), "User updated.");
+    if (r) { setEdit(null); load(); }
+  };
+  const roleName = (r) => (r === "admin" ? "Administrator" : r === "coordinator" ? "Coordinator" : "Trainee");
+  return (
+    <>
+      <Notice msg={msg} />
+      {edit && (
+        <Card title={`Edit ${edit.login_id || "user"}`} actions={<Btn onClick={() => setEdit(null)} disabled={busy}>Cancel</Btn>}>
+          <Row>
+            <Field label="First name"><Input value={edit.first_name || ""} maxLength={80} onChange={set("first_name")} /></Field>
+            <Field label="Middle name"><Input value={edit.middle_name || ""} maxLength={80} onChange={set("middle_name")} /></Field>
+            <Field label="Last name"><Input value={edit.last_name || ""} maxLength={80} onChange={set("last_name")} /></Field>
+            <Field label="Email"><Input type="email" value={edit.email || ""} onChange={set("email")} /></Field>
+            <Btn kind="primary" disabled={busy} onClick={save}>{busy ? "Saving…" : "Save changes"}</Btn>
+          </Row>
+          <p className="st-muted" style={{ marginTop: 10 }}>The Student ID / Administrator ID and the role can’t be changed here.</p>
+        </Card>
+      )}
+      <Card title="Users">
+        {error && <p role="alert" className="st-error">{error}</p>}
+        <Row>
+          <Field label="Search"><Input value={q} placeholder="Name, ID or email" onChange={(e) => setQ(e.target.value)} /></Field>
+          <Field label="Role">
+            <Select value={role} onChange={(e) => setRole(e.target.value)}>
+              <option value="">Everyone</option><option value="trainee">Trainees</option><option value="coordinator">Coordinators</option><option value="admin">Administrators</option>
+            </Select>
+          </Field>
+        </Row>
+        <Table empty="No users match." rows={rows} cols={[
+          { h: "ID", render: (u) => u.login_id || "—" },
+          { h: "Name", render: (u) => u.name },
+          { h: "Role", render: (u) => <Chip>{roleName(u.role)}</Chip> },
+          { h: "Email", render: (u) => u.email },
+          { h: "", render: (u) => <Btn onClick={() => setEdit({ ...u })}>Edit</Btn> },
+        ]} />
+      </Card>
     </>
   );
 }
@@ -277,6 +333,7 @@ function Training({ sections }) {
 const NAV = [
   { key: "overview", label: "Overview", icon: LayoutDashboard },
   { key: "coordinators", label: "Coordinators", icon: UserCog },
+  { key: "users", label: "Users", icon: UsersIcon },
   { key: "sections", label: "Sections", icon: Layers },
   { key: "enrollments", label: "Enrollments", icon: ClipboardList },
   { key: "progression", label: "Progression", icon: TrendingUp },
@@ -301,6 +358,7 @@ export default function AdminDashboard() {
     <AdminShell roleLabel="System Administrator" nav={NAV} active={tab} onNavigate={setTab}
       title={NAV.find((n) => n.key === tab)?.label} subtitle={year ? `Current academic year: ${year.name}` : undefined}>
       {tab === "overview" && <Overview />}
+      {tab === "users" && <Users />}
       {tab === "coordinators" && <Coordinators sections={sections} year={year} goTo={setTab} />}
       {tab === "sections" && <Sections courses={courses || []} year={year} onChanged={refresh} goTo={setTab} />}
       {tab === "enrollments" && <Enrollments sections={sections} />}
