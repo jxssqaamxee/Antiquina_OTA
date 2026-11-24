@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Search, ArrowUpDown } from "lucide-react";
+import { Search, ArrowUpDown, Send } from "lucide-react";
 import EntryCard from "../../Components/logbook/EntryCard";
 import logo from "../../assets/images/site-logo.png";
 import Tooltip from "../../Components/shared/Tooltip";
@@ -23,12 +23,23 @@ import {
 // elapsed, so its stored `hours` is already the final, settled value —
 // no need to re-derive live status here the way LogbookPage does for
 // today's still-moving entries.
-export default function EntryHistoryPanel({ entries, clients, now = new Date(), scopedName = null }) {
+const REVIEW_FILTERS = [
+  { id: "any", label: "Any status" },
+  { id: "todo", label: "To submit" },
+  { id: "pending", label: "Pending" },
+  { id: "approved", label: "Approved" },
+  { id: "returned", label: "Returned" },
+];
+const reviewKey = (e) => (e.status === "submitted" ? "pending" : e.status === "approved" ? "approved" : e.status === "rejected" ? "returned" : "todo");
+
+export default function EntryHistoryPanel({ entries, clients, now = new Date(), scopedName = null, onSubmit = null, onSubmitAll = null }) {
   const [filterMode, setFilterMode] = useState("all"); // all | day | week | month
   const [filterDay, setFilterDay] = useState(() => todayStr(now));
   const [filterWeek, setFilterWeek] = useState(() => todayStr(now));
   const [filterMonth, setFilterMonth] = useState(() => monthKey(todayStr(now)));
   const [sortOrder, setSortOrder] = useState("desc"); // desc = newest on top, asc = oldest (Day 1) on top
+  const [reviewFilter, setReviewFilter] = useState("any"); // any | todo | pending | approved | returned
+  const [busy, setBusy] = useState(false);
 
   const clientName = (id) => clients.find((c) => c.id === id)?.name || "Unassigned";
 
@@ -47,10 +58,25 @@ export default function EntryHistoryPanel({ entries, clients, now = new Date(), 
     } else if (filterMode === "month") {
       list = list.filter((e) => monthKey(e.date) === filterMonth);
     }
+    if (reviewFilter !== "any") list = list.filter((e) => reviewKey(e) === reviewFilter);
     return list
       .slice()
       .sort((a, b) => (sortOrder === "asc" ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date)));
-  }, [completed, filterMode, filterDay, filterWeek, filterMonth, sortOrder]);
+  }, [completed, filterMode, filterDay, filterWeek, filterMonth, sortOrder, reviewFilter]);
+
+  const counts = useMemo(() => {
+    const c = { todo: 0, pending: 0, approved: 0, returned: 0 };
+    for (const e of completed) c[reviewKey(e)] += 1;
+    return c;
+  }, [completed]);
+  // Finished days that are still drafts (or returned) and have hours: these are what the coordinator is waiting for.
+  const submittable = useMemo(() => completed.filter((e) => ["todo", "returned"].includes(reviewKey(e)) && Number(e.hours) > 0), [completed]);
+
+  async function submitAll() {
+    if (!onSubmitAll || busy) return;
+    setBusy(true);
+    try { await onSubmitAll(submittable.map((e) => e.id)); } finally { setBusy(false); }
+  }
 
   const hostsInList = useMemo(() => {
     const counts = new Map();
@@ -87,6 +113,19 @@ export default function EntryHistoryPanel({ entries, clients, now = new Date(), 
       {!scopedName && hostsInList.length > 1 && (
         <p className="fld-hint" style={{ margin: "0 0 8px" }}>All host clients: {hostsInList.join(" · ")}. Each card shows its host client.</p>
       )}
+      {onSubmit && submittable.length > 0 && (
+        <div className="submit-banner" role="status">
+          <div>
+            <b>{submittable.length} finished {submittable.length === 1 ? "day needs" : "days need"} submitting</b>
+            <span>Your coordinator only sees entries you submit. Hours count as verified once approved.</span>
+          </div>
+          {onSubmitAll && (
+            <button type="button" className="btn btn-sm btn-primary" disabled={busy} onClick={submitAll}>
+              <Send size={14} /> {busy ? "Submitting…" : submittable.length > 1 ? "Submit all" : "Submit"}
+            </button>
+          )}
+        </div>
+      )}
       <div className="sec-head"><h2>Filter</h2></div>
       <div className="hist-filter">
         <div className="chips" role="tablist" aria-label="Filter completed entries">
@@ -98,6 +137,14 @@ export default function EntryHistoryPanel({ entries, clients, now = new Date(), 
           <Tooltip label={"Toggle chronological order"}><button type="button" className="chip" onClick={() => setSortOrder((o) => (o === "asc" ? "desc" : "asc"))} aria-label="Toggle chronological order">
             <ArrowUpDown size={14} /> {sortOrder === "asc" ? "Oldest first" : "Newest first"}
           </button></Tooltip>
+        </div>
+
+        <div className="chips" role="tablist" aria-label="Filter by review status">
+          {REVIEW_FILTERS.map((f) => (
+            <button key={f.id} type="button" role="tab" aria-selected={reviewFilter === f.id} className={`chip${reviewFilter === f.id ? " is-active" : ""}`} onClick={() => setReviewFilter(f.id)}>
+              {f.label}{f.id !== "any" ? ` (${counts[f.id]})` : ""}
+            </button>
+          ))}
         </div>
 
         {filterMode === "day" && (
@@ -129,7 +176,7 @@ export default function EntryHistoryPanel({ entries, clients, now = new Date(), 
       ) : (
         <div className="entry-list">
           {filtered.map((e) => (
-            <EntryCard key={e.id} entry={e} dateLabel={formatDateLong(e.date)} clientName={clientName(e.client)} />
+            <EntryCard key={e.id} entry={e} dateLabel={formatDateLong(e.date)} clientName={clientName(e.client)} onSubmit={onSubmit} />
           ))}
         </div>
       )}

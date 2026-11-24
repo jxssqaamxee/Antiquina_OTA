@@ -965,6 +965,25 @@ export default function LogbookPage() {
     }
   }
 
+  // Submits several finished days one after another (the server locks per trainee, so never in parallel).
+  async function submitManyForReview(ids) {
+    if (!ids.length) return;
+    let sent = 0;
+    try {
+      await flushSync(userId);
+      for (const id of ids) {
+        await api.post(`/logbook/entries/${encodeURIComponent(id)}/submit`);
+        sent += 1;
+      }
+      toast.success(`${sent} ${sent === 1 ? "entry was" : "entries were"} sent to your coordinator.`, { title: "Submitted", key: "entry-submitted" });
+    } catch (err) {
+      const msg = err?.response?.data?.errors?.entry?.[0] || err?.response?.data?.message || "Could not submit. Check your connection and try again.";
+      toast.warning(sent ? `${sent} sent, then it stopped: ${msg}` : msg, { title: "Not submitted", key: "entry-submit-failed" });
+    } finally {
+      try { await hydrateSync(userId); applyLogbook(getUserStorage(STORAGE_KEY, userId)); } catch { /* keep local copy */ }
+    }
+  }
+
   function requestDeleteEntry(id) {
     setConfirmDialog({ kind: "entry", id });
   }
@@ -1263,8 +1282,8 @@ export default function LogbookPage() {
                   <div>
                     <div className="big">{formatHours(scoped ? viewHours : totalHours)}</div>
                     <div className="of">{scoped ? `at ${viewClientName} · of ${targetHours}h required` : `of ${targetHours}h required`}</div>
-                    {!scoped && (verifiedHours > 0 || pendingReviewHours > 0) && (
-                      <div className="of">{formatHours(verifiedHours)} verified · {formatHours(pendingReviewHours)} awaiting review</div>
+                    {!scoped && totalHours > 0 && (
+                      <div className="of">{formatHours(verifiedHours)} verified · {formatHours(pendingReviewHours)} awaiting review · {formatHours(Math.max(0, Math.round((totalHours - verifiedHours - pendingReviewHours) * 100) / 100))} not submitted</div>
                     )}
                   </div>
                   <div className="hero-chips">
@@ -1432,7 +1451,7 @@ export default function LogbookPage() {
           </>
         )}
 
-        {tab === "history" && <EntryHistoryPanel entries={viewEntries} clients={clients} now={nowDate} scopedName={scoped ? viewClientName : null} />}
+        {tab === "history" && <EntryHistoryPanel entries={viewEntries} clients={clients} now={nowDate} scopedName={scoped ? viewClientName : null} onSubmit={submitEntryForReview} onSubmitAll={submitManyForReview} />}
         {tab === "reports" && <ReportsPanel entries={viewEntries} clients={clients} now={nowDate} blockingExport={blockingExport} scopedName={scoped ? viewClientName : null} />}
 
         <Footer />
