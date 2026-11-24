@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router-dom";
 import { BellRing, Check, ChevronDown, LogOut, Palette, UserCircle } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import { hasAdminAccess } from "../../utils/roles";
 import { useNotifications } from "../../context/NotificationContext";
 import { useToast } from "../../context/ToastContext";
 import { useAppTheme } from "../../hooks/useAppTheme";
@@ -136,11 +137,12 @@ export default function AccountMenu() {
     if (signingOut) return;
     setSigningOut(true);
     close();
+    const signedOutTo = hasAdminAccess(user) ? "/administrator" : "/login"; // read before logout clears the user
     try {
       await logout();
     } finally {
       // Whatever happened above, leave the signed-in screens.
-      navigate("/login", { replace: true });
+      navigate(signedOutTo, { replace: true });
       setSigningOut(false);
     }
   }

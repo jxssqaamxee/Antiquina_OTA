@@ -18,7 +18,7 @@
         default => 'false',
     };
     // Management addresses install the STAFF app (own name + start page /administrator); everything else the trainee app.
-    $occStaff = request()->is('administrator', 'administrator/*', 'admin', 'admin/*', 'coordinator', 'coordinator/*', 'admin-login', 'staff-login', 'setup-account');
+    $occStaff = request()->is('administrator', 'administrator/*', 'admin', 'admin/*', 'coordinator', 'coordinator/*', 'admin-login', 'staff-login', 'setup-account', 'forgot-password/administrator', 'reset-password/administrator', 'reset-password/administrator/*');
 @endphp
 <!DOCTYPE html>
 <html lang="en" data-mobile-only="{{ $occMobileOnly }}" data-inspect-protection="{{ $occInspect }}" style="background:#ffffff; overscroll-behavior-y: none; -webkit-text-size-adjust: 100%;">

@@ -63,6 +63,8 @@ export default function AuthShell({
   gateName = "Opol Community College",
   gateLabel = "Login",
   gateDefaultOpen = false,
+  railFacts = RAIL_FACTS,     // left-rail list; pass your own wording per page
+  legalNote,                  // text under the form; pass null to hide it (undefined = trainee default)
 }) {
   const { theme, isDark } = useAppTheme();
   const [gateOpen, setGateOpen] = useState(gateDefaultOpen || gateOpenMemory);
@@ -106,7 +108,8 @@ export default function AuthShell({
     </div>
   );
 
-  const legal = <p className="lg-stage-legal">Entries in this ledger are encrypted in transit and visible only to you and your OJT coordinator.</p>;
+  const legalText = legalNote === undefined ? "Entries in this ledger are encrypted in transit and visible only to you and your OJT coordinator." : legalNote;
+  const legal = legalText ? <p className="lg-stage-legal">{legalText}</p> : null;
 
   return (
     <div className={`lg-wrap ${isDark ? "dark" : "light"}${compact ? " is-compact" : ""}${fit ? " is-fit" : ""}`}>
@@ -135,7 +138,7 @@ export default function AuthShell({
           <h2 className="lg-rail-headline">{railHeadline}</h2>
           <p className="lg-rail-note">{railNote}</p>
           <ol className="lg-rail-facts">
-            {RAIL_FACTS.map((f, i) => (
+            {railFacts.map((f, i) => (
               <li key={f}><span className="lg-rail-facts-num">{String(i + 1).padStart(2, "0")}</span>{f}</li>
             ))}
           </ol>

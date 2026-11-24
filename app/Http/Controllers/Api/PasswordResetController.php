@@ -99,12 +99,16 @@ class PasswordResetController extends Controller
     {
         $request->validate(['token' => 'required|string', 'email' => 'required|email']);
 
-        $state = $this->linkState(strtolower(trim($request->email)), (string) $request->token);
+        $email = strtolower(trim($request->email));
+        $state = $this->linkState($email, (string) $request->token);
+        // Only for a usable link, so this can never reveal who is staff: tells the page which sign-in to use.
+        $staff = $state === 'ok' && (bool) User::where('email', $email)->first()?->hasAdminAccess();
 
         return response()->json([
             'success' => true,
             'data' => [
                 'valid' => $state === 'ok',
+                'staff' => $staff,
                 'reason' => $state,
                 'message' => match ($state) {
                     'expired' => self::LINK_EXPIRED,

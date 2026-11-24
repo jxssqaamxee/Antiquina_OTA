@@ -220,7 +220,9 @@ class User extends Authenticatable implements MustVerifyEmail
      */
     public function sendPasswordResetNotification($token): void
     {
-        $url = rtrim(config('app.url'), '/').'/reset-password/'.$token.'?email='.urlencode($this->getEmailForPasswordReset());
+        // Admins / Coordinators get their own address so every page after the email stays in the staff app.
+        $base = $this->hasAdminAccess() ? '/reset-password/administrator/' : '/reset-password/';
+        $url = rtrim(config('app.url'), '/').$base.$token.'?email='.urlencode($this->getEmailForPasswordReset());
 
         \Illuminate\Support\Facades\Mail::to($this->email)->send(
             new \App\Mail\PasswordResetMail($this->first_name ?: $this->fullName(), $url, $this->email)

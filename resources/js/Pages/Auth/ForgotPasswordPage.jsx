@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Mail } from "lucide-react";
 import AuthShell, {
   LedgerBanner, LedgerButton, LedgerInput, LedgerRow, Stamp,
@@ -14,6 +14,8 @@ import { GMAIL_REGEX, normalizeEmailInput } from "../../utils/validators";
 const RESEND_SECONDS = 60;
 
 export default function ForgotPasswordPage() {
+  const staff = useLocation().pathname.startsWith("/forgot-password/administrator");
+  const backTo = staff ? "/administrator" : "/login";
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
@@ -39,7 +41,7 @@ export default function ForgotPasswordPage() {
     e?.preventDefault();
     setError("");
     const value = normalizeEmailInput(email);
-    if (!GMAIL_REGEX.test(value)) { setError("Enter the Gmail address you registered with."); return; }
+    if (staff ? !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) : !GMAIL_REGEX.test(value)) { setError(staff ? "Enter the email address on your Administrator or Coordinator account." : "Enter the Gmail address you registered with."); return; }
     setBusy(true);
     try {
       await api.post("/forgot-password", { email: value });
@@ -57,28 +59,29 @@ export default function ForgotPasswordPage() {
 
   return (
     <AuthShell
-      docType="RECOVERY REQUEST"
+      docType={staff ? "ADMIN RECOVERY" : "RECOVERY REQUEST"}
       caseSeed="REC"
       centerHead={sent}
       title={sent ? <>Check your <span className="accent">email</span></> : <>Recover <span className="accent">access</span></>}
       subtitle={sent
         ? "If an account uses this email, we've sent a secure password reset link to it."
-        : "Give us the Gmail on your account and we'll send you a reset link."}
+        : (staff ? "Enter the email on your Administrator or Coordinator account and we'll send you a reset link." : "Give us the Gmail on your account and we'll send you a reset link.")}
       railHeadline={sent ? "Almost there." : "Locked out happens to everyone."}
       railNote={sent
         ? "The link expires in 60 minutes. Check the spam folder too."
         : "We never say whether an address has an account. That keeps everyone's record private."}
-      footer={<>Remembered it after all? <Link to="/login">Back to sign in</Link></>}
+      footer={<>Remembered it after all? <Link to={backTo}>Back to sign in</Link></>}
+      legalNote={staff ? null : undefined}
     >
       <LedgerBanner>{error}</LedgerBanner>
 
       {!sent && (
         <form onSubmit={send} noValidate>
-          <LedgerRow index={1} icon={Mail} htmlFor="email" label={<>Gmail on file <span className="lg-required" aria-hidden="true">*</span></>} hint="The Gmail you registered with, e.g. occ.lastname.firstname@gmail.com">
+          <LedgerRow index={1} icon={Mail} htmlFor="email" label={<>{staff ? "Email on file" : "Gmail on file"} <span className="lg-required" aria-hidden="true">*</span></>} hint={staff ? "The email on your Administrator or Coordinator account." : "The Gmail you registered with, e.g. occ.lastname.firstname@gmail.com"}>
             <LedgerInput
               id="email" type="email" inputMode="email" value={email} autoComplete="email"
               autoCapitalize="none" autoCorrect="off" spellCheck={false} enterKeyHint="go"
-              placeholder="occ.lastname.firstname@gmail.com" aria-required="true" aria-invalid={!!error}
+              placeholder={staff ? "you@example.com" : "occ.lastname.firstname@gmail.com"} aria-required="true" aria-invalid={!!error}
               onChange={(e) => { setEmail(normalizeEmailInput(e.target.value)); setError(""); }}
             />
           </LedgerRow>

@@ -16,7 +16,7 @@ export const needsSetup = (user) => hasAdminAccess(user) && user?.must_change_pa
 export const SETUP_PATH = "/setup-account";
 
 /** Paths of the management areas. The phone-only gate lets these open on a desktop (see mobileOnly.js). */
-export const ADMIN_PATH_PREFIXES = ["/admin", "/coordinator", "/administrator", "/admin-login", "/setup-account"];
+export const ADMIN_PATH_PREFIXES = ["/admin", "/coordinator", "/administrator", "/admin-login", "/setup-account", "/forgot-password/administrator", "/reset-password/administrator"];
 export const isAdminPath = (path) => ADMIN_PATH_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`));
 
 /** Where a signed-in person belongs. */

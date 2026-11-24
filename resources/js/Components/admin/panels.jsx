@@ -66,14 +66,16 @@ export function AnnouncementsPanel({ svc, sections = [], courses = [], fixedSect
           {f.audience_type === "section" && !fixedSection && <Field label="Section"><Select value={f.section_id} onChange={(e) => setF({ ...f, section_id: e.target.value })}><option value="">Choose…</option>{sections.map((s) => <option key={s.id} value={s.id}>{s.code}</option>)}</Select></Field>}
           {fixedSection && <Chip>{`Section ${fixedSection.code}`}</Chip>}
         </Row>
-        <div className="st-grid">
+        <div className="st-grid st-compose">
           <Field label="Title"><Input value={f.title} maxLength={160} onChange={(e) => setF({ ...f, title: e.target.value })} /></Field>
           <Field label="Message (max 500 characters)">
             <Textarea value={f.body} maxLength={500} rows={4} onChange={(e) => setF({ ...f, body: e.target.value })} />
           </Field>
-          <div><Btn kind="primary" disabled={busy || f.title.trim().length < 3 || f.body.trim().length < 3 || (f.audience_type === "course" && !f.course_id) || (f.audience_type === "section" && !f.section_id)} onClick={send}>Send</Btn></div>
         </div>
-        <p className="st-muted">Trainees see it in their notification bell. Sending cannot be undone.</p>
+        <div className="st-compose-foot">
+          <p className="st-muted">Trainees see it in their notification bell. Sending cannot be undone. <span className="st-count">{f.body.length}/500</span></p>
+          <Btn kind="primary" disabled={busy || f.title.trim().length < 3 || f.body.trim().length < 3 || (f.audience_type === "course" && !f.course_id) || (f.audience_type === "section" && !f.section_id)} onClick={send}>Send</Btn>
+        </div>
       </Card>
       <Card title="Sent announcements" actions={<RefreshButton onRefresh={load} loading={m.loading && !m.updatedAt} updatedAt={m.updatedAt} />}>
         <Table empty="Nothing sent yet." rows={list?.announcements} cols={[
@@ -93,7 +95,7 @@ export function AuditPanel({ svc, title = "Audit log" }) {
     <Card title={title} actions={<RefreshButton onRefresh={reload} loading={m.loading && !m.updatedAt} updatedAt={m.updatedAt} />}>
       {error && <p role="alert" className="st-error">{m.stale ? "Couldn’t refresh just now. Showing the last data we loaded." : error}</p>}
       <Row>
-        <Field label="Show"><Select value={action} onChange={(e) => setAction(e.target.value)}>
+        <Field label="Show" className="st-field-md"><Select value={action} onChange={(e) => setAction(e.target.value)}>
           <option value="">Everything</option><option value="entry.">Entry approvals</option><option value="coordinator.">Coordinator changes</option>
           <option value="enrollment.">Enrollment transfers</option><option value="placement.">Placements</option><option value="hours.">Hour exceptions</option><option value="announcement.">Announcements</option><option value="report.">Report exports</option>
         </Select></Field>
@@ -283,7 +285,7 @@ export function RosterPanel({ svc, sections = [], scope = "admin" }) {
             <StatCard label="On the list" value={list.total} /><StatCard label="Registered" value={list.registered} /><StatCard label="Not registered yet" value={list.waiting} />
           </div>
           <Row>
-            <Field label="Show"><Select value={show} onChange={(e) => setShow(e.target.value)}>
+            <Field label="Show" className="st-field-md"><Select value={show} onChange={(e) => setShow(e.target.value)}>
               <option value="all">All ({list.total})</option>
               <option value="registered">Registered ({list.registered})</option>
               <option value="waiting">Not registered yet ({list.waiting})</option>

@@ -110,21 +110,24 @@ export function Table({ cols, rows: allRows, empty = "Nothing here yet.", toggle
   const rows = allRows == null ? allRows : q ? allRows.filter((r) => matchesSearch(r, q)) : allRows;
   // The search box appears once a list is long enough to need it (or while a search is active).
   const showSearch = searchable && allRows != null && (allRows.length >= 5 || !!q);
+  // The Cards / Table switch only earns its own row on a list long enough to need it (same threshold as search);
+  // on a 1-4 row list it was a lonely control floating above the table.
+  const showToggle = toggle && allRows != null && allRows.length >= 5;
   const phone = useMediaQuery("(max-width: 600px)");
   // rows == null means "still loading" (every screen starts with null/undefined), so show the skeleton, not "nothing here".
   if (rows == null) return <TableSkeleton cols={cols.length} />;
   if (!allRows.length) return <p className="st-empty">{empty}</p>;
   // Phones always get the stacked-card table, so the switch only exists on larger screens.
-  const view = phone || !toggle ? "table" : saved;
+  const view = phone || !showToggle ? "table" : saved;
   const actionCol = cols.length > 1 && !cols[cols.length - 1].h ? cols[cols.length - 1] : null;
   const shown = actionCol ? cols.slice(0, -1) : cols;
   const [first, ...rest] = shown;
   return (
     <div className="st-data" data-view={view}>
-      {(showSearch || (toggle && !phone)) && (
+      {(showSearch || (showToggle && !phone)) && (
         <div className="st-list-head-row">
           {showSearch ? <SearchBox value={q} onChange={setQ} placeholder="Search this list…" /> : <span />}
-          {toggle && !phone && <ViewToggle mode={saved} onChange={setView} />}
+          {showToggle && !phone && <ViewToggle mode={saved} onChange={setView} />}
         </div>
       )}
       {showSearch && q && <p className="st-muted st-search-count" role="status">{rows.length} of {allRows.length} match “{q}”</p>}

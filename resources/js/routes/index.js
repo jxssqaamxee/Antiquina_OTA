@@ -31,6 +31,10 @@ export const guestRoutes = [
   { path: "/staff-login", component: () => createElement(Navigate, { to: "/administrator", replace: true }) },
   { path: "/register", component: RegisterPage },
   { path: "/forgot-password", component: ForgotPasswordPage },
+  // Staff (Administrator / Coordinator) recovery: its own address so "back to sign in" returns to /administrator.
+  { path: "/forgot-password/administrator", component: ForgotPasswordPage },
+  { path: "/reset-password/administrator/success", component: ResetPasswordPage },
+  { path: "/reset-password/administrator/:token", component: ResetPasswordPage },
   { path: "/reset-password/success", component: ResetPasswordPage },
   { path: "/reset-password/:token", component: ResetPasswordPage },
 ];

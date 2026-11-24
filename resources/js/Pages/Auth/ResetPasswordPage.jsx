@@ -33,6 +33,10 @@ export default function ResetPasswordPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const email = searchParams.get("email") || "";
+  // Opened from /reset-password/administrator/...: everything returns to the staff sign-in, never the trainee one.
+  const staff = location.pathname.startsWith("/reset-password/administrator");
+  const signInPath = staff ? "/administrator" : "/login";
+  const forgotPath = staff ? "/forgot-password/administrator" : "/forgot-password";
 
   const [phase, setPhase] = useState(token && email ? "checking" : "blocked"); // checking | form | blocked
   const [blockedCode, setBlockedCode] = useState("link_invalid");
@@ -57,6 +61,11 @@ export default function ResetPasswordPage() {
       try {
         const { data } = await api.post("/password/reset-token/check", { token, email });
         if (cancelled) return;
+        // Admins / Coordinators always finish on the staff pages, trainees on the trainee ones, whichever address was opened.
+        if (data?.data?.valid && !!data.data.staff !== staff) {
+          navigate(`${data.data.staff ? "/reset-password/administrator/" : "/reset-password/"}${encodeURIComponent(token)}${location.search}`, { replace: true });
+          return;
+        }
         if (data?.data?.valid) setPhase((p) => (p === "blocked" ? p : "form"));
         else { setBlockedCode(data?.data?.reason === "expired" ? "link_expired" : "link_invalid"); setPhase("blocked"); }
       } catch {
@@ -68,7 +77,7 @@ export default function ResetPasswordPage() {
     const onShow = (e) => { if (e.persisted) verify(); };
     window.addEventListener("pageshow", onShow);
     return () => { cancelled = true; window.removeEventListener("pageshow", onShow); };
-  }, [token, email, isSuccessRoute]);
+  }, [token, email, isSuccessRoute, staff]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const problem = passwordProblem(password);
   const matches = password.length > 0 && password === confirm;
@@ -82,7 +91,7 @@ export default function ResetPasswordPage() {
     try {
       await api.post("/reset-password", { token, email, password, password_confirmation: confirm });
       // REPLACE so the form (and its spent token) is gone from history.
-      navigate("/reset-password/success", { replace: true, state: { passwordReset: true } });
+      navigate(staff ? "/reset-password/administrator/success" : "/reset-password/success", { replace: true, state: { passwordReset: true } });
     } catch (err) {
       const code = err.response?.data?.code;
       if (code === "link_expired" || code === "link_invalid") { setBlockedCode(code); setPhase("blocked"); }
@@ -93,12 +102,12 @@ export default function ResetPasswordPage() {
   }
 
   // /reset-password/success opened directly: nothing to show.
-  if (isSuccessRoute && !resetJustDone) return <Navigate to="/login" replace />;
+  if (isSuccessRoute && !resetJustDone) return <Navigate to={signInPath} replace />;
 
   if (!isSuccessRoute && phase === "checking") {
     return (
       <AuthShell
-        docType="CREDENTIAL REISSUE" caseSeed="RST"
+        docType="CREDENTIAL REISSUE" caseSeed="RST" legalNote={staff ? null : undefined}
         title={<>Checking your <span className="accent">link</span></>}
         subtitle="One moment while we confirm this reset link is still valid."
         railHeadline="Almost back in." railNote="Reset links work once and only for a short time, so we check yours first."
@@ -112,15 +121,15 @@ export default function ResetPasswordPage() {
     const m = LINK_MESSAGES[blockedCode] || LINK_MESSAGES.link_invalid;
     return (
       <AuthShell
-        docType="CREDENTIAL REISSUE" caseSeed="RST" title={m.title} centerHead
+        docType="CREDENTIAL REISSUE" caseSeed="RST" legalNote={staff ? null : undefined} title={m.title} centerHead
         subtitle="We can't use this link to change a password."
         railHeadline={m.headline} railNote={m.note}
       >
         <Stamp label={m.stamp} tone="danger" />
         <LedgerBanner>{m.text}</LedgerBanner>
         <div className="lg-stack">
-          <LedgerButton type="button" onClick={() => navigate("/forgot-password", { replace: true })}>Request a new link</LedgerButton>
-          <LedgerGhostButton onClick={() => navigate("/login", { replace: true })}>Back to sign in</LedgerGhostButton>
+          <LedgerButton type="button" onClick={() => navigate(forgotPath, { replace: true })}>Request a new link</LedgerButton>
+          <LedgerGhostButton onClick={() => navigate(signInPath, { replace: true })}>Back to sign in</LedgerGhostButton>
         </div>
       </AuthShell>
     );
@@ -129,26 +138,26 @@ export default function ResetPasswordPage() {
   if (resetJustDone) {
     return (
       <AuthShell
-        docType="CREDENTIAL REISSUE" caseSeed="RST" centerHead
+        docType="CREDENTIAL REISSUE" caseSeed="RST" legalNote={staff ? null : undefined} centerHead
         title={<>Credential <span className="accent">reissued</span></>}
         subtitle="Your password has been changed successfully."
         railHeadline="You're all set." railNote="Sign in with your new password to get back to your duty log."
-        footer={<>Ready to go? <Link to="/login">Sign in here</Link></>}
+        footer={<>Ready to go? <Link to={signInPath}>Sign in here</Link></>}
       >
         <Stamp label="RESET COMPLETE" />
         <LedgerBanner tone="notice">Your password has been reset. Please sign in with your new password.</LedgerBanner>
-        <LedgerButton type="button" onClick={() => navigate("/login", { replace: true, state: { passwordReset: true } })}>Go to sign in</LedgerButton>
+        <LedgerButton type="button" onClick={() => navigate(signInPath, { replace: true, state: { passwordReset: true } })}>Go to sign in</LedgerButton>
       </AuthShell>
     );
   }
 
   return (
     <AuthShell
-      docType="CREDENTIAL REISSUE" caseSeed="RST"
+      docType="CREDENTIAL REISSUE" caseSeed="RST" legalNote={staff ? null : undefined}
       title={<>Set a <span className="accent">new</span> password</>}
       subtitle="Choose a strong, secure password for your account."
       railHeadline="Almost back in." railNote="Choose a strong new password so your record — and every hour you've logged — stays secure."
-      footer={<>Remember your password? <Link to="/login">Sign in here</Link></>}
+      footer={<>Remember your password? <Link to={signInPath}>Sign in here</Link></>}
     >
       <LedgerBanner>{error}</LedgerBanner>
       <form onSubmit={submit} noValidate>

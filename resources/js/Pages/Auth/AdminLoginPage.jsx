@@ -68,7 +68,7 @@ export default function AdminLoginPage() {
     e.preventDefault();
     setError(""); setErrors({});
     const v = {};
-    if (adminId.length < 3) v.admin_id = "Enter your Administrator ID.";
+    if (adminId.length < 3) v.admin_id = "Enter your Admin or Coordinator ID.";
     if (!password) v.password = "Enter your password.";
     if (Object.keys(v).length) {
       setErrors(v);
@@ -94,9 +94,15 @@ export default function AdminLoginPage() {
       docType="ADMIN ACCESS"
       caseSeed="STF"
       title={<>Administrator <span className="accent">sign in</span></>}
-      subtitle="Administrators sign in with their Admin ID and Coordinators with their Coordinator ID."
+      subtitle="For Administrators and Coordinators. Use the ID given to you by the system administrator."
       railHeadline="Manage on-the-job training."
-      railNote="Coordinators see only their own section. Every management action is checked on the server."
+      railNote="Staff access for Opol Community College Administrators and Coordinators."
+      railFacts={[
+        "Administrators manage all sections, coordinators, trainees and announcements.",
+        "Coordinators see and approve only their own section.",
+        "Every management action is checked and recorded on the server.",
+      ]}
+      legalNote={null}
       gate
       gateName="Opol Community College"
       gateLabel="Admin"
@@ -130,13 +136,13 @@ export default function AdminLoginPage() {
       <form onSubmit={submit} noValidate>
         <LedgerRow
           index={1} icon={IdCard} htmlFor="admin_id" error={errors.admin_id}
-          label={<>Administrator ID <span className="lg-required" aria-hidden="true">*</span></>}
-          hint="Given to you by the system administrator, e.g. ADMIN-001"
+          label={<>Admin / Coordinator ID <span className="lg-required" aria-hidden="true">*</span></>}
+          hint="e.g. ADMIN-001 for Administrators, COOR-001 for Coordinators"
         >
           <LedgerInput
             id="admin_id" value={adminId} autoComplete="username" maxLength={32}
             autoCapitalize="characters" autoCorrect="off" spellCheck={false}
-            enterKeyHint="next" placeholder="ADMIN-001"
+            enterKeyHint="next" placeholder="ADMIN-001 or COOR-001"
             aria-required="true" aria-invalid={!!errors.admin_id}
             onChange={(e) => { setAdminId(filterAdminId(e.target.value)); setError(""); setErrors((x) => ({ ...x, admin_id: undefined })); }}
           />
@@ -159,7 +165,7 @@ export default function AdminLoginPage() {
             <input id="remember" type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
             Keep this session open
           </label>
-          <Link to="/forgot-password" className="lg-forgot">Forgot password?</Link>
+          <Link to="/forgot-password/administrator" className="lg-forgot">Forgot password?</Link>
         </div>
 
         <LedgerButton disabled={busy}>

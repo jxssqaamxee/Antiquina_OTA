@@ -764,3 +764,95 @@ textarea.st-inp { min-height: 104px; padding: 12px 14px; resize: vertical; font-
   .st-form-actions .btn { flex: 1 1 100%; }
   .st-chart-tools { width: 100%; margin-left: 0; }
 }
+
+/* =====================================================================
+   Layout polish v2: remove dead space on laptop / desktop / PWA window.
+   Rules: fields never stretch past a readable width, forms use the full
+   card width in columns, tables keep data and actions close together.
+   ===================================================================== */
+
+/* --- fields: a lone filter must not span the whole card --- */
+.st-flex > .st-field { max-width: 420px; }
+.st-flex > .st-field.st-field-wide { max-width: none; }
+.st-flex > .st-field.st-field-md { flex: 0 1 280px; }
+.st-flex { align-items: flex-end; }
+.st-card > .st-flex { margin-bottom: 16px; }
+.st-card > .st-flex:last-child { margin-bottom: 0; }
+
+/* --- stat tiles: tighter, evenly spread, never a single orphan stretched across the row --- */
+.st-stat-grid { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.st-stat:not(.st-kpi-card) { display: flex; flex-direction: column; justify-content: center; gap: 2px; min-height: 76px; padding: 12px 16px; }
+.st-stat:not(.st-kpi-card) b { font-size: 24px; font-variant-numeric: tabular-nums; }
+.st-stat:not(.st-kpi-card) span { margin-top: 0; font-size: 12px; }
+
+/* --- list toolbar (search + Cards/Table) sits on one level line and hugs the table --- */
+.st-list-head-row { margin-bottom: 12px; align-items: center; }
+.st-list-head-row > span:empty { display: none; }
+.st-list-head-row .st-view-toggle { margin-left: auto; }
+.st-search { flex: 1 1 260px; max-width: 420px; }
+
+/* --- tables: aligned columns, numbers right-aligned feel, action column hugs the content --- */
+.st-table { table-layout: auto; }
+.st-table th, .st-table td { padding: 12px 16px; text-align: left; }
+.st-table th:first-child, .st-table td:first-child { padding-left: 18px; }
+.st-table th:last-child, .st-table td:last-child { padding-right: 18px; }
+.st-table td:first-child { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.st-table td:last-child:has(.btn), .st-table th:last-child:empty { width: 1%; white-space: nowrap; text-align: right; }
+.st-table td .st-chip { white-space: nowrap; }
+.st-table td { overflow-wrap: anywhere; }
+
+/* --- card view: rows use the width, meta aligned in a tidy grid --- */
+.st-list { gap: 8px; }
+.st-list-item { align-items: center; gap: 16px; }
+.st-list-meta { gap: 4px 24px; }
+@media (min-width: 1100px) {
+  .st-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
+}
+
+/* --- card header: title left, tools right, always on one baseline --- */
+.st-card-head { align-items: center; padding-bottom: 12px; border-bottom: 1px solid var(--row-line, var(--edge)); margin-bottom: 16px; }
+.st-card-head h2 { line-height: 1.25; }
+.st-card-actions { justify-content: flex-end; margin-left: auto; }
+.st-card-actions .st-updated { margin-right: 2px; }
+
+/* --- roster import: use the full width in two columns instead of a 720px strip --- */
+.ro-meta { margin-bottom: 14px; align-items: stretch; }
+.ro-fact { min-width: 140px; justify-content: center; }
+.ro-pane { max-width: none; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px 20px; align-items: start; }
+.ro-pane > p, .ro-pane > .ro-actions { grid-column: 1 / -1; }
+.ro-drop { min-height: 96px; }
+@media (min-width: 900px) {
+  .ro-pane { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ro-pane > .ro-field:first-of-type .ro-drop { height: 100%; }
+}
+.ro-pane > .ro-option { align-self: stretch; }
+.ro-actions { padding-top: 2px; }
+
+/* --- announcements compose: full-width fields, tidy footer (hint left, Send right) --- */
+.st-grid.st-compose { max-width: none; margin-top: 14px; }
+.st-compose textarea.st-inp { min-height: 130px; }
+.st-compose-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px 20px; flex-wrap: wrap; margin-top: 14px; }
+.st-compose-foot p { margin: 0; flex: 1 1 280px; }
+.st-count { margin-left: 8px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.st-compose-foot .btn { min-width: 120px; margin-left: auto; }
+
+/* --- placement / forms: section titles and actions align to the grid --- */
+.st-h3 { margin: 20px 0 12px; }
+.st-form-actions { margin-top: 16px; }
+
+/* --- page frame --- */
+.ds-header { padding-bottom: 2px; }
+.ds-main > .ds-page > .st-card:only-child { min-height: 0; }
+@media (min-width: 1700px) { .ds-page { max-width: 1560px; } }
+
+/* --- phone: keep the compact layout (card head divider off, compose stacks) --- */
+@media (max-width: 600px) {
+  .st-card-head { border-bottom: 0; padding-bottom: 0; margin-bottom: 10px; }
+  .st-flex > .st-field { max-width: none; }
+  .st-compose-foot .btn { width: 100%; margin-left: 0; }
+  .st-list { display: flex; }
+  .st-table td:last-child:has(.btn) { width: auto; white-space: normal; }
+  .st-table td:first-child { white-space: normal; }
+  .st-table th, .st-table td { padding: 7px 0; }
+  .st-table td:first-child, .st-table td:last-child { padding-left: 0; padding-right: 0; }
+}
