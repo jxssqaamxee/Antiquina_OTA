@@ -161,7 +161,7 @@ export default function TwoFactorPanel() {
           aria-invalid={!!errs.password} onChange={(e) => { setPassword(e.target.value); setMsg(null); setErrs({}); }} />
       </Field>
       <div className="st-flex" style={{ marginTop: 14 }}>
-        <Btn kind="primary" disabled={busy || !password}>{busy ? "Please wait…" : label}</Btn>
+        <Btn type="submit" kind="primary" disabled={busy || !password}>{busy ? "Please wait…" : label}</Btn>
         <Btn type="button" onClick={reset} disabled={busy}>Cancel</Btn>
       </div>
     </form>
@@ -192,7 +192,7 @@ export default function TwoFactorPanel() {
           </div>
         </div>
         <div className="st-flex" style={{ marginTop: 14 }}>
-          <Btn kind="primary" disabled={busy || code.length !== 6}>{busy ? "Verifying…" : "Verify & enable"}</Btn>
+          <Btn type="submit" kind="primary" disabled={busy}>{busy ? "Verifying…" : "Verify & enable"}</Btn>
           <Btn type="button" disabled={busy} onClick={async () => {
             const leave = await popup.confirm({
               title: "Stop setting up two-factor?",
