@@ -27,7 +27,7 @@ export function ReportsPanel({ svc, sections = [], courses = [], scope = "admin"
             <Field label="Section"><Select value={f.section_id} onChange={(e) => setF({ ...f, section_id: e.target.value })}><option value="">All</option>{sections.map((s) => <option key={s.id} value={s.id}>{s.code}</option>)}</Select></Field>
           </Row>
         )}
-        <div className="st-flex st-mb" style={{ margin: "14px 0" }}>
+        <div className="st-stat-grid">
           <StatCard label="Trainees" value={t?.trainees} /><StatCard label="Verified hours" value={t?.verified} />
           <StatCard label="Pending review" value={t?.pending} /><StatCard label="Reached requirement" value={t?.completed} />
         </div>
@@ -258,7 +258,7 @@ export function RosterPanel({ svc, sections = [], scope = "admin" }) {
         {result && (
           <>
             <h3 className="st-h3">{result.dry_run ? "Preview — nothing saved yet" : "Result"} · {result.file} → {result.section}</h3>
-            <div className="st-flex st-mb">
+            <div className="st-stat-grid">
               <StatCard label={result.dry_run ? "Will be added" : "Added"} value={c.added} /><StatCard label="Placed" value={c.updated} />
               <StatCard label="Already listed" value={c.unchanged} /><StatCard label="Rejected" value={c.rejected} /><StatCard label="Skipped" value={c.skipped} />
             </div>
@@ -277,7 +277,7 @@ export function RosterPanel({ svc, sections = [], scope = "admin" }) {
         <Card title={`Roster · ${list.section.code}`} actions={
           <a href={svc.rosterCsvUrl(show === "all" ? "" : show, sectionId)} download className="st-link-reset"><Btn>Download CSV</Btn></a>
         }>
-          <div className="st-flex st-mb">
+          <div className="st-stat-grid">
             <StatCard label="On the list" value={list.total} /><StatCard label="Registered" value={list.registered} /><StatCard label="Not registered yet" value={list.waiting} />
           </div>
           <Row>

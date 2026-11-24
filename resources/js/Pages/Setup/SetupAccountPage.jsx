@@ -129,7 +129,7 @@ export default function SetupAccountPage() {
       const { data } = await api.post("/profile/complete-setup", body);
       await updateUser(data.user);
       toast.success("Your account is set up. Welcome to OCCDL!", { title: "All set", key: "setup-done" });
-      navigate(homePath(data.user), { replace: true });
+      navigate("/", { replace: true }); // main loading page, then the dashboard
     } catch (err) {
       const fe = serverFieldErrors(err);
       setErrors(fe);

@@ -6,6 +6,7 @@ export const loaders = {
   forgot: () => import("../Pages/Auth/ForgotPasswordPage"),
   reset: () => import("../Pages/Auth/ResetPasswordPage"),
   logbook: () => import("../Pages/Logbook/LogbookPage"),
+  announcements: () => import("../Pages/Announcements/AnnouncementsPage"),
   profile: () => import("../Pages/Profile/ProfilePage"),
   verify: () => import("../Pages/Auth/VerifyEmailPage"),
   adminLogin: () => import("../Pages/Auth/AdminLoginPage"),

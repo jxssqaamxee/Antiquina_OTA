@@ -49,7 +49,9 @@ export default function LoginPage() {
 
   const goHome = () => {
     flagWelcome();
-    navigate(location.state?.from || "/logbook", { replace: true });
+    // Main loading page first; it then opens the page the person was heading to (or their home).
+    try { if (location.state?.from) window.sessionStorage.setItem("occ-post-login", location.state.from); } catch { /* ignore */ }
+    navigate("/", { replace: true });
   };
 
   // One toast for a failed sign-in (replaced, never stacked) + the banner in the card.

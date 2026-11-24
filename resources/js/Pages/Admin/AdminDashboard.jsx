@@ -305,7 +305,7 @@ function Training({ sections }) {
       </Card>
       {h && (
         <Card title={sel.name}>
-          <div className="st-flex st-mb">
+          <div className="st-stat-grid">
             <StatCard label="Required" value={h.required} /><StatCard label="Verified" value={h.verified} />
             <StatCard label="Pending review" value={h.pending} /><StatCard label="Draft / rejected" value={h.draft} />
           </div>

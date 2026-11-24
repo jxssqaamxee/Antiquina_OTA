@@ -7,6 +7,8 @@ import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import api, { errorMessage } from "../../config/axiosConfig";
 import { useAppTheme } from "../../hooks/useAppTheme";
+import useIsPhone from "../../hooks/useIsPhone";
+import usePhoneTableLabels from "../../hooks/usePhoneTableLabels";
 import { REGULAR_THEMES, BLACK_THEMES, THEMES, setTheme, saveThemeToAccount } from "../../utils/theme";
 import AvatarPhoto from "../shared/AvatarPhoto";
 import PhotoUploadModal from "../shared/PhotoUploadModal";
@@ -303,24 +305,56 @@ function ProfileSettings() {
 }
 
 /**
+ * Phone tab bar (sclf_APP's MobileBottomNav): four shortcut tabs + "Menu", which opens the full sidebar.
+ * While the sidebar is open the bar slides out of the way. The tabs switch sections (no page change), so they are buttons.
+ */
+function StaffTabBar({ tabs, active, hidden, menuOpen, onGo, onMenu }) {
+  const tick = (ms = 8) => { try { navigator.vibrate?.(ms); } catch { /* ignore */ } };
+  return (
+    <nav className={`ds-bottomnav${hidden ? " is-hidden" : ""}`} aria-label="Quick navigation" inert={hidden ? "" : undefined}>
+      {tabs.map(({ key, label, icon: Icon, short }) => {
+        const on = key === active;
+        return (
+          <button key={key} type="button" className={`ds-bottomnav-item${on ? " is-active" : ""}`} aria-label={label} aria-current={on ? "page" : undefined}
+            tabIndex={hidden ? -1 : undefined}
+            onClick={() => { tick(); if (on) document.querySelector(".ds-main")?.scrollTo?.({ top: 0, behavior: "smooth" }); else onGo(key); }}>
+            <span className="ds-bottomnav-icon">{Icon && <Icon size={22} strokeWidth={on ? 2.3 : 2} />}</span>
+            <span className="ds-bottomnav-label">{short || label}</span>
+          </button>
+        );
+      })}
+      <button type="button" className="ds-bottomnav-item" aria-label="Open menu" aria-haspopup="true" aria-expanded={menuOpen} aria-controls="ds-sidebar"
+        tabIndex={hidden ? -1 : undefined} onClick={() => { tick(); onMenu(); }}>
+        <span className="ds-bottomnav-icon"><Menu size={22} strokeWidth={2} /></span>
+        <span className="ds-bottomnav-label">Menu</span>
+      </button>
+    </nav>
+  );
+}
+
+/**
  * Admin / Coordinator frame, copied from sclf_APP's DashboardShell: collapsible sidebar (nav + account row),
  * top bar, page header, pinned footer.
  *
- *   nav         [{ key, label, icon }]  the sections of this area (they replace the old tab strip)
+ *   nav         [{ key, label, icon, short? }]  the sections of this area (they replace the old tab strip)
+ *   phoneTabs   keys of the (up to) four sections that get a tab in the phone bottom bar; default: the first four
  *   active      key of the open section
  *   onNavigate  (key) => void
  */
-export default function AdminShell({ roleLabel, nav = [], active, onNavigate, title, subtitle, actions, children }) {
+export default function AdminShell({ roleLabel, nav = [], phoneTabs, active, onNavigate, title, subtitle, actions, children }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const [showProfile, setShowProfile] = useState(() => { try { return window.location.hash === "#profile"; } catch { return false; } });
   const [sidebarOpen, setSidebarOpen] = useState(false); // slide-over on narrow screens
-  const [isDesktop, setIsDesktop] = useState(() => (typeof window === "undefined" ? true : window.matchMedia(DESKTOP_QUERY).matches));
+  const [isDesktopWidth, setIsDesktop] = useState(() => (typeof window === "undefined" ? true : window.matchMedia(DESKTOP_QUERY).matches));
   const [collapsed, setCollapsed] = useState(() => {
     try { return window.localStorage.getItem(COLLAPSE_KEY) === "1"; } catch { return false; }
   });
-  const railCollapsed = collapsed && isDesktop;
+  const isPhone = useIsPhone();
+  usePhoneTableLabels();
+  const isDesktop = isDesktopWidth && !isPhone; // a big phone turned sideways still gets the slide-over menu
+  const railCollapsed = collapsed && isDesktop && !isPhone;
 
   useEffect(() => {
     const mq = window.matchMedia(DESKTOP_QUERY);
@@ -356,13 +390,17 @@ export default function AdminShell({ roleLabel, nav = [], active, onNavigate, ti
   };
   const go = (key) => { setShowProfile(false); onNavigate?.(key); setSidebarOpen(false); };
   const activeItem = nav.find((n) => n.key === active);
+  const tabs = (phoneTabs ? phoneTabs.map((k) => nav.find((n) => n.key === k)).filter(Boolean) : nav).slice(0, 4);
   const menuProps = { signingOut: busy, onSignOut: signOut, onEditProfile: openProfile };
 
   return (
-    <div className="ds-shell ds-layout">
+    <div className={`ds-shell ds-layout${isPhone ? " ds-phone ds-staff-app" : ""}`}>
       <div className={`ds-sidebar-backdrop${sidebarOpen ? " open" : ""}`} onClick={() => setSidebarOpen(false)} aria-hidden={!sidebarOpen} />
 
       <nav id="ds-sidebar" className={`ds-sidebar${sidebarOpen ? " open" : ""}${railCollapsed ? " collapsed" : ""}`} aria-label="Sections">
+        {isPhone && (
+          <button type="button" className="ds-icon-btn ds-sidebar-close" onClick={() => setSidebarOpen(false)} aria-label="Close menu"><X size={18} /></button>
+        )}
         <div className="ds-brand" title={railCollapsed ? "OCCDL" : undefined}>
           <img src={logo} alt="" />
           <span className="ds-brand-text">
@@ -371,7 +409,6 @@ export default function AdminShell({ roleLabel, nav = [], active, onNavigate, ti
           </span>
         </div>
 
-        <div className="ds-sidebar-divider" aria-hidden="true" />
         <div className="ds-nav-label">{roleLabel}</div>
 
         <div className="ds-nav-scroll">
@@ -392,6 +429,11 @@ export default function AdminShell({ roleLabel, nav = [], active, onNavigate, ti
           <div className="ds-sidebar-spacer" />
         </div>
 
+        {isPhone && (
+          <div className="ds-sidebar-credit">
+            {"</> "}Developed by <DeveloperCredit showTag={false} />
+          </div>
+        )}
         <div className="ds-sidebar-footer">
           <div className="ds-sidebar-menu-wrap">
             <AdminAccountMenu variant="side" collapsed={railCollapsed} {...menuProps} />
@@ -464,6 +506,11 @@ export default function AdminShell({ roleLabel, nav = [], active, onNavigate, ti
             <span className="ds-footer-copy ds-footer-extra">© {new Date().getFullYear()} OCCDL • Built with ❤️</span>
           </div>
         </footer>
+
+        {isPhone && (
+          <StaffTabBar tabs={tabs} active={showProfile ? null : active} hidden={sidebarOpen} menuOpen={sidebarOpen}
+            onGo={go} onMenu={() => setSidebarOpen(true)} />
+        )}
       </div>
     </div>
   );

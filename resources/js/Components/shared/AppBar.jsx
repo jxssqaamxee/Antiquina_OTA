@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { EVENTS } from "../../config/constant";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Megaphone } from "lucide-react";
 import { NotificationBell } from "./NotificationCenter";
 import { HelpButton } from "./HelpGuide";
 import AccountMenu from "./AccountMenu";
@@ -10,6 +10,7 @@ import logo from "../../assets/images/site-logo.png";
 // Slim frosted top bar: logo + page name on the left, help / bell / avatar on the right.
 export default function AppBar({ title, subtitle, back }) {
   const [scrolled, setScrolled] = useState(false);
+  const onAnnouncements = useLocation().pathname.startsWith("/announcements");
   useEffect(() => {
     const on = () => setScrolled(window.scrollY > 4);
     on();
@@ -37,6 +38,7 @@ export default function AppBar({ title, subtitle, back }) {
           {subtitle && <small>{subtitle}</small>}
         </div>
         <div className="appbar-actions" style={{ flex: "none" }}>
+          {!onAnnouncements && <Link to="/announcements" className="icon-btn" aria-label="Announcements" title="Announcements"><Megaphone size={19} /></Link>}
           <HelpButton />
           <NotificationBell />
           <AccountMenu />

@@ -42,7 +42,14 @@ export default function SplashPage() {
       timer = setTimeout(() => {
         if (!live) return;
         const u = userRef.current;
-        navigate(homePath(u), { replace: true });
+        let to = homePath(u);
+        try {
+          const want = window.sessionStorage.getItem("occ-post-login");
+          window.sessionStorage.removeItem("occ-post-login");
+          // Only an in-app path, and only where this account may go (the route guards still decide).
+          if (want && /^\/[^/]/.test(want) && to === homePath(u) && !/^\/(login|register|administrator|forgot|reset)/.test(want) && roleOf(u) === "trainee") to = want;
+        } catch { /* ignore */ }
+        navigate(to, { replace: true });
       }, wait);
     })();
     return () => { live = false; clearTimeout(timer); };

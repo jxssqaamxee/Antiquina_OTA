@@ -50,7 +50,7 @@ export default function AdminLoginPage() {
       const { data } = await api.post("/auth/administrator", { admin_id: adminId, password, remember });
       await signIn(data, remember);
       if (remember) saveRememberedCredentials(adminId, "admin"); else clearRememberedCredentials("admin");
-      navigate(homePath(data.user), { replace: true });
+      navigate("/", { replace: true }); // main loading page, then the dashboard
     } catch (err) {
       setErrors(fieldErrors(err));
       const message = errorMessage(err);

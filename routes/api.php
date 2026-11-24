@@ -87,6 +87,8 @@ Route::middleware(['auth', 'session.fresh', 'active', 'email.verified', 'setup.c
     Route::middleware(['role:trainee', 'throttle:60,1'])->group(function () {
         Route::post('/logbook/entries/{entryUid}/submit', [LogbookReviewController::class, 'submit']);
         Route::get('/logbook/hours', [LogbookReviewController::class, 'hours']);
+        // Announcements delivered to this trainee (from their coordinator / the administrator).
+        Route::get('/announcements/mine', [\App\Http\Controllers\Api\TraineeAnnouncementController::class, 'index']);
     });
 
     // Management areas. Each group is closed to every other role; later phases add the real modules.

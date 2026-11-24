@@ -38,6 +38,7 @@ export function UnverifiedRoute({ children }) {
 export function GuestRoute({ children }) {
   const { loading, isAuthenticated, user } = useAuth();
   if (loading) return <Splash />;
-  if (isAuthenticated) return <Navigate to={homePath(user)} replace />;
+  // Signed in: go through the main loading page ("/"), which then sends the person to their own home.
+  if (isAuthenticated) return <Navigate to="/" replace />;
   return children;
 }

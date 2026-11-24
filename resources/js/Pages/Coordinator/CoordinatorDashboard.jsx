@@ -96,7 +96,7 @@ function TraineeDetail({ trainee, onClose }) {
       <Card title={`${trainee.name} · ${trainee.student_id}`} actions={<Btn onClick={onClose}>Back to list</Btn>}>
         <Notice msg={msg} />{error && <p role="alert" className="st-error">{error}</p>}
         {h && (
-          <div className="st-flex st-mb">
+          <div className="st-stat-grid">
             <StatCard label="Required" value={h.required} /><StatCard label="Verified" value={h.verified} />
             <StatCard label="Pending review" value={h.pending} /><StatCard label="Draft / rejected" value={h.draft} />
           </div>
@@ -133,7 +133,7 @@ const NAV = [
   { key: "live", label: "Live duty", icon: Radio },
   { key: "trainees", label: "Trainees", icon: Users },
   { key: "roster", label: "Import roster", icon: Upload },
-  { key: "approvals", label: "Logbook approvals", icon: ClipboardCheck },
+  { key: "approvals", label: "Logbook approvals", short: "Approvals", icon: ClipboardCheck },
   { key: "reports", label: "Reports", icon: FileBarChart },
   { key: "announcements", label: "Announcements", icon: Megaphone },
   { key: "activity", label: "Audit log", icon: ShieldCheck },
@@ -145,7 +145,7 @@ export default function CoordinatorDashboard() {
   const [data, , error] = useLoad(svc.overview);
   useEffect(() => { document.title = "Coordinator | OCCDL"; }, []);
   return (
-    <AdminShell roleLabel="Coordinator" nav={NAV} active={tab} onNavigate={setTab}
+    <AdminShell roleLabel="Coordinator" nav={NAV} phoneTabs={["dashboard","live","trainees","approvals"]} active={tab} onNavigate={setTab}
       title={tab === "dashboard" ? (data?.section ? `Section ${data.section.code}` : "Coordinator dashboard") : NAV.find((n) => n.key === tab)?.label}
       subtitle={tab === "dashboard" ? data?.message : (data?.section ? `Section ${data.section.code}` : undefined)}>
       {error && <p role="alert" className="st-error">{error}</p>}
