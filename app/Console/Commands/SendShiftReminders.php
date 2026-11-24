@@ -18,8 +18,7 @@ use Illuminate\Console\Command;
  *   - shift-start: OCC_REMINDER_START_MIN (20) minutes before the host client's time in
  *   - shift-end  : OCC_REMINDER_END_MIN   (10) minutes before the host client's time out
  *
- * Same rules as the in-app reminders in LogbookPage.jsx: the client the trainee logged hours under most
- * recently, and only on that client's working days. Each reminder is sent once per day (push_reminder_logs).
+ * Every host client the trainee added is checked, and only on that client's own working days. Each reminder is sent once per day (push_reminder_logs).
  */
 class SendShiftReminders extends Command
 {
@@ -66,7 +65,7 @@ class SendShiftReminders extends Command
                 $sent += $this->send($push, $user, $client, 'shift-start', $date, [
                     'title' => 'Your OJT shift starts soon',
                     'body' => sprintf('%s starts at %s, about %d minute%s from now.', $client->name, self::time12($client->time_in), $left, $left === 1 ? '' : 's'),
-                    'tag' => "shift-reminder-{$date}",
+                    'tag' => "shift-reminder-{$date}-{$client->client_uid}",
                 ]);
             }
 
@@ -78,7 +77,7 @@ class SendShiftReminders extends Command
                 $sent += $this->send($push, $user, $client, 'shift-end', $date, [
                     'title' => 'Time to clock out soon',
                     'body' => sprintf('Your shift at %s ends at %s, about %d minute%s from now. Remember to log your time out.', $client->name, self::time12($client->time_out), $left, $left === 1 ? '' : 's'),
-                    'tag' => "shift-end-{$date}",
+                    'tag' => "shift-end-{$date}-{$client->client_uid}",
                 ]);
             }
             }
@@ -95,22 +94,14 @@ class SendShiftReminders extends Command
     }
 
     /**
-     * The client the trainee most recently logged under, or their only client. With several clients and no
-     * usable "last client" (never logged, or it was deleted) ALL of them are returned: the schedule/day checks
-     * in handle() then pick the one that works today, instead of silently sending nothing.
+     * EVERY host client the trainee added, however many. handle() then keeps only the ones that work today and
+     * whose reminder time is now, and each reminder is sent once per client per day (push_reminder_logs).
      *
      * @return \Illuminate\Support\Collection<int, HostClient>
      */
     public static function clientsFor(User $user): \Illuminate\Support\Collection
     {
-        $clients = HostClient::where('user_id', $user->id)->orderBy('position')->orderBy('id')->get();
-        if ($clients->count() <= 1) {
-            return $clients;
-        }
-        $last = UserSetting::where('user_id', $user->id)->value('last_client_uid');
-        $match = $last ? $clients->firstWhere('client_uid', $last) : null;
-
-        return $match ? collect([$match]) : $clients;
+        return HostClient::where('user_id', $user->id)->orderBy('position')->orderBy('id')->get();
     }
 
     /** Claims the reminder first (unique row), then sends; gives the claim back if no device got it. */

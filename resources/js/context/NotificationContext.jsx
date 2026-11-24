@@ -46,6 +46,13 @@ export function NotificationProvider({ children }) {
     return () => { live = false; };
   }, [userId]);
 
+  // Tell the service worker whose reminders this install may show. A push for anyone else (a shared phone where
+  // the previous trainee's address was not removed) is shown without any names, see public/sw.js.
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.ready.then((reg) => reg.active?.postMessage({ type: "PUSH_USER", sub: userId || null })).catch(() => {});
+  }, [userId]);
+
   // Keep this install registered while the app stays in use: every time the app comes back to the front or the
   // network returns (at most every 10 minutes), and at once when the service worker says the browser rotated
   // the push address (pushsubscriptionchange). Without this a rotated address was only fixed at the next sign-in.

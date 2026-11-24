@@ -162,6 +162,12 @@ class AuthController extends Controller
 
     public function logout(Request $request): JsonResponse
     {
+        // This install must not keep receiving the signed-out person's reminders (shared phones).
+        $installId = (string) $request->input('install_id', '');
+        if ($request->user() && $installId !== '' && preg_match('/^[A-Za-z0-9_-]{1,64}$/', $installId)) {
+            $request->user()->pushSubscriptions()->where('install_id', $installId)->delete();
+        }
+
         $this->sessions->end($request);
 
         return response()->json(['ok' => true]);

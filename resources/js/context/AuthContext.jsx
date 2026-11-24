@@ -4,7 +4,7 @@ import { KEYS, EVENTS } from "../config/constant";
 import { hydrate, releaseUser, stopSync } from "../utils/sync";
 import { setTheme } from "../utils/theme";
 import { clearPhotoCache, preloadPhoto } from "../utils/imageCache";
-import { forgetThisDevice } from "../utils/push";
+import { forgetThisDevice, getInstallId } from "../utils/push";
 import { isTrainee } from "../utils/roles";
 
 const AuthContext = createContext(null);
@@ -130,7 +130,7 @@ export function AuthProvider({ children }) {
     // so try once more before giving up.
     let ended = false;
     for (let i = 0; i < 2 && !ended; i += 1) {
-      try { await api.post("/auth/logout", null, { timeout: 8000 }); ended = true; }
+      try { await api.post("/auth/logout", { install_id: getInstallId() || undefined }, { timeout: 8000 }); ended = true; }
       catch (e) { if (e.response && (e.response.status === 401 || e.response.status === 419)) ended = true; /* already gone */ }
     }
     stopSync();

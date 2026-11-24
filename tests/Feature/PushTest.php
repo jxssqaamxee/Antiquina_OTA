@@ -243,4 +243,42 @@ class PushTest extends TestCase
         $this->assertCount(1, $sent);
         $this->assertStringContainsString('City Hall', $sent[0]['body']);
     }
+
+    public function test_every_host_client_gets_its_own_reminders(): void
+    {
+        $sent = $this->fakeSender();
+        $user = $this->trainee(); // City Hall, Mon-Thu 08:00-17:00, also the last-used client
+        HostClient::create(['user_id' => $user->id, 'client_uid' => 'c2', 'name' => 'Library', 'name_key' => 'library', 'type' => 'public', 'days' => [1], 'time_in' => '09:00', 'time_out' => '17:05']);
+
+        $this->artisan('push:reminders', ['--at' => '2026-11-16 16:55'])->assertSuccessful(); // Monday: both end soon
+        $this->assertCount(2, $sent);
+        $this->assertNotSame($sent[0]['tag'], $sent[1]['tag']);
+    }
+
+    public function test_signing_out_removes_only_this_installs_push_address(): void
+    {
+        $user = User::factory()->create();
+        $mine = ['endpoint' => 'https://fcm.googleapis.com/fcm/send/mine', 'keys' => ['p256dh' => 'k', 'auth' => 'a'], 'install_id' => 'phone-1'];
+        $other = ['endpoint' => 'https://fcm.googleapis.com/fcm/send/other', 'keys' => ['p256dh' => 'k', 'auth' => 'a'], 'install_id' => 'laptop-1'];
+        $this->signedIn($user)->postJson('/api/push/subscribe', $mine)->assertOk();
+        $this->signedIn($user)->postJson('/api/push/subscribe', $other)->assertOk();
+
+        $this->signedIn($user)->postJson('/api/auth/logout', ['install_id' => 'phone-1'])->assertOk();
+
+        $this->assertSame(0, PushSubscription::where('install_id', 'phone-1')->count());
+        $this->assertSame(1, PushSubscription::where('install_id', 'laptop-1')->count());
+    }
+
+    public function test_a_phone_used_by_another_trainee_moves_the_install_to_them(): void
+    {
+        $a = User::factory()->create();
+        $b = User::factory()->create();
+        $sub = fn ($n) => ['endpoint' => "https://fcm.googleapis.com/fcm/send/{$n}", 'keys' => ['p256dh' => 'k', 'auth' => 'a'], 'install_id' => 'shared-phone'];
+
+        $this->signedIn($a)->postJson('/api/push/subscribe', $sub('a'))->assertOk();
+        $this->signedIn($b)->postJson('/api/push/subscribe', $sub('b'))->assertOk();
+
+        $this->assertSame(0, PushSubscription::where('user_id', $a->id)->count());
+        $this->assertSame(1, PushSubscription::where('user_id', $b->id)->where('install_id', 'shared-phone')->count());
+    }
 }

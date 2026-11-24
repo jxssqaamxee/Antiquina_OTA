@@ -67,5 +67,7 @@ class SessionLogin
     public function revokeAll(User $user): void
     {
         $this->revokeOthers($user, null);
+        // Every device was signed out: none of them may keep getting this account's reminders.
+        $user->pushSubscriptions()->delete();
     }
 }

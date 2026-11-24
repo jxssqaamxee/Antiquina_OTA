@@ -28,13 +28,44 @@ self.addEventListener("message", (event) => {
 
 // A real push from the server (php artisan push:reminders): runs even when the app is closed.
 // Every push MUST show a notification, or the phone (iOS especially) cancels the subscription.
+// Who is signed in on this install (set by the app, see NotificationContext). Kept in the Cache API because the
+// worker is stopped and restarted all the time.
+const USER_CACHE = "occ-push-user";
+const USER_URL = "/__push_user";
+const setPushUser = async (sub) => {
+  const c = await caches.open(USER_CACHE);
+  await c.put(USER_URL, new Response(sub || "none"));
+};
+const getPushUser = async () => {
+  try { const r = await (await caches.open(USER_CACHE)).match(USER_URL); return r ? await r.text() : null; } catch { return null; }
+};
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "PUSH_USER") event.waitUntil(setPushUser(event.data.sub));
+});
+
+// A real push from the server (php artisan push:reminders): runs even when the app is closed.
+// Every push MUST show a notification, or the phone (iOS especially) cancels the subscription.
+// A push addressed to another account than the one signed in here (or to nobody, after sign-out) is shown
+// as a plain "open the app" notice: no name, no client, no times. The server also drops the address on sign-out.
 self.addEventListener("push", (event) => {
   let p = {};
   try { p = event.data ? event.data.json() : {}; }
   catch { p = { body: event.data ? event.data.text() : "" }; }
 
-  event.waitUntil(
-    self.registration.showNotification(p.title || "OCCDL", {
+  event.waitUntil((async () => {
+    const current = await getPushUser(); // "u12" | "none" | null (not told yet: show normally)
+    const foreign = p.uid != null && current !== null && current !== "u" + p.uid;
+    if (foreign) {
+      return self.registration.showNotification("OCCDL", {
+        body: "You have a reminder. Open the app to see it.",
+        icon: "/images/icon-192.png",
+        badge: "/images/icon-96.png",
+        tag: "occ-generic",
+        data: { url: "/logbook" },
+      });
+    }
+    return self.registration.showNotification(p.title || "OCCDL", {
       body: p.body || "",
       icon: p.icon || "/images/icon-192.png",
       badge: "/images/icon-96.png",
@@ -42,8 +73,8 @@ self.addEventListener("push", (event) => {
       tag: p.tag || "occ-notification",
       renotify: false,
       data: { url: p.url || "/logbook", uid: p.uid || null },
-    })
-  );
+    });
+  })());
 });
 
 // The browser rotated this install's push address: take the new one and ask any open window to register it

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import { clearPersistedUi } from "../../hooks/usePersistedTab";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
-import { Boxes, Camera, Check as CheckIcon, ChevronDown, ChevronUp, ClipboardList, IdCard, KeyRound, Lock, LogOut, Mail, ShieldCheck, UserRound, Menu, Palette, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
+import { Boxes, Camera, Check as CheckIcon, ChevronDown, ChevronUp, ClipboardList, IdCard, Lock, LogOut, Mail, ShieldCheck, UserRound, Menu, Palette, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import api, { errorMessage } from "../../config/axiosConfig";
@@ -24,11 +24,11 @@ const DESKTOP_QUERY = "(min-width: 960px)";
 const idLine = (user) => (user?.admin_id ? `${user?.role === "admin" ? "Administrator" : "Coordinator"} ID: ${user.admin_id}` : (user?.email || ""));
 
 /**
- * Account menu: Change password · Theme (nine themes) · Sign out.
+ * Account menu: Profile settings · Theme (nine themes) · Sign out. (Changing the password lives in Profile settings > Security.)
  * variant "top"  = the avatar pill in the top bar (drops down).
  * variant "side" = the account row pinned at the bottom of the sidebar (opens beside / above it).
  */
-function AdminAccountMenu({ variant = "top", collapsed = false, onEditProfile, onChangePassword, onSignOut, signingOut }) {
+function AdminAccountMenu({ variant = "top", collapsed = false, onEditProfile, onSignOut, signingOut }) {
   const { user } = useAuth();
   const { theme } = useAppTheme();
   const [open, setOpen] = useState(false);
@@ -114,9 +114,6 @@ function AdminAccountMenu({ variant = "top", collapsed = false, onEditProfile, o
 
           <button type="button" className="am-item" role="menuitem" onClick={() => { close(); onEditProfile(); }}>
             <UserRound size={17} /> Profile settings
-          </button>
-          <button type="button" className="am-item" role="menuitem" onClick={() => { close(); onChangePassword(); }}>
-            <KeyRound size={17} /> Change password
           </button>
 
           <button type="button" className="am-item" role="menuitem" aria-haspopup="true" aria-expanded={themesOpen}
@@ -326,7 +323,6 @@ export default function AdminShell({ roleLabel, nav = [], active, onNavigate, ti
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
-  const [showPw, setShowPw] = useState(false);
   const [showProfile, setShowProfile] = useState(() => { try { return window.location.hash === "#profile"; } catch { return false; } });
   const [sidebarOpen, setSidebarOpen] = useState(false); // slide-over on narrow screens
   const [isDesktop, setIsDesktop] = useState(() => (typeof window === "undefined" ? true : window.matchMedia(DESKTOP_QUERY).matches));
@@ -364,12 +360,12 @@ export default function AdminShell({ roleLabel, nav = [], active, onNavigate, ti
   }
 
   const openProfile = () => {
-    setShowPw(false); setShowProfile(true); setSidebarOpen(false);
+    setShowProfile(true); setSidebarOpen(false);
     try { window.history.replaceState(window.history.state, "", `${window.location.pathname}${window.location.search}#profile`); } catch { /* ignore */ }
   };
-  const go = (key) => { setShowPw(false); setShowProfile(false); onNavigate?.(key); setSidebarOpen(false); };
+  const go = (key) => { setShowProfile(false); onNavigate?.(key); setSidebarOpen(false); };
   const activeItem = nav.find((n) => n.key === active);
-  const menuProps = { signingOut: busy, onSignOut: signOut, onChangePassword: () => setShowPw(true), onEditProfile: openProfile };
+  const menuProps = { signingOut: busy, onSignOut: signOut, onEditProfile: openProfile };
 
   return (
     <div className="ds-shell ds-layout">
@@ -451,7 +447,6 @@ export default function AdminShell({ roleLabel, nav = [], active, onNavigate, ti
                   {actions && <div className="ds-actions">{actions}</div>}
                 </div>
               )}
-              {showPw && <PasswordPanel onDone={() => setShowPw(false)} />}
               {showProfile ? <ProfileSettings /> : children}
           </>
         </main>
