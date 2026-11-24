@@ -41,9 +41,23 @@ self.addEventListener("push", (event) => {
       // Same tag as the in-app reminder, so one reminder never shows twice.
       tag: p.tag || "occ-notification",
       renotify: false,
-      data: { url: p.url || "/logbook" },
+      data: { url: p.url || "/logbook", uid: p.uid || null },
     })
   );
+});
+
+// The browser rotated this install's push address: take the new one and ask any open window to register it
+// with the server (the worker has no sign-in of its own). If no window is open, the next time the app opens
+// it registers itself (see NotificationContext).
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil((async () => {
+    try {
+      const key = event.oldSubscription && event.oldSubscription.options && event.oldSubscription.options.applicationServerKey;
+      if (key) await self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+    } catch { /* the app re-subscribes on its next start */ }
+    const wins = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    wins.forEach((w) => w.postMessage({ type: "PUSH_SUBSCRIPTION_CHANGED" }));
+  })());
 });
 
 // Tapping a notification opens (or focuses) the app on the right page.

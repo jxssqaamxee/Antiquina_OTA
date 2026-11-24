@@ -46,9 +46,11 @@ class PushController extends Controller
             }],
             'keys.p256dh' => ['required', 'string', 'max:255'],
             'keys.auth' => ['required', 'string', 'max:255'],
+            'install_id' => ['nullable', 'string', 'max:64', 'regex:/^[A-Za-z0-9_-]+$/'],
         ]);
+        $installId = $data['install_id'] ?? null;
 
-        PushSubscription::updateOrCreate(
+        $row = PushSubscription::updateOrCreate(
             ['endpoint_hash' => hash('sha256', $data['endpoint'])],
             [
                 'user_id' => $request->user()->id,
@@ -56,18 +58,34 @@ class PushController extends Controller
                 'public_key' => $data['keys']['p256dh'],
                 'auth_token' => $data['keys']['auth'],
                 'content_encoding' => 'aes128gcm',
+                'install_id' => $installId,
+                'last_seen_at' => now(),
             ],
         );
+
+        // One endpoint per install: when the browser rotated its address (or the app was reinstalled and kept the
+        // id), the older rows of this install are dead, whichever account they belonged to.
+        if ($installId) {
+            PushSubscription::where('install_id', $installId)->where('id', '!=', $row->id)->delete();
+        }
 
         return response()->json(['success' => true]);
     }
 
     public function unsubscribe(Request $request): JsonResponse
     {
-        $data = $request->validate(['endpoint' => ['required', 'string', 'max:2048']]);
+        $data = $request->validate([
+            'endpoint' => ['required', 'string', 'max:2048'],
+            'install_id' => ['nullable', 'string', 'max:64', 'regex:/^[A-Za-z0-9_-]+$/'],
+        ]);
 
         $request->user()->pushSubscriptions()
-            ->where('endpoint_hash', hash('sha256', $data['endpoint']))
+            ->where(function ($q) use ($data) {
+                $q->where('endpoint_hash', hash('sha256', $data['endpoint']));
+                if (! empty($data['install_id'])) {
+                    $q->orWhere('install_id', $data['install_id']);
+                }
+            })
             ->delete();
 
         return response()->json(['success' => true]);
@@ -80,12 +98,20 @@ class PushController extends Controller
             return response()->json(['sent' => 0, 'message' => 'Background alerts are not set up on the server yet.'], 503);
         }
 
-        $sent = $push->sendToUser($request->user(), [
+        $request->validate(['install_id' => ['nullable', 'string', 'max:64', 'regex:/^[A-Za-z0-9_-]+$/']]);
+        $payload = [
             'title' => 'OCCDL alerts are on',
             'body' => 'You will get shift and clock-out reminders even when the app is closed.',
             'url' => '/logbook',
             'tag' => 'occ-test',
-        ]);
+        ];
+
+        // This install first; if it is not registered yet, any device of the account.
+        $installId = $request->input('install_id');
+        $sent = $installId ? $push->sendToUser($request->user(), $payload, $installId) : 0;
+        if ($sent === 0) {
+            $sent = $push->sendToUser($request->user(), $payload);
+        }
 
         return response()->json(['sent' => $sent]);
     }

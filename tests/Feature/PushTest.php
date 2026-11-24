@@ -218,4 +218,29 @@ class PushTest extends TestCase
         $this->artisan('push:reminders', ['--at' => '2026-11-16 16:50'])->assertSuccessful();
         $this->assertSame(0, PushReminderLog::count());
     }
+
+    public function test_a_new_address_from_the_same_install_replaces_the_old_one(): void
+    {
+        $user = User::factory()->create();
+        $old = ['endpoint' => 'https://fcm.googleapis.com/fcm/send/old', 'keys' => ['p256dh' => 'k', 'auth' => 'a'], 'install_id' => 'install-abc'];
+        $new = ['endpoint' => 'https://fcm.googleapis.com/fcm/send/new', 'keys' => ['p256dh' => 'k', 'auth' => 'a'], 'install_id' => 'install-abc'];
+
+        $this->signedIn($user)->postJson('/api/push/subscribe', $old)->assertOk();
+        $this->signedIn($user)->postJson('/api/push/subscribe', $new)->assertOk();
+
+        $this->assertSame(1, PushSubscription::where('install_id', 'install-abc')->count());
+        $this->assertSame(hash('sha256', $new['endpoint']), PushSubscription::where('install_id', 'install-abc')->value('endpoint_hash'));
+    }
+
+    public function test_a_trainee_with_several_clients_and_no_last_client_still_gets_the_reminder(): void
+    {
+        $sent = $this->fakeSender();
+        $user = $this->trainee();
+        UserSetting::where('user_id', $user->id)->update(['last_client_uid' => null]);
+        HostClient::create(['user_id' => $user->id, 'client_uid' => 'c2', 'name' => 'Library', 'name_key' => 'library', 'type' => 'public', 'days' => [5], 'time_in' => '09:00', 'time_out' => '18:00']);
+
+        $this->artisan('push:reminders', ['--at' => '2026-11-16 16:50'])->assertSuccessful(); // Monday: only City Hall works today
+        $this->assertCount(1, $sent);
+        $this->assertStringContainsString('City Hall', $sent[0]['body']);
+    }
 }

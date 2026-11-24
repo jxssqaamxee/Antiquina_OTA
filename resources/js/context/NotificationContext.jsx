@@ -46,6 +46,31 @@ export function NotificationProvider({ children }) {
     return () => { live = false; };
   }, [userId]);
 
+  // Keep this install registered while the app stays in use: every time the app comes back to the front or the
+  // network returns (at most every 10 minutes), and at once when the service worker says the browser rotated
+  // the push address (pushsubscriptionchange). Without this a rotated address was only fixed at the next sign-in.
+  useEffect(() => {
+    if (!userId) return undefined;
+    let last = Date.now();
+    const resync = (force = false) => {
+      const now = Date.now();
+      if (!force && now - last < 10 * 60 * 1000) return;
+      last = now;
+      syncPush().then((s) => { if (s !== "off") setPushStatus(s); });
+    };
+    const onVisible = () => { if (document.visibilityState === "visible") resync(); };
+    const onOnline = () => resync();
+    const onMessage = (e) => { if (e.data?.type === "PUSH_SUBSCRIPTION_CHANGED") resync(true); };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", onOnline);
+    navigator.serviceWorker?.addEventListener("message", onMessage);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", onOnline);
+      navigator.serviceWorker?.removeEventListener("message", onMessage);
+    };
+  }, [userId]);
+
   // Load (and reload, if a different account signs in) this account's
   // notification history.
   useEffect(() => {

@@ -3,6 +3,19 @@
 import api from "../config/axiosConfig";
 
 const OFF_KEY = "occ_push_off"; // set when the person turned background alerts off themselves
+const INSTALL_KEY = "occ_install_id"; // random id of THIS install (browser profile / home-screen app), created once
+
+/** The install id: lets the server keep exactly one push address per install and per account. */
+export const getInstallId = () => {
+  try {
+    let id = localStorage.getItem(INSTALL_KEY);
+    if (!id) {
+      id = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+      localStorage.setItem(INSTALL_KEY, id);
+    }
+    return id;
+  } catch { return null; }
+};
 
 export const isPushSupported = () =>
   typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
@@ -72,7 +85,7 @@ export async function syncPush({ force = false } = {}) {
   if (Notification.permission !== "granted") return "off";
   if (!force && getOff()) return "off";
   try {
-    const { data } = await api.get("/push/status");
+    const { data } = await api.get("/push/status", { params: { install_id: getInstallId() || undefined } });
     if (!data.configured || !data.vapid_public_key) return "unconfigured";
 
     const reg = await registration();
@@ -85,7 +98,7 @@ export async function syncPush({ force = false } = {}) {
       });
     }
     // Always (re)register: it also moves a phone that another trainee used before to THIS account.
-    await api.post("/push/subscribe", sub.toJSON());
+    await api.post("/push/subscribe", { ...sub.toJSON(), install_id: getInstallId() });
     setOff(false);
     return "on";
   } catch {
@@ -113,14 +126,14 @@ export async function forgetThisDevice() {
   const sub = await withTimeout(currentSubscription({ wait: false }), 3000, null); // no waiting for a worker that is not there
   if (!sub) return;
   const endpoint = sub.endpoint;
-  await withTimeout(api.post("/push/unsubscribe", { endpoint }, { timeout: 4000 }), 5000); // the server drops dead endpoints itself
+  await withTimeout(api.post("/push/unsubscribe", { endpoint, install_id: getInstallId() }, { timeout: 4000 }), 5000); // the server drops dead endpoints itself
   await withTimeout(sub.unsubscribe(), 3000);
 }
 
 /** Asks the server to push a test message to this account's devices. Resolves to the number of devices reached. */
 export async function sendTestPush() {
   try {
-    const { data } = await api.post("/push/test");
+    const { data } = await api.post("/push/test", { install_id: getInstallId() });
     return data.sent ?? 0;
   } catch (e) {
     return e?.response?.status === 503 ? -1 : 0;

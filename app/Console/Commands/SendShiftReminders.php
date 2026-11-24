@@ -49,10 +49,7 @@ class SendShiftReminders extends Command
         $userIds = PushSubscription::query()->distinct()->pluck('user_id');
 
         foreach (User::whereIn('id', $userIds)->get() as $user) {
-            $client = $this->clientFor($user);
-            if (! $client) {
-                continue;
-            }
+            foreach (self::clientsFor($user) as $client) {
             $days = array_map('intval', (array) $client->days);
             if (! in_array($weekday, $days, true)) {
                 continue;
@@ -84,6 +81,7 @@ class SendShiftReminders extends Command
                     'tag' => "shift-end-{$date}",
                 ]);
             }
+            }
         }
 
         // Tidy up once an hour.
@@ -96,17 +94,23 @@ class SendShiftReminders extends Command
         return self::SUCCESS;
     }
 
-    /** The client the trainee most recently logged under (or their only client). */
-    private function clientFor(User $user): ?HostClient
+    /**
+     * The client the trainee most recently logged under, or their only client. With several clients and no
+     * usable "last client" (never logged, or it was deleted) ALL of them are returned: the schedule/day checks
+     * in handle() then pick the one that works today, instead of silently sending nothing.
+     *
+     * @return \Illuminate\Support\Collection<int, HostClient>
+     */
+    public static function clientsFor(User $user): \Illuminate\Support\Collection
     {
         $clients = HostClient::where('user_id', $user->id)->orderBy('position')->orderBy('id')->get();
-        if ($clients->isEmpty()) {
-            return null;
+        if ($clients->count() <= 1) {
+            return $clients;
         }
         $last = UserSetting::where('user_id', $user->id)->value('last_client_uid');
         $match = $last ? $clients->firstWhere('client_uid', $last) : null;
 
-        return $match ?? ($clients->count() === 1 ? $clients->first() : null);
+        return $match ? collect([$match]) : $clients;
     }
 
     /** Claims the reminder first (unique row), then sends; gives the claim back if no device got it. */
