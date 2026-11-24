@@ -17,6 +17,7 @@ class EnsureTwoFactorEnrolled
         'api/auth/logout',
         'api/email/*',
         'api/profile/password',
+        'api/profile/complete-setup',
         'api/2fa/*',
     ];
 
