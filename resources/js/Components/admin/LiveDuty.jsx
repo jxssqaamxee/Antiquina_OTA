@@ -85,10 +85,10 @@ export function LiveDutyPanel({ fetcher }) {
           </button>
         ))}
       </div>
-      <div className="st-tabs" role="tablist" style={{ margin: "4px 0 14px" }}>
+      <div className="st-tabs st-tabs-tight" role="tablist">
         {FILTERS.map(([k, l]) => <button key={k} type="button" role="tab" aria-selected={f === k} className={`st-tab${f === k ? " is-active" : ""}`} onClick={() => setF(k)}>{l}</button>)}
       </div>
-      {!data && !error ? <div style={{ display: "grid", gap: 10 }}>{[0, 1, 2, 3].map((i) => <Skel key={i} w="100%" h={46} r={12} />)}</div>
+      {!data && !error ? <div className="st-stack">{[0, 1, 2, 3].map((i) => <Skel key={i} w="100%" h={46} r={12} />)}</div>
         : !shown.length ? <p className="st-empty">{rows.length ? "Nobody matches this filter." : "No trainees to show yet."}</p> : (
           <div className="st-table-wrap">
             <table className="st-table st-live-table">
@@ -97,7 +97,7 @@ export function LiveDutyPanel({ fetcher }) {
             </table>
           </div>
         )}
-      <p className="st-muted" style={{ marginTop: 10 }}>Times follow Philippine time. A trainee shows here once their day is saved on the server (it syncs a few seconds after they add it).</p>
+      <p className="st-muted st-note">Times follow Philippine time. A trainee shows here once their day is saved on the server (it syncs a few seconds after they add it).</p>
     </section>
   );
 }
@@ -111,7 +111,7 @@ export function LiveDutyCard({ fetcher, onOpen }) {
       <div className="st-chart-head">
         <span className="st-chart-icon"><Radio size={16} strokeWidth={2.2} /></span>
         <div><h2>On duty right now</h2><p>Trainees whose logged hours are running at this moment</p></div>
-        <div style={{ marginLeft: "auto", display: "flex", gap: 10, alignItems: "center" }}>
+        <div className="st-chart-tools">
           <LiveBadge updatedAt={updatedAt} error={error} /><RefreshButton onRefresh={reload} />
           {onOpen && <button type="button" className="btn st-btn" onClick={onOpen}>Open board <ChevronRight size={14} /></button>}
         </div>
@@ -131,7 +131,7 @@ export function LiveDutyCard({ fetcher, onOpen }) {
                 </li>
               ))}
             </ul>
-          ) : <p className="st-empty" style={{ margin: "10px 0 0" }}>Nobody is on duty at the moment.</p>}
+          ) : <p className="st-empty st-empty-flush">Nobody is on duty at the moment.</p>}
         </>
       )}
     </section>

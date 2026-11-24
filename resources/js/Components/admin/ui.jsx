@@ -27,8 +27,8 @@ export function Btn({ kind, className = "", ...p }) {
 export const Input = ({ className = "", ...p }) => <input {...p} className={`st-inp ${className}`.trim()} />;
 export const Textarea = ({ className = "", ...p }) => <textarea {...p} className={`st-inp ${className}`.trim()} />;
 export const Select = ({ children, className = "", ...p }) => <select {...p} className={`st-inp ${className}`.trim()}>{children}</select>;
-export const Field = ({ label, children }) => (
-  <label className="st-field"><span>{label}</span>{children}</label>
+export const Field = ({ label, children, className = "" }) => (
+  <label className={`st-field ${className}`.trim()}><span>{label}</span>{children}</label>
 );
 export const Row = ({ children }) => <div className="st-flex">{children}</div>;
 export const Check = ({ children, ...p }) => <label className="st-check"><input type="checkbox" {...p} />{children}</label>;

@@ -16,19 +16,6 @@ const LIVE = 30000; // how often an open screen quietly refetches (paused while 
 const refreshBtn = (reload, m) => <RefreshButton onRefresh={reload} loading={m.loading && !m.updatedAt} updatedAt={m.updatedAt} />;
 const Stale = ({ m }) => (m.stale ? <p className="st-stale" role="status">Couldn’t refresh just now. Showing the last data we loaded.</p> : null);
 
-function Overview({ go }) {
-  const [data, reload, error, m] = useLoad(() => svc.overview(), { interval: LIVE });
-  return (
-    <>
-      <div className="st-toolbar">{refreshBtn(reload, m)}</div>
-      {error && !data && <p role="alert" className="st-error">{error}</p>}
-      <Stale m={m} />
-      {!data && !error && <OverviewSkeleton />}
-      <OverviewDashboard data={data} scope="admin" go={go} liveFetcher={svc.live} />
-    </>
-  );
-}
-
 /** Every account's details (name, email): only the Administrator can change them. Profile Settings is read-only. */
 function Users() {
   const [q, setQ] = usePersistedState("admin.users.q", "");
@@ -57,7 +44,7 @@ function Users() {
             <Field label="Email"><Input type="email" value={edit.email || ""} onChange={set("email")} /></Field>
             <Btn kind="primary" disabled={busy} onClick={save}>{busy ? "Saving…" : "Save changes"}</Btn>
           </Row>
-          <p className="st-muted" style={{ marginTop: 10 }}>The Student ID / Administrator ID and the role can’t be changed here.</p>
+          <p className="st-muted st-note">The Student ID / Administrator ID and the role can’t be changed here.</p>
         </Card>
       )}
       <Card title="Users" actions={refreshBtn(load, m)}>
@@ -164,7 +151,7 @@ function Sections({ courses, year, onChanged, goTo }) {
             <option value="">Choose…</option>{courses.map((c) => <option key={c.id} value={c.id}>{c.code}</option>)}
           </Select></Field>
           <Field label="Year level"><Select value={f.year_level} onChange={(e) => setF({ ...f, year_level: e.target.value })}>{[1, 2, 3, 4].map((n) => <option key={n}>{n}</option>)}</Select></Field>
-          <Field label="How many (A, B, …)"><Input type="number" min="1" max="12" value={f.count} onChange={(e) => setF({ ...f, count: e.target.value })} style={{ width: 90 }} /></Field>
+          <Field label="How many (A, B, …)" className="st-field-sm"><Input type="number" min="1" max="12" value={f.count} onChange={(e) => setF({ ...f, count: e.target.value })} /></Field>
           <Btn kind="primary" disabled={busy || !f.course_id} onClick={create}>Create</Btn>
         </Row>
       </Card>
@@ -309,8 +296,8 @@ function Training({ sections }) {
             <StatCard label="Pending review" value={h.pending} /><StatCard label="Draft / rejected" value={h.draft} />
           </div>
           <Row>
-            <Field label="New required hours"><Input type="number" min="1" max="2000" value={f.hours} onChange={(e) => setF({ ...f, hours: e.target.value })} style={{ width: 130 }} /></Field>
-            <Field label="Reason (required)"><Input value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} style={{ width: 320 }} /></Field>
+            <Field label="New required hours" className="st-field-sm"><Input type="number" min="1" max="2000" value={f.hours} onChange={(e) => setF({ ...f, hours: e.target.value })} /></Field>
+            <Field label="Reason (required)" className="st-field-wide"><Input value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} /></Field>
             <Btn kind="primary" disabled={busy || !f.hours || f.reason.trim().length < 5} onClick={save}>Save exception</Btn>
           </Row>
           <h3 className="st-h3">History</h3>
@@ -325,9 +312,9 @@ function Training({ sections }) {
 }
 
 const NAV = [
-  { key: "overview", label: "Overview", icon: LayoutDashboard },
+  { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "live", label: "Live duty", icon: Radio },
-  { key: "registrations", label: "Registrations", icon: UserCheck },
+  { key: "registrations", label: "Registrations", short: "Sign-ups", icon: UserCheck },
   { key: "coordinators", label: "Coordinators", icon: UserCog },
   { key: "users", label: "Users", icon: UsersIcon },
   { key: "sections", label: "Sections", icon: Layers },
@@ -341,7 +328,8 @@ const NAV = [
 
 /** Admin area: one desktop page, one sidebar entry per section. Every action is also enforced by Laravel (role:admin). */
 export default function AdminDashboard() {
-  const [tab, setTab] = usePersistedTab("admin", NAV.map((n) => n.key), "overview");
+  const [tab, setTab] = usePersistedTab("admin", NAV.map((n) => n.key), "dashboard");
+  const [ov, reloadOv, ovError, om] = useLoad(() => svc.overview(), { interval: LIVE });
   const [courses] = useLoad(() => svc.courses().then((d) => d.courses));
   const [years, reloadYears] = useLoad(() => svc.years().then((d) => d.academic_years), { interval: 60000 });
   const [secs, reloadSecs] = useLoad(() => svc.sections().then((d) => d.sections), { interval: 60000 });
@@ -351,9 +339,12 @@ export default function AdminDashboard() {
   const sections = secs || [];
 
   return (
-    <AdminShell roleLabel="System Administrator" nav={NAV} active={tab} onNavigate={setTab}
-      title={NAV.find((n) => n.key === tab)?.label} subtitle={year ? `Current academic year: ${year.name}` : undefined}>
-      {tab === "overview" && <Overview go={setTab} />}
+    <AdminShell roleLabel="System Administrator" nav={NAV} phoneTabs={["dashboard", "live", "registrations", "users"]} active={tab} onNavigate={setTab}
+      title={NAV.find((n) => n.key === tab)?.label} subtitle={year ? `Current academic year: ${year.name}` : undefined}
+      actions={tab === "dashboard" ? <div className="st-header-tools">{refreshBtn(reloadOv, om)}</div> : undefined}>
+      {tab === "dashboard" && ovError && !ov && <p role="alert" className="st-error">{ovError}</p>}
+      {tab === "dashboard" && <Stale m={om} />}
+      {tab === "dashboard" && (ov ? <OverviewDashboard data={ov} scope="admin" go={setTab} liveFetcher={svc.live} /> : !ovError && <OverviewSkeleton />)}
       {tab === "live" && <LiveDutyPanel fetcher={svc.live} />}
       {tab === "registrations" && <RegistrationsPanel svc={svc} />}
       {tab === "users" && <Users />}

@@ -191,6 +191,8 @@ Route::middleware(['auth', 'session.fresh', 'active', 'email.verified', 'approve
         Route::delete('/placements/{id}', [PlacementController::class, 'end'])->whereNumber('id');
         // Phase 5: logbook review.
         Route::get('/approvals', [CoordinatorReviewController::class, 'pending']);
+        Route::get('/approvals/summary', [CoordinatorReviewController::class, 'summary']);
+        Route::middleware('throttle:30,1')->post('/entries/review', [CoordinatorReviewController::class, 'reviewBatch']);
         Route::get('/trainees/{id}/entries', [CoordinatorReviewController::class, 'traineeEntries'])->whereNumber('id');
         Route::post('/entries/{id}/approve', [CoordinatorReviewController::class, 'approve'])->whereNumber('id');
         Route::post('/entries/{id}/reject', [CoordinatorReviewController::class, 'reject'])->whereNumber('id');

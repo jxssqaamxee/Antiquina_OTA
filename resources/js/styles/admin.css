@@ -678,3 +678,89 @@ textarea.st-inp { min-height: 104px; padding: 12px 14px; resize: vertical; font-
 .st-stale { margin: 0 0 10px; font-size: 12.5px; font-weight: 700; color: #b45309; }
 @media (prefers-reduced-motion: reduce) { .st-spin { animation: none; } }
 .st-toolbar { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-bottom: 12px; }
+
+/* ---- Logbook approvals: per-trainee review with select + bulk actions ---- */
+.rv-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px 14px; flex-wrap: wrap; padding: 10px 12px; margin-bottom: 12px; border: 1px solid var(--edge); border-radius: 12px; background: var(--field); position: sticky; top: 0; z-index: 2; }
+.rv-bar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.rv-item { align-items: center; gap: 12px; }
+.rv-item.is-picked { border-color: var(--accent-text); background: rgba(var(--accent-rgb), .07); }
+.rv-pick { width: 18px; height: 18px; flex-shrink: 0; accent-color: var(--accent-text); }
+.rv-hrs { margin-left: 6px; font-weight: 800; color: var(--accent-text); }
+.rv-side { flex-wrap: wrap; justify-content: flex-end; }
+@media (max-width: 600px) {
+  .rv-bar-actions { width: 100%; }
+  .rv-bar-actions .btn { flex: 1 1 0; justify-content: center; }
+  .rv-item { flex-wrap: wrap; }
+  .rv-item .st-list-main { flex-basis: calc(100% - 40px); }
+  .rv-side { width: 100%; justify-content: stretch; }
+  .rv-side .st-inp { flex: 1 1 100%; width: 100% !important; }
+  .rv-side .btn { flex: 1 1 0; justify-content: center; }
+}
+
+/* =====================================================================
+   Layout polish: one consistent page frame for Admin + Coordinator
+   (desktop, laptop, tablet / PWA, phone). Appended last so it wins.
+   ===================================================================== */
+.ds-shell { --occ-bottombar-h: 52px; }
+.ds-page { width: 100%; max-width: 1440px; margin: 0 auto; }
+.ds-main { padding-top: 20px; padding-bottom: 20px; scrollbar-gutter: stable; }
+.ds-main > .ds-page > :last-child { margin-bottom: 0; }
+
+/* page header: role label is a quiet line, not a pill; actions sit level with the title */
+.ds-header { align-items: center; gap: 10px 16px; margin-bottom: 16px; }
+.ds-eyebrow { padding: 0; margin: 0 0 3px; border: 0; background: none; box-shadow: none; border-radius: 0; font-size: 11px; letter-spacing: .1em; }
+.ds-title { margin: 0 0 2px; }
+.st-header-tools { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+
+/* cards and tab strips: tighter, even rhythm */
+.st-card { padding: clamp(16px, 2.2vw, 22px); margin-bottom: 16px; }
+.st-card-head { margin-bottom: 12px; }
+.st-tabs { margin-bottom: 14px; }
+.st-tabs-tight { margin: 0 0 14px; }
+.st-stack { display: grid; gap: 10px; }
+.st-note { margin-top: 10px; }
+.st-empty-flush { margin: 10px 0 0; }
+.st-h3-first { margin-top: 0; }
+
+/* forms: fields share the row evenly; no fixed pixel widths, so nothing overflows or leaves gaps */
+.st-flex { gap: 12px 14px; }
+.st-flex > .st-field { flex: 1 1 200px; }
+.st-flex > .st-field.st-field-sm { flex: 0 1 130px; }
+.st-flex > .st-field.st-field-wide { flex: 2 1 280px; }
+.st-flex > .btn, .st-flex > .st-check { flex: 0 0 auto; }
+.st-inp.st-w-xs { width: 96px; }
+.st-days-field { margin-top: 14px; }
+.st-days { display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 10px 14px; border: 1.5px solid var(--edge); border-radius: 14px; background: var(--field); }
+.st-form-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
+
+/* live-duty card tools wrap instead of overflowing */
+.st-chart-head { flex-wrap: wrap; }
+.st-chart-tools { margin-left: auto; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+/* laptop: slimmer sidebar so the work area gets the room */
+@media (min-width: 960px) and (max-width: 1279px) {
+  .ds-sidebar { width: 224px; }
+  .ds-content { margin-left: 224px; }
+}
+
+/* tablet / PWA window */
+@media (min-width: 601px) and (max-width: 959px) {
+  .ds-main { padding-left: max(20px, env(safe-area-inset-left)); padding-right: max(20px, env(safe-area-inset-right)); }
+}
+
+/* phone */
+@media (max-width: 600px) {
+  .ds-main { padding-top: 10px; }
+  .ds-eyebrow { display: none; }
+  .ds-header { flex-direction: row; flex-wrap: nowrap; align-items: center; margin-bottom: 12px; }
+  .ds-header-text { flex: 1 1 auto; }
+  .ds-header .ds-actions { width: auto; flex: 0 0 auto; }
+  .st-header-tools .st-updated { display: none; }
+  .st-header-tools .st-refresh { width: 42px; min-height: 42px; padding: 0; justify-content: center; }
+  .st-header-tools .st-refresh span { display: none; }
+  .st-flex > .st-field, .st-flex > .st-field.st-field-sm, .st-flex > .st-field.st-field-wide { flex: 1 1 100%; }
+  .st-flex > .btn { flex: 1 1 100%; }
+  .st-inp.st-w-xs { width: 100%; }
+  .st-form-actions .btn { flex: 1 1 100%; }
+  .st-chart-tools { width: 100%; margin-left: 0; }
+}

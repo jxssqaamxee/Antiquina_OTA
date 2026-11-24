@@ -5,59 +5,16 @@ import { Btn, Card, Check, Chip, Field, Input, Notice, RefreshButton, Row, Selec
 import { OverviewDashboard, OverviewSkeleton } from "../../Components/admin/Dashboard";
 import { LiveDutyPanel } from "../../Components/admin/LiveDuty";
 import RegistrationsPanel from "../../Components/admin/RegistrationsPanel";
+import { ApprovalsPanel, PendingEntries, times } from "../../Components/admin/ApprovalsPanel";
 import { AnnouncementsPanel, AuditPanel, ReportsPanel, RosterPanel } from "../../Components/admin/panels";
 import { coordinatorService as svc } from "../../services/coordinatorService";
 import useLoad from "../../hooks/useLoad";
 import usePersistedTab from "../../hooks/usePersistedTab";
 import usePersistedState from "../../hooks/usePersistedState";
-import { usePopup } from "../../context/PopupContext";
 
 const LIVE = 30000; // how often an open screen quietly refetches (paused while the tab is hidden)
 const refreshBtn = (reload, m) => <RefreshButton onRefresh={reload} loading={m.loading && !m.updatedAt} updatedAt={m.updatedAt} />;
 const Stale = ({ m }) => (m.stale ? <p className="st-stale" role="status">Couldn’t refresh just now. Showing the last data we loaded.</p> : null);
-
-/** Approve (optionally with verified hours) or reject (reason required) one submitted entry. */
-function ReviewButtons({ entry, onDone, run, busy }) {
-  const [hrs, setHrs] = useState("");
-  const popup = usePopup();
-  const approve = async () => { if (await run(() => svc.approve(entry.id, hrs), "Entry approved.")) onDone(); };
-  const reject = async () => {
-    const reason = await popup.prompt({
-      title: "Reject this entry?",
-      message: "Tell the trainee why. They will see this reason.",
-      placeholder: "e.g. Time-out doesn't match the attendance sheet",
-      okLabel: "Reject entry",
-      required: true,
-      minLength: 3,
-      danger: true,
-    });
-    if (reason && await run(() => svc.reject(entry.id, reason), "Entry rejected.")) onDone();
-  };
-  return (
-    <Row>
-      <Input type="number" step="0.25" min="0" max="24" placeholder={`hrs (${entry.hours})`} value={hrs} onChange={(e) => setHrs(e.target.value)} style={{ width: 100 }} />
-      <Btn kind="primary" disabled={busy} onClick={approve}>Approve</Btn>
-      <Btn kind="danger" disabled={busy} onClick={reject}>Reject</Btn>
-    </Row>
-  );
-}
-
-const times = (e) => [["am", e.am_in, e.am_out], ["pm", e.pm_in, e.pm_out], ["ev", e.ev_in, e.ev_out]].filter(([, i, o]) => i && o).map(([, i, o]) => `${i}–${o}`).join(", ");
-
-function Approvals() {
-  const [data, reload, error, m] = useLoad(() => svc.approvals(), { interval: 20000 });
-  const { busy, msg, run } = useAction();
-  return (
-    <Card title={`Waiting for review (${data?.entries?.length ?? "…"})`} actions={refreshBtn(reload, m)}>
-      <Notice msg={msg} />{error && !data && <p role="alert" className="st-error">{error}</p>}<Stale m={m} />
-      <Table empty="No entries are waiting for review." rows={data?.entries} cols={[
-        { h: "Trainee", render: (e) => e.trainee_id }, { h: "Date", render: (e) => e.date }, { h: "Times", render: times },
-        { h: "Hours", render: (e) => e.hours }, { h: "Task", render: (e) => e.task || "—" },
-        { h: "Decision", render: (e) => <ReviewButtons entry={e} onDone={reload} run={run} busy={busy} /> },
-      ]} />
-    </Card>
-  );
-}
 
 const DAYS = [[1, "Mon"], [2, "Tue"], [3, "Wed"], [4, "Thu"], [5, "Fri"], [6, "Sat"], [7, "Sun"]];
 
@@ -72,23 +29,28 @@ function Placement({ trainee }) {
   return (
     <Card title="Placement & schedule">
       <Notice msg={msg} />
+      <h3 className="st-h3 st-h3-first">Host establishment & schedule</h3>
       <Row>
-        <Field label="New establishment"><Input value={n.name} onChange={(e) => setN({ ...n, name: e.target.value })} /></Field>
-        <Field label="Type"><Select value={n.type} onChange={(e) => setN({ ...n, type: e.target.value })}><option value="public">Public</option><option value="private">Private</option><option value="custom">Custom</option></Select></Field>
-        <Btn disabled={busy || n.name.trim().length < 2} onClick={addEst}>Add</Btn>
-      </Row>
-      <hr className="st-hr" />
-      <Row>
-        <Field label="Establishment"><Select value={f.establishment_id} onChange={(e) => setF({ ...f, establishment_id: e.target.value })}>
+        <Field label="Establishment" className="st-field-wide"><Select value={f.establishment_id} onChange={(e) => setF({ ...f, establishment_id: e.target.value })}>
           <option value="">Choose…</option>{(ests?.establishments || []).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
         </Select></Field>
-        <Field label="Time in"><Input type="time" value={f.time_in} onChange={(e) => setF({ ...f, time_in: e.target.value })} /></Field>
-        <Field label="Time out"><Input type="time" value={f.time_out} onChange={(e) => setF({ ...f, time_out: e.target.value })} /></Field>
-        <Field label="Supervisor"><Input value={f.supervisor_name} onChange={(e) => setF({ ...f, supervisor_name: e.target.value })} /></Field>
+        <Field label="Supervisor (optional)"><Input value={f.supervisor_name} onChange={(e) => setF({ ...f, supervisor_name: e.target.value })} /></Field>
+        <Field label="Time in" className="st-field-sm"><Input type="time" value={f.time_in} onChange={(e) => setF({ ...f, time_in: e.target.value })} /></Field>
+        <Field label="Time out" className="st-field-sm"><Input type="time" value={f.time_out} onChange={(e) => setF({ ...f, time_out: e.target.value })} /></Field>
       </Row>
+      <div className="st-field st-days-field"><span>Duty days</span>
+        <div className="st-days">{DAYS.map(([d, l]) => <Check key={d} checked={f.days.includes(d)} onChange={() => toggle(d)}>{l}</Check>)}</div>
+      </div>
+      <div className="st-form-actions">
+        <Btn kind="primary" disabled={busy || !f.establishment_id || !f.days.length} onClick={place}>Save placement</Btn>
+      </div>
+      <hr className="st-hr" />
+      <h3 className="st-h3 st-h3-first">Can’t find the establishment? Add it</h3>
       <Row>
-        {DAYS.map(([d, l]) => <Check key={d} checked={f.days.includes(d)} onChange={() => toggle(d)}>{l}</Check>)}
-        <Btn kind="primary" disabled={busy || !f.establishment_id || !f.days.length} onClick={place} style={{ marginTop: 6 }}>Save placement</Btn>
+        <Field label="Name" className="st-field-wide"><Input value={n.name} onChange={(e) => setN({ ...n, name: e.target.value })} /></Field>
+        <Field label="Type" className="st-field-sm"><Select value={n.type} onChange={(e) => setN({ ...n, type: e.target.value })}><option value="public">Public</option><option value="private">Private</option><option value="custom">Custom</option></Select></Field>
+        <Field label="Address (optional)"><Input value={n.address} onChange={(e) => setN({ ...n, address: e.target.value })} /></Field>
+        <Btn disabled={busy || n.name.trim().length < 2} onClick={addEst}>Add establishment</Btn>
       </Row>
     </Card>
   );
@@ -96,23 +58,25 @@ function Placement({ trainee }) {
 
 function TraineeDetail({ trainee, onClose }) {
   const [data, reload, error, m] = useLoad(() => svc.traineeEntries(trainee.id), { interval: 30000, deps: [trainee.id] });
-  const { busy, msg, run } = useAction();
   const h = data?.hours;
+  const waiting = data?.entries?.filter((e) => e.status === "submitted") || [];
   return (
     <>
       <Card title={`${trainee.name} · ${trainee.student_id}`} actions={<>{refreshBtn(reload, m)}<Btn onClick={onClose}>Back to list</Btn></>}>
-        <Notice msg={msg} />{error && !data && <p role="alert" className="st-error">{error}</p>}<Stale m={m} />
+        {error && !data && <p role="alert" className="st-error">{error}</p>}<Stale m={m} />
         {h && (
           <div className="st-stat-grid">
             <StatCard label="Required" value={h.required} /><StatCard label="Verified" value={h.verified} />
             <StatCard label="Pending review" value={h.pending} /><StatCard label="Draft / rejected" value={h.draft} />
           </div>
         )}
+        {waiting.length > 0 && <PendingEntries entries={waiting} svc={svc} name={trainee.name} onChanged={reload} />}
+      </Card>
+      <Card title="All entries">
         <Table empty="No duty entries yet." rows={data?.entries} cols={[
           { h: "Date", render: (e) => e.date }, { h: "Times", render: times }, { h: "Hours", render: (e) => e.hours },
           { h: "Status", render: (e) => <><Chip tone={statusTone(e.status)}>{e.status}</Chip>{e.legacy && <> <Chip>legacy</Chip></>}</> },
           { h: "Verified", render: (e) => e.verified_hours ?? "—" }, { h: "Note", render: (e) => e.review_reason || "" },
-          { h: "", render: (e) => e.status === "submitted" ? <ReviewButtons entry={e} onDone={reload} run={run} busy={busy} /> : null },
         ]} />
       </Card>
       <Placement trainee={trainee} />
@@ -127,8 +91,9 @@ function Trainees() {
   return (
     <Card title="My trainees" actions={refreshBtn(reload, m)}>
       {error && !data && <p role="alert" className="st-error">{error}</p>}<Stale m={m} />
-      <Table empty="No trainees in your section yet." rows={data?.trainees} cols={[
+      <Table empty="No trainees in your section yet." rows={data?.trainees && [...data.trainees].sort((a, b) => (b.pending > 0) - (a.pending > 0))} cols={[
         { h: "Student ID", render: (t) => t.student_id }, { h: "Name", render: (t) => t.name }, { h: "Email", render: (t) => t.email },
+        { h: "Pending", render: (t) => t.pending ? <Chip tone="warn">{t.pending} to review</Chip> : "—" },
         { h: "", render: (t) => <Btn onClick={() => setOpen(t)}>Open</Btn> },
       ]} />
     </Card>
@@ -139,7 +104,7 @@ const NAV = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "live", label: "Live duty", icon: Radio },
   { key: "trainees", label: "Trainees", icon: Users },
-  { key: "registrations", label: "Registrations", icon: UserCheck },
+  { key: "registrations", label: "Registrations", short: "Sign-ups", icon: UserCheck },
   { key: "roster", label: "Import roster", icon: Upload },
   { key: "approvals", label: "Logbook approvals", short: "Approvals", icon: ClipboardCheck },
   { key: "reports", label: "Reports", icon: FileBarChart },
@@ -155,16 +120,16 @@ export default function CoordinatorDashboard() {
   return (
     <AdminShell roleLabel="Coordinator" nav={NAV} phoneTabs={["dashboard","live","trainees","approvals"]} active={tab} onNavigate={setTab}
       title={tab === "dashboard" ? (data?.section ? `Section ${data.section.code}` : "Coordinator dashboard") : NAV.find((n) => n.key === tab)?.label}
-      subtitle={tab === "dashboard" ? data?.message : (data?.section ? `Section ${data.section.code}` : undefined)}>
+      subtitle={tab === "dashboard" ? data?.message : (data?.section ? `Section ${data.section.code}` : undefined)}
+      actions={tab === "dashboard" ? <div className="st-header-tools">{refreshBtn(reloadOverview, om)}</div> : undefined}>
       {error && !data && <p role="alert" className="st-error">{error}</p>}
-      {tab === "dashboard" && <div className="st-toolbar">{refreshBtn(reloadOverview, om)}</div>}
       {tab === "dashboard" && <Stale m={om} />}
       {tab === "dashboard" && (data ? <OverviewDashboard data={data} scope="coordinator" go={setTab} liveFetcher={svc.live} /> : !error && <OverviewSkeleton />)}
       {tab === "live" && <LiveDutyPanel fetcher={svc.live} />}
       {tab === "trainees" && <Trainees />}
       {tab === "registrations" && <RegistrationsPanel svc={svc} />}
       {tab === "roster" && <RosterPanel svc={svc} scope="coord" />}
-      {tab === "approvals" && <Approvals />}
+      {tab === "approvals" && <ApprovalsPanel svc={svc} />}
       {tab === "reports" && <ReportsPanel svc={svc} scope="coord" />}
       {tab === "announcements" && <AnnouncementsPanel svc={svc} fixedSection={data?.section || null} scope="coord" />}
       {tab === "activity" && <AuditPanel svc={svc} title="Audit log (my section)" />}

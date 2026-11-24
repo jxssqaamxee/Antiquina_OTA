@@ -19,6 +19,8 @@ export const coordinatorService = {
   trainee: (id) => d(api.get(`/coordinator/trainees/${id}`)),
   traineeEntries: (id) => d(api.get(`/coordinator/trainees/${id}/entries`)),
   approvals: () => d(api.get("/coordinator/approvals")),
+  approvalSummary: () => d(api.get("/coordinator/approvals/summary")),
+  reviewBatch: (action, ids, reason) => d(api.post("/coordinator/entries/review", { action, ids, ...(action === "reject" ? { reason } : {}) })),
   approve: (entryId, verified_hours) => d(api.post(`/coordinator/entries/${entryId}/approve`, verified_hours == null || verified_hours === "" ? {} : { verified_hours: Number(verified_hours) })),
   reject: (entryId, reason) => d(api.post(`/coordinator/entries/${entryId}/reject`, { reason })),
   establishments: () => d(api.get("/coordinator/establishments")),

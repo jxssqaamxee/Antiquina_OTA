@@ -473,7 +473,7 @@ export default function AdminShell({ roleLabel, nav = [], phoneTabs, active, onN
         </header>
 
         <main className="ds-main" id="main-content" tabIndex={-1}>
-          <>
+          <div className="ds-page">
               {showProfile ? (
                 <div className="ds-header">
                   <div className="ds-header-text">
@@ -494,7 +494,7 @@ export default function AdminShell({ roleLabel, nav = [], phoneTabs, active, onN
                 </div>
               )}
               {showProfile ? <ProfileSettings /> : children}
-          </>
+          </div>
         </main>
 
         <footer className="ds-footer">

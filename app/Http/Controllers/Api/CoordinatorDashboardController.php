@@ -26,8 +26,12 @@ class CoordinatorDashboardController extends Controller
 
     public function trainees(Request $request): JsonResponse
     {
-        return response()->json(['trainees' => $this->scope->traineesQuery($request->user())->orderBy('last_name')->get()
-            ->map(fn ($u) => ['id' => $u->id, 'student_id' => $u->student_id, 'name' => $u->fullName(), 'email' => $u->email])]);
+        $q = $this->scope->traineesQuery($request->user());
+        $pending = \App\Models\DutyEntry::whereIn('user_id', (clone $q)->select('users.id'))->where('status', \App\Models\DutyEntry::SUBMITTED)
+            ->groupBy('user_id')->selectRaw('user_id, count(*) as n')->pluck('n', 'user_id');
+
+        return response()->json(['trainees' => $q->orderBy('last_name')->get()
+            ->map(fn ($u) => ['id' => $u->id, 'student_id' => $u->student_id, 'name' => $u->fullName(), 'email' => $u->email, 'pending' => (int) ($pending[$u->id] ?? 0)])]);
     }
 
     public function trainee(Request $request, string $id): JsonResponse

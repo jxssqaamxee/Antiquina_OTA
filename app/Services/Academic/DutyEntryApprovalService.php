@@ -37,12 +37,42 @@ class DutyEntryApprovalService
         return $this->review($coordinator, $entry, DutyEntry::REJECTED, $reason, null);
     }
 
-    private function review(User $reviewer, DutyEntry $entry, string $outcome, ?string $reason, ?float $verified): DutyEntry
+    /**
+     * Reviews several submitted entries in one go (approve at the full logged hours, or return with one shared reason).
+     * Each entry is still its own locked transaction with its own audit row, so one stale entry never blocks the rest;
+     * the trainee gets ONE notice per batch instead of one per entry. Returns ['done' => n, 'skipped' => n, 'hours' => x].
+     *
+     * @param  iterable<DutyEntry>  $entries
+     */
+    public function reviewMany(User $reviewer, iterable $entries, string $outcome, ?string $reason = null): array
+    {
+        $done = []; $skipped = 0; $hours = 0.0;
+        foreach ($entries as $entry) {
+            try {
+                $e = $this->review($reviewer, $entry, $outcome, $reason, null, false);
+                $done[$e->user_id][] = $e;
+                $hours += (float) ($e->verified_hours ?? 0);
+            } catch (ValidationException) {
+                $skipped++; // already reviewed by someone else, or withdrawn
+            }
+        }
+        foreach ($done as $traineeId => $list) {
+            $n = count($list);
+            $what = $n === 1 ? '1 entry was' : "{$n} entries were";
+            $this->notify->notify(User::findOrFail($traineeId),
+                $outcome === DutyEntry::APPROVED ? ($n === 1 ? 'Entry approved' : 'Entries approved') : ($n === 1 ? 'Entry needs changes' : 'Entries need changes'),
+                $outcome === DutyEntry::APPROVED ? "{$what} approved." : "{$what} returned: {$reason}");
+        }
+
+        return ['done' => array_sum(array_map('count', $done)), 'skipped' => $skipped, 'hours' => round($hours, 2)];
+    }
+
+    private function review(User $reviewer, DutyEntry $entry, string $outcome, ?string $reason, ?float $verified, bool $notify = true): DutyEntry
     {
         $trainee = User::findOrFail($entry->user_id);
 
         return $this->change($trainee, fn () => DutyEntry::whereKey($entry->id)->lockForUpdate()->first(),
-            function (DutyEntry $e) use ($reviewer, $trainee, $outcome, $reason, $verified) {
+            function (DutyEntry $e) use ($reviewer, $trainee, $outcome, $reason, $verified, $notify) {
                 if ($e->status !== DutyEntry::SUBMITTED) {
                     throw ValidationException::withMessages(['entry' => 'Only a submitted entry can be reviewed.']);
                 }
@@ -54,6 +84,9 @@ class DutyEntryApprovalService
                 DutyEntryReview::create(['duty_entry_id' => $e->id, 'actor_id' => $reviewer->id, 'action' => $outcome, 'reason' => $reason, 'verified_hours' => $hours, 'created_at' => now()]);
                 $sectionId = StudentEnrollment::open()->where('user_id', $trainee->id)->value('section_id');
                 $this->log->record($reviewer, "entry.{$outcome}", 'duty_entry', $e->id, $sectionId, ['trainee' => $trainee->id, 'reason' => $reason, 'verified_hours' => $hours]);
+                if (! $notify) {
+                    return;
+                }
                 $date = $e->duty_date->format('M j');
                 $this->notify->notify($trainee, $outcome === DutyEntry::APPROVED ? 'Entry approved' : 'Entry needs changes',
                     $outcome === DutyEntry::APPROVED ? "Your {$date} entry was approved." : "Your {$date} entry was returned: {$reason}");
