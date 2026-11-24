@@ -1,27 +1,26 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { Lock, Upload } from "lucide-react";
-import { Btn, Card, Check, Chip, Field, Input, Notice, Row, Select, Table, Tabs, Textarea, useAction } from "./ui";
+import { Btn, Card, Check, Chip, Field, Input, Notice, RefreshButton, Row, Select, Table, Tabs, Textarea, useAction } from "./ui";
 import { StatCard } from "./AdminShell";
-import { errorMessage } from "../../config/axiosConfig";
+import useLoad from "../../hooks/useLoad";
 import usePersistedState from "../../hooks/usePersistedState";
 import { usePopup } from "../../context/PopupContext";
 
 /** Hours report (verified = approved only). `filters` = optional extra controls for Admin; `svc` is the role's service. */
 export function ReportsPanel({ svc, sections = [], courses = [], scope = "admin" }) {
   const [f, setF] = usePersistedState(`${scope}.reports`, { section_id: "", course_id: "" });
-  const [data, setData] = useState(null);
-  const [error, setError] = useState("");
   const params = Object.fromEntries(Object.entries(f).filter(([, v]) => v));
   const key = JSON.stringify(params);
-  useEffect(() => { svc.report(params).then(setData).catch((e) => setError(errorMessage(e))); }, [key]); // eslint-disable-line
+  const [data, reload, error, m] = useLoad(() => svc.report(params), { interval: 60000, deps: [key] });
   const t = data?.totals;
   return (
     <>
       <Card title="Hours report" actions={<>
+        <RefreshButton onRefresh={reload} loading={m.loading && !m.updatedAt} updatedAt={m.updatedAt} />
         <a href={svc.reportCsvUrl(params)} download className="st-link-reset"><Btn>Download CSV</Btn></a>
         <Btn onClick={() => window.print()}>Print / Save as PDF</Btn>
       </>}>
-        {error && <p role="alert" className="st-error">{error}</p>}
+        {error && <p role="alert" className="st-error">{m.stale ? "Couldn’t refresh just now. Showing the last data we loaded." : error}</p>}
         {sections.length > 0 && (
           <Row>
             <Field label="Course"><Select value={f.course_id} onChange={(e) => setF({ ...f, course_id: e.target.value })}><option value="">All</option>{courses.map((c) => <option key={c.id} value={c.id}>{c.code}</option>)}</Select></Field>
@@ -44,11 +43,9 @@ export function ReportsPanel({ svc, sections = [], courses = [], scope = "admin"
 
 /** Compose + history. Admin may pick all / course / section; a Coordinator is fixed to their own section (`fixedSection`). */
 export function AnnouncementsPanel({ svc, sections = [], courses = [], fixedSection = null, scope = "admin" }) {
-  const [list, setList] = useState(null);
   const { busy, msg, run } = useAction();
   const [f, setF] = usePersistedState(`${scope}.announcement`, { audience_type: fixedSection ? "section" : "all", course_id: "", section_id: fixedSection?.id || "", title: "", body: "" });
-  const load = () => svc.announcements().then(setList).catch(() => setList({ announcements: [] }));
-  useEffect(() => { load(); }, []); // eslint-disable-line
+  const [list, load, , m] = useLoad(() => svc.announcements(), { interval: 60000 });
   const send = async () => {
     const body = { ...f, course_id: f.course_id ? Number(f.course_id) : null, section_id: f.section_id ? Number(f.section_id) : null };
     const r = await run(() => svc.publishAnnouncement(body), null);
@@ -78,7 +75,7 @@ export function AnnouncementsPanel({ svc, sections = [], courses = [], fixedSect
         </div>
         <p className="st-muted">Trainees see it in their notification bell. Sending cannot be undone.</p>
       </Card>
-      <Card title="Sent announcements">
+      <Card title="Sent announcements" actions={<RefreshButton onRefresh={load} loading={m.loading && !m.updatedAt} updatedAt={m.updatedAt} />}>
         <Table empty="Nothing sent yet." rows={list?.announcements} cols={[
           { h: "When", render: (a) => new Date(a.created_at).toLocaleString() }, { h: "Title", render: (a) => a.title },
           { h: "Audience", render: (a) => a.audience_type }, { h: "Recipients", render: (a) => a.recipient_count },
@@ -90,13 +87,11 @@ export function AnnouncementsPanel({ svc, sections = [], courses = [], fixedSect
 
 /** Audit viewer with an action-prefix filter. */
 export function AuditPanel({ svc, title = "Audit log" }) {
-  const [rows, setRows] = useState(null);
   const [action, setAction] = useState("");
-  const [error, setError] = useState("");
-  useEffect(() => { svc.activityFiltered(action).then((r) => { setRows(r); setError(""); }).catch((e) => setError(errorMessage(e))); }, [action]); // eslint-disable-line
+  const [rows, reload, error, m] = useLoad(() => svc.activityFiltered(action), { interval: 30000, deps: [action] });
   return (
-    <Card title={title}>
-      {error && <p role="alert" className="st-error">{error}</p>}
+    <Card title={title} actions={<RefreshButton onRefresh={reload} loading={m.loading && !m.updatedAt} updatedAt={m.updatedAt} />}>
+      {error && <p role="alert" className="st-error">{m.stale ? "Couldn’t refresh just now. Showing the last data we loaded." : error}</p>}
       <Row>
         <Field label="Show"><Select value={action} onChange={(e) => setAction(e.target.value)}>
           <option value="">Everything</option><option value="entry.">Entry approvals</option><option value="coordinator.">Coordinator changes</option>
@@ -140,14 +135,12 @@ export function RosterPanel({ svc, sections = [], scope = "admin" }) {
   const [assume, setAssume] = usePersistedState(`${scope}.roster.assume`, false);
   const [typed, setTyped] = usePersistedState(`${scope}.roster.typed`, "");
   const [result, setResult] = useState(null);
-  const [list, setList] = useState(null);
-  const [error, setError] = useState("");
   const [show, setShow] = usePersistedState(`${scope}.roster.show`, "all");
   const { busy, msg, run, setMsg } = useAction();
   const ready = !isAdmin || !!sectionId;
 
-  const load = () => svc.rosterList(sectionId || undefined).then((d) => { setList(d); setError(""); }).catch((e) => { setList(null); setError(errorMessage(e)); });
-  useEffect(() => { if (ready) load(); else setList(null); }, [sectionId]); // eslint-disable-line
+  const [loaded, load, error, m] = useLoad(() => svc.rosterList(sectionId || undefined), { interval: 60000, deps: [sectionId], enabled: ready });
+  const list = ready ? loaded : null;
 
   const section = list?.section || sections.find((s) => String(s.id) === String(sectionId)) || null;
   const sectionCode = section?.code || "";
@@ -282,9 +275,10 @@ export function RosterPanel({ svc, sections = [], scope = "admin" }) {
       </Card>
 
       {ready && list && (
-        <Card title={`Roster · ${list.section.code}`} actions={
+        <Card title={`Roster · ${list.section.code}`} actions={<>
+          <RefreshButton onRefresh={load} loading={m.loading && !m.updatedAt} updatedAt={m.updatedAt} />
           <a href={svc.rosterCsvUrl(show === "all" ? "" : show, sectionId)} download className="st-link-reset"><Btn>Download CSV</Btn></a>
-        }>
+        </>}>
           <div className="st-stat-grid">
             <StatCard label="On the list" value={list.total} /><StatCard label="Registered" value={list.registered} /><StatCard label="Not registered yet" value={list.waiting} />
           </div>

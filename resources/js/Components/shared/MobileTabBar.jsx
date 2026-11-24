@@ -27,14 +27,14 @@ export default function MobileTabBar({ tab, onTab, onAdd, historyCount = 0 }) {
       <button key={id} type="button" className={cls} aria-current={active ? "page" : undefined}
         onClick={() => { tick(); onTab(id); window.scrollTo({ top: 0, behavior: "smooth" }); }}>{content}</button>
     ) : (
-      <Link key={id} to="/logbook" className={cls} state={{ tab: id }} onClick={tick}>{content}</Link>
+      <Link key={id} to={id === "log" ? "/logbook" : `/logbook/${id}`} className={cls} onClick={tick}>{content}</Link>
     );
   };
 
   const add = () => {
     tick();
     if (onAdd) onAdd();
-    else navigate("/logbook", { state: { tab: "log", add: true } });
+    else navigate("/logbook", { state: { add: true } });
   };
 
   return (

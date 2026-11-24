@@ -1,31 +1,28 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Radio, LayoutDashboard, UserCog, Layers, ClipboardList, Users as UsersIcon, TrendingUp, Target, FileBarChart, Megaphone, ShieldCheck, UserCheck } from "lucide-react";
 import AdminShell, { StatCard } from "../../Components/admin/AdminShell";
-import { Btn, Card, Chip, Field, Input, Notice, Row, Select, Table, statusTone, useAction } from "../../Components/admin/ui";
+import { Btn, Card, Chip, Field, Input, Notice, RefreshButton, Row, Select, Table, statusTone, useAction } from "../../Components/admin/ui";
 import { OverviewDashboard, OverviewSkeleton } from "../../Components/admin/Dashboard";
 import { LiveDutyPanel } from "../../Components/admin/LiveDuty";
 import RegistrationsPanel from "../../Components/admin/RegistrationsPanel";
 import { AnnouncementsPanel, AuditPanel, ReportsPanel } from "../../Components/admin/panels";
 import { adminService as svc } from "../../services/adminService";
-import { errorMessage } from "../../config/axiosConfig";
+import useLoad from "../../hooks/useLoad";
 import usePersistedTab from "../../hooks/usePersistedTab";
 import usePersistedState from "../../hooks/usePersistedState";
 import { filterNameInput } from "../../utils/validators";
 
-/** Loads data once and exposes a reload; keeps the first error readable. */
-function useLoad(fn, deps = []) {
-  const [data, setData] = useState(null);
-  const [error, setError] = useState("");
-  const load = useCallback(() => fn().then((d) => { setData(d); setError(""); }).catch((e) => setError(errorMessage(e))), deps); // eslint-disable-line
-  useEffect(() => { load(); }, [load]);
-  return [data, load, error];
-}
+const LIVE = 30000; // how often an open screen quietly refetches (paused while the tab is hidden)
+const refreshBtn = (reload, m) => <RefreshButton onRefresh={reload} loading={m.loading && !m.updatedAt} updatedAt={m.updatedAt} />;
+const Stale = ({ m }) => (m.stale ? <p className="st-stale" role="status">Couldn’t refresh just now. Showing the last data we loaded.</p> : null);
 
 function Overview({ go }) {
-  const [data, , error] = useLoad(svc.overview);
+  const [data, reload, error, m] = useLoad(() => svc.overview(), { interval: LIVE });
   return (
     <>
-      {error && <p role="alert" className="st-error">{error}</p>}
+      <div className="st-toolbar">{refreshBtn(reload, m)}</div>
+      {error && !data && <p role="alert" className="st-error">{error}</p>}
+      <Stale m={m} />
       {!data && !error && <OverviewSkeleton />}
       <OverviewDashboard data={data} scope="admin" go={go} liveFetcher={svc.live} />
     </>
@@ -36,12 +33,12 @@ function Overview({ go }) {
 function Users() {
   const [q, setQ] = usePersistedState("admin.users.q", "");
   const [role, setRole] = usePersistedState("admin.users.role", "");
-  const [rows, setRows] = useState(null);
-  const [error, setError] = useState("");
+  const [dq, setDq] = useState(q);
+  useEffect(() => { const t = setTimeout(() => setDq(q), 250); return () => clearTimeout(t); }, [q]); // wait for the typing to pause
   const [edit, setEdit] = useState(null);
   const { busy, msg, run } = useAction();
-  const load = useCallback(() => svc.users({ q: q || undefined, role: role || undefined }).then((d) => { setRows(d.users); setError(""); }).catch((e) => setError(errorMessage(e))), [q, role]);
-  useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [load]);
+  const [data, load, error, m] = useLoad(() => svc.users({ q: dq || undefined, role: role || undefined }), { interval: 45000, deps: [dq, role] });
+  const rows = data ? data.users : null;
   const set = (k) => (e) => setEdit({ ...edit, [k]: k === "email" ? e.target.value : filterNameInput(e.target.value) });
   const save = async () => {
     const r = await run(() => svc.updateUser(edit.id, { first_name: edit.first_name, middle_name: edit.middle_name || null, last_name: edit.last_name, email: edit.email }), "User updated.");
@@ -63,17 +60,17 @@ function Users() {
           <p className="st-muted" style={{ marginTop: 10 }}>The Student ID / Administrator ID and the role can’t be changed here.</p>
         </Card>
       )}
-      <Card title="Users">
-        {error && <p role="alert" className="st-error">{error}</p>}
+      <Card title="Users" actions={refreshBtn(load, m)}>
+        {error && !data && <p role="alert" className="st-error">{error}</p>}<Stale m={m} />
         <Row>
-          <Field label="Search"><Input value={q} placeholder="Name, ID or email" onChange={(e) => setQ(e.target.value)} /></Field>
+          <Field label="Search"><Input type="search" value={q} placeholder="Name, ID or email" onChange={(e) => setQ(e.target.value)} /></Field>
           <Field label="Role">
             <Select value={role} onChange={(e) => setRole(e.target.value)}>
               <option value="">Everyone</option><option value="trainee">Trainees</option><option value="coordinator">Coordinators</option><option value="admin">Administrators</option>
             </Select>
           </Field>
         </Row>
-        <Table empty="No users match." rows={rows} cols={[
+        <Table searchable={false} empty="No users match." rows={rows} cols={[
           { h: "ID", render: (u) => u.login_id || "—" },
           { h: "Name", render: (u) => u.name },
           { h: "Role", render: (u) => <Chip>{roleName(u.role)}</Chip> },
@@ -86,7 +83,7 @@ function Users() {
 }
 
 function Coordinators({ sections, year, goTo }) {
-  const [data, reload] = useLoad(svc.coordinators);
+  const [data, reload, , m] = useLoad(() => svc.coordinators(), { interval: 45000 });
   const { busy, msg, run } = useAction();
   const [f, setF] = usePersistedState("admin.coordinator", { admin_id: "", first_name: "", last_name: "", email: "", password: "" }, { omit: ["password"] });
   const [pick, setPick] = useState({});
@@ -112,7 +109,8 @@ function Coordinators({ sections, year, goTo }) {
           <Btn kind="primary" disabled={busy} onClick={create}>Create</Btn>
         </Row>
       </Card>
-      <Card title="Coordinators">
+      <Card title="Coordinators" actions={refreshBtn(reload, m)}>
+        <Stale m={m} />
         {sections.length === 0 && (
           <p className="st-notice is-bad" role="status">
             {year ? "There are no sections yet, so there is nothing to choose. Create sections first." : "There is no current academic year yet, so no sections exist. Add an academic year and make it current first."}{" "}
@@ -142,7 +140,7 @@ function Coordinators({ sections, year, goTo }) {
 }
 
 function Sections({ courses, year, onChanged, goTo }) {
-  const [list, reload] = useLoad(() => svc.sections(), []);
+  const [list, reload, , m] = useLoad(() => svc.sections(), { interval: 45000 });
   const { busy, msg, run } = useAction();
   const [f, setF] = usePersistedState("admin.sections", { course_id: "", year_level: "1", count: "1" });
   const [open, setOpen] = useState(null);
@@ -170,7 +168,7 @@ function Sections({ courses, year, onChanged, goTo }) {
           <Btn kind="primary" disabled={busy || !f.course_id} onClick={create}>Create</Btn>
         </Row>
       </Card>
-      <Card title="Sections">
+      <Card title="Sections" actions={refreshBtn(reload, m)}>
         <Table rows={list?.sections} cols={[
           { h: "Section", render: (s) => s.code }, { h: "Year", render: (s) => s.year_level }, { h: "Students", render: (s) => s.students },
           { h: "", render: (s) => <Btn onClick={() => show(s)}>View roster</Btn> },
@@ -186,8 +184,8 @@ function Sections({ courses, year, onChanged, goTo }) {
 }
 
 function Enrollments({ sections }) {
-  const [un, reloadUn] = useLoad(svc.unassigned);
-  const [all, reloadAll] = useLoad(() => svc.enrollments(), []);
+  const [un, reloadUn, , mu] = useLoad(() => svc.unassigned(), { interval: LIVE });
+  const [all, reloadAll, , ma] = useLoad(() => svc.enrollments(), { interval: 45000 });
   const { busy, msg, run } = useAction();
   const [pick, setPick] = useState({});
   const place = async (e, transfer) => {
@@ -205,13 +203,13 @@ function Enrollments({ sections }) {
   return (
     <>
       <Notice msg={msg} />
-      <Card title={`Unassigned students (${un?.total ?? "…"})`}>
+      <Card title={`Unassigned students (${un?.total ?? "…"})`} actions={refreshBtn(reloadUn, mu)}>
         <Table empty="Every student has a section." rows={un?.enrollments} cols={[
           { h: "Student ID", render: (e) => e.student?.student_id }, { h: "Name", render: (e) => e.student?.name },
           { h: "Course", render: (e) => e.course?.code || "—" }, { h: "Assign", render: (e) => picker(e, "Assign", false) },
         ]} />
       </Card>
-      <Card title="Open enrollments">
+      <Card title="Open enrollments" actions={refreshBtn(reloadAll, ma)}>
         <Table rows={all?.data} cols={[
           { h: "Student ID", render: (e) => e.student?.student_id }, { h: "Name", render: (e) => e.student?.name },
           { h: "Section", render: (e) => e.section?.code || "—" }, { h: "Status", render: (e) => <Chip tone={statusTone(e.status)}>{e.status}</Chip> },
@@ -345,8 +343,8 @@ const NAV = [
 export default function AdminDashboard() {
   const [tab, setTab] = usePersistedTab("admin", NAV.map((n) => n.key), "overview");
   const [courses] = useLoad(() => svc.courses().then((d) => d.courses));
-  const [years, reloadYears] = useLoad(() => svc.years().then((d) => d.academic_years));
-  const [secs, reloadSecs] = useLoad(() => svc.sections().then((d) => d.sections));
+  const [years, reloadYears] = useLoad(() => svc.years().then((d) => d.academic_years), { interval: 60000 });
+  const [secs, reloadSecs] = useLoad(() => svc.sections().then((d) => d.sections), { interval: 60000 });
   useEffect(() => { document.title = "Admin | OCCDL"; }, []);
   const year = (years || []).find((y) => y.is_current);
   const refresh = () => { reloadYears(); reloadSecs(); };

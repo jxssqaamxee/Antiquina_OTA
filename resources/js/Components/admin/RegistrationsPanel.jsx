@@ -1,25 +1,24 @@
-import React, { useCallback, useEffect, useState } from "react";
-import { Btn, Card, Chip, Notice, Row, Table, useAction } from "./ui";
-import { errorMessage } from "../../config/axiosConfig";
+import React, { useEffect, useState } from "react";
+import { Btn, Card, Chip, Notice, RefreshButton, Row, Table, useAction } from "./ui";
+import useLoad from "../../hooks/useLoad";
 import { usePopup } from "../../context/PopupContext";
 import CachedImage from "../shared/CachedImage";
 import { preloadPhotos, syncPhotoSet } from "../../utils/imageCache";
 
 /** Pending self-registrations: look at the photo, then approve or reject. `svc` is the role's service. */
 export default function RegistrationsPanel({ svc }) {
-  const [rows, setRows] = useState(null);
-  const [error, setError] = useState("");
   const [photo, setPhoto] = useState(null);
   const { busy, msg, run } = useAction();
   const popup = usePopup();
 
-  const load = useCallback(() => svc.registrations().then((d) => {
-    setRows(d.registrations); setError("");
+  const [data, load, error, m] = useLoad(() => svc.registrations(), { interval: 20000 });
+  const rows = data ? data.registrations : null;
+  useEffect(() => {
+    if (!data) return;
     // Warm the photo cache while the staff member reads the list, and forget photos no longer pending.
-    const urls = d.registrations.filter((r) => r.photo_v).map((r) => svc.registrationPhotoUrl(r.id, r.photo_v));
+    const urls = data.registrations.filter((r) => r.photo_v).map((r) => svc.registrationPhotoUrl(r.id, r.photo_v));
     syncPhotoSet(urls); preloadPhotos(urls);
-  }).catch((e) => setError(errorMessage(e))), [svc]);
-  useEffect(() => { load(); }, [load]);
+  }, [data, svc]);
 
   const approve = async (r) => { if (await run(() => svc.approveRegistration(r.id), `${r.name} approved.`)) load(); };
   const reject = async (r) => {
@@ -35,8 +34,8 @@ export default function RegistrationsPanel({ svc }) {
   };
 
   return (
-    <Card title={`Waiting for approval (${rows?.length ?? "…"})`}>
-      <Notice msg={msg} />{error && <p role="alert" className="st-error">{error}</p>}
+    <Card title={`Waiting for approval (${rows?.length ?? "…"})`} actions={<RefreshButton onRefresh={load} loading={m.loading && !m.updatedAt} updatedAt={m.updatedAt} />}>
+      <Notice msg={msg} />{error && <p role="alert" className="st-error">{m.stale ? "Couldn’t refresh just now. Showing the last data we loaded." : error}</p>}
       {photo && (
         <Row>
           <CachedImage src={svc.registrationPhotoUrl(photo.id, photo.photo_v)} alt={`Registration photo of ${photo.name}`} style={{ maxWidth: 220, maxHeight: 260, borderRadius: 8 }} fallback={<p className="st-muted">This photo isn't available right now.</p>} />

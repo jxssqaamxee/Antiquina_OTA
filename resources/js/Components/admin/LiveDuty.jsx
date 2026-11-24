@@ -5,11 +5,12 @@ import { formatHours, formatTime12 } from "../../utils/time";
 import { useLiveClock } from "../../hooks/useLiveClock";
 import { errorMessage } from "../../config/axiosConfig";
 import { Skel } from "./Dashboard";
+import { RefreshButton } from "./ui";
 
 /**
  * Live duty board. The server sends today's logged entries (+ host client); which segment is running is worked
  * out here from the Philippine clock, every 15 s, so hours and progress move without a request. A refetch every
- * 30 s (paused while the tab is hidden) picks up days that trainees add or change while this page is open.
+ * 15 s (paused while the tab is hidden) picks up days that trainees add or change while this page is open.
  */
 export function useLiveBoard(fetcher) {
   const [data, setData] = useState(null);
@@ -19,7 +20,7 @@ export function useLiveBoard(fetcher) {
   const load = useCallback(() => fetcher().then((d) => { setData(d); setError(""); setUpdatedAt(Date.now()); }).catch((e) => setError(errorMessage(e))), [fetcher]);
   useEffect(() => {
     load();
-    const id = setInterval(() => { if (!document.hidden) load(); }, 30000);
+    const id = setInterval(() => { if (!document.hidden) load(); }, 15000);
     const vis = () => { if (!document.hidden) load(); };
     document.addEventListener("visibilitychange", vis);
     return () => { clearInterval(id); document.removeEventListener("visibilitychange", vis); };
@@ -67,14 +68,14 @@ const FILTERS = [["all", "Everyone"], ["on", "On duty"], ["soon", "Starts later"
 
 /** Full board (its own sidebar tab). */
 export function LiveDutyPanel({ fetcher }) {
-  const { data, rows, counts, error, updatedAt } = useLiveBoard(fetcher);
+  const { data, rows, counts, error, updatedAt, reload } = useLiveBoard(fetcher);
   const [f, setF] = useState("all");
   const shown = rows.filter((r) => f === "all" || r.status === f).sort((a, b) => ["on", "soon", "done", "none"].indexOf(a.status) - ["on", "soon", "done", "none"].indexOf(b.status));
   return (
     <section className="st-card">
       <div className="st-card-head">
         <h2>Duty today{data ? ` · ${data.date}` : ""}</h2>
-        <div className="st-card-actions"><LiveBadge updatedAt={updatedAt} error={error} /></div>
+        <div className="st-card-actions"><LiveBadge updatedAt={updatedAt} error={error} /><RefreshButton onRefresh={reload} /></div>
       </div>
       {error && <p role="alert" className="st-error">{error}</p>}
       <div className="st-live-tiles">
@@ -103,7 +104,7 @@ export function LiveDutyPanel({ fetcher }) {
 
 /** Compact card for the Overview: who is on duty right now + counts, link to the full board. */
 export function LiveDutyCard({ fetcher, onOpen }) {
-  const { data, rows, counts, error, updatedAt } = useLiveBoard(fetcher);
+  const { data, rows, counts, error, updatedAt, reload } = useLiveBoard(fetcher);
   const on = rows.filter((r) => r.status === "on").slice(0, 6);
   return (
     <section className="st-card st-chart st-live-card">
@@ -111,7 +112,7 @@ export function LiveDutyCard({ fetcher, onOpen }) {
         <span className="st-chart-icon"><Radio size={16} strokeWidth={2.2} /></span>
         <div><h2>On duty right now</h2><p>Trainees whose logged hours are running at this moment</p></div>
         <div style={{ marginLeft: "auto", display: "flex", gap: 10, alignItems: "center" }}>
-          <LiveBadge updatedAt={updatedAt} error={error} />
+          <LiveBadge updatedAt={updatedAt} error={error} /><RefreshButton onRefresh={reload} />
           {onOpen && <button type="button" className="btn st-btn" onClick={onOpen}>Open board <ChevronRight size={14} /></button>}
         </div>
       </div>

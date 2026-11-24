@@ -1,9 +1,13 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 
-// Remembers which section of the Admin / Coordinator area is open, so a refresh stays where the
-// person was (same idea as sclf_APP, where every page has its own address). The section is kept in
-// the address (/admin#sections) and in sessionStorage as a fallback; it is cleared on sign-out.
-const PREFIX = "occdl.tab.";
+// Which section of the Admin / Coordinator area is open now lives in the address itself, as a real
+// path: /admin/sections, /coordinator/approvals (no "#"). The router owns it, so refresh, Back/Forward
+// and shared links all land on the right section. Bare /admin or /coordinator opens the default one.
+//
+// Old links still work: /coordinator#approvals is rewritten to /coordinator/approvals on arrival,
+// and an unknown section (/admin/nope) is replaced by the area's default.
+const RESERVED = ["profile"]; // pages of the shell itself, handled by AdminShell, not sections
 
 export const clearPersistedUi = () => {
   try {
@@ -12,24 +16,24 @@ export const clearPersistedUi = () => {
 };
 
 export default function usePersistedTab(area, keys, fallback) {
-  const [tab, setTabState] = useState(() => {
-    try {
-      const fromUrl = decodeURIComponent(window.location.hash.replace(/^#/, ""));
-      if (keys.includes(fromUrl)) return fromUrl;
-      const saved = window.sessionStorage.getItem(PREFIX + area);
-      if (keys.includes(saved)) return saved;
-    } catch { /* ignore */ }
-    return fallback;
-  });
+  const { tab: param } = useParams();
+  const { hash } = useLocation();
+  const navigate = useNavigate();
+  const base = `/${area}`;
 
-  const setTab = useCallback((key) => {
-    setTabState(key);
-    try {
-      window.sessionStorage.setItem(PREFIX + area, key);
-      // Keep the router's own history state; only the #fragment changes.
-      window.history.replaceState(window.history.state, "", `${window.location.pathname}${window.location.search}#${key}`);
-    } catch { /* ignore */ }
-  }, [area]);
+  const legacy = decodeURIComponent((hash || "").replace(/^#/, ""));
+  const tab = keys.includes(param) ? param : (!param && keys.includes(legacy) ? legacy : fallback);
+
+  useEffect(() => {
+    if (param && !keys.includes(param) && !RESERVED.includes(param)) {
+      navigate(base, { replace: true }); // unknown section
+    } else if (!param && legacy && (keys.includes(legacy) || RESERVED.includes(legacy))) {
+      navigate(`${base}/${legacy}`, { replace: true }); // old /area#section link
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [param, legacy]);
+
+  const setTab = useCallback((key) => navigate(`${base}/${key}`), [navigate, base]);
 
   return [tab, setTab];
 }

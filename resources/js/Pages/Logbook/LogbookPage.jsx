@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { Plus, Trash2, FileDown, Sun, Sunset, Moon, Pencil, Settings2, Info, Clock3, Hourglass, Zap, CalendarDays, Building2, ChevronRight, AlertTriangle, Lock } from "lucide-react";
 import MobileTabBar from "../../Components/shared/MobileTabBar";
 import AppBar from "../../Components/shared/AppBar";
@@ -202,7 +202,13 @@ export default function LogbookPage() {
   const [lastClientId, setLastClientId] = useState(null); // most recently clocked-in client — drives the shift-start reminder
   const [entries, setEntries] = useState([]);
   const [draft, setDraft] = useState(emptyDraft());
-  const [tab, setTab] = useState(["log", "history", "reports"].includes(location.state?.tab) ? location.state.tab : "log");
+  // The open tab is part of the address: /logbook, /logbook/history, /logbook/reports.
+  const { tab: tabParam } = useParams();
+  const tab = ["history", "reports"].includes(tabParam) ? tabParam : "log";
+  const setTab = useCallback((t) => navigate(t === "log" ? "/logbook" : `/logbook/${t}`), [navigate]);
+  useEffect(() => {
+    if (tabParam && !["history", "reports"].includes(tabParam)) navigate("/logbook", { replace: true }); // unknown tab
+  }, [tabParam, navigate]);
   const [saveState, setSaveState] = useState("idle");
   const [newClientName, setNewClientName] = useState("");
   const [newClientType, setNewClientType] = useState("public"); // "public" | "private" | "custom"
@@ -271,7 +277,7 @@ export default function LogbookPage() {
   useEffect(() => {
     if (location.state?.add) {
       setEntrySheet(true);
-      navigate(location.pathname, { replace: true, state: { tab: location.state.tab } });
+      navigate(location.pathname, { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state]);

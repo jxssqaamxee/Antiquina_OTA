@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { clearPersistedUi } from "../../hooks/usePersistedTab";
 import { createPortal } from "react-dom";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { Boxes, Camera, Check as CheckIcon, ChevronDown, ChevronUp, ClipboardList, IdCard, Lock, LogOut, Mail, ShieldCheck, UserRound, Menu, Palette, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
@@ -356,7 +356,9 @@ export default function AdminShell({ roleLabel, nav = [], phoneTabs, active, onN
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
-  const [showProfile, setShowProfile] = useState(() => { try { return window.location.hash === "#profile"; } catch { return false; } });
+  const { tab: routeTab } = useParams();
+  const { pathname, hash } = useLocation();
+  const showProfile = routeTab === "profile" || (!routeTab && hash === "#profile"); // /admin/profile (old #profile links still open it)
   const [sidebarOpen, setSidebarOpen] = useState(false); // slide-over on narrow screens
   const [isDesktopWidth, setIsDesktop] = useState(() => (typeof window === "undefined" ? true : window.matchMedia(DESKTOP_QUERY).matches));
   const [collapsed, setCollapsed] = useState(() => {
@@ -396,10 +398,10 @@ export default function AdminShell({ roleLabel, nav = [], phoneTabs, active, onN
   }
 
   const openProfile = () => {
-    setShowProfile(true); setSidebarOpen(false);
-    try { window.history.replaceState(window.history.state, "", `${window.location.pathname}${window.location.search}#profile`); } catch { /* ignore */ }
+    setSidebarOpen(false);
+    navigate(`/${pathname.split("/")[1]}/profile`);
   };
-  const go = (key) => { setShowProfile(false); onNavigate?.(key); setSidebarOpen(false); };
+  const go = (key) => { onNavigate?.(key); setSidebarOpen(false); };
   const activeItem = nav.find((n) => n.key === active);
   const tabs = (phoneTabs ? phoneTabs.map((k) => nav.find((n) => n.key === k)).filter(Boolean) : nav).slice(0, 4);
   const menuProps = { signingOut: busy, onSignOut: signOut, onEditProfile: openProfile };

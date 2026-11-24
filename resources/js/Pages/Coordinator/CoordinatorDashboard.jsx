@@ -1,24 +1,20 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Radio, LayoutDashboard, Users, ClipboardCheck, FileBarChart, Megaphone, ShieldCheck, Upload, UserCheck } from "lucide-react";
 import AdminShell, { StatCard } from "../../Components/admin/AdminShell";
-import { Btn, Card, Check, Chip, Field, Input, Notice, Row, Select, Table, statusTone, useAction } from "../../Components/admin/ui";
+import { Btn, Card, Check, Chip, Field, Input, Notice, RefreshButton, Row, Select, Table, statusTone, useAction } from "../../Components/admin/ui";
 import { OverviewDashboard, OverviewSkeleton } from "../../Components/admin/Dashboard";
 import { LiveDutyPanel } from "../../Components/admin/LiveDuty";
 import RegistrationsPanel from "../../Components/admin/RegistrationsPanel";
 import { AnnouncementsPanel, AuditPanel, ReportsPanel, RosterPanel } from "../../Components/admin/panels";
 import { coordinatorService as svc } from "../../services/coordinatorService";
-import { errorMessage } from "../../config/axiosConfig";
+import useLoad from "../../hooks/useLoad";
 import usePersistedTab from "../../hooks/usePersistedTab";
 import usePersistedState from "../../hooks/usePersistedState";
 import { usePopup } from "../../context/PopupContext";
 
-function useLoad(fn) {
-  const [data, setData] = useState(null);
-  const [error, setError] = useState("");
-  const load = useCallback(() => fn().then((d) => { setData(d); setError(""); }).catch((e) => setError(errorMessage(e))), []); // eslint-disable-line
-  useEffect(() => { load(); }, [load]);
-  return [data, load, error];
-}
+const LIVE = 30000; // how often an open screen quietly refetches (paused while the tab is hidden)
+const refreshBtn = (reload, m) => <RefreshButton onRefresh={reload} loading={m.loading && !m.updatedAt} updatedAt={m.updatedAt} />;
+const Stale = ({ m }) => (m.stale ? <p className="st-stale" role="status">Couldn’t refresh just now. Showing the last data we loaded.</p> : null);
 
 /** Approve (optionally with verified hours) or reject (reason required) one submitted entry. */
 function ReviewButtons({ entry, onDone, run, busy }) {
@@ -49,11 +45,11 @@ function ReviewButtons({ entry, onDone, run, busy }) {
 const times = (e) => [["am", e.am_in, e.am_out], ["pm", e.pm_in, e.pm_out], ["ev", e.ev_in, e.ev_out]].filter(([, i, o]) => i && o).map(([, i, o]) => `${i}–${o}`).join(", ");
 
 function Approvals() {
-  const [data, reload, error] = useLoad(svc.approvals);
+  const [data, reload, error, m] = useLoad(() => svc.approvals(), { interval: 20000 });
   const { busy, msg, run } = useAction();
   return (
-    <Card title={`Waiting for review (${data?.entries?.length ?? "…"})`}>
-      <Notice msg={msg} />{error && <p role="alert" className="st-error">{error}</p>}
+    <Card title={`Waiting for review (${data?.entries?.length ?? "…"})`} actions={refreshBtn(reload, m)}>
+      <Notice msg={msg} />{error && !data && <p role="alert" className="st-error">{error}</p>}<Stale m={m} />
       <Table empty="No entries are waiting for review." rows={data?.entries} cols={[
         { h: "Trainee", render: (e) => e.trainee_id }, { h: "Date", render: (e) => e.date }, { h: "Times", render: times },
         { h: "Hours", render: (e) => e.hours }, { h: "Task", render: (e) => e.task || "—" },
@@ -66,7 +62,7 @@ function Approvals() {
 const DAYS = [[1, "Mon"], [2, "Tue"], [3, "Wed"], [4, "Thu"], [5, "Fri"], [6, "Sat"], [7, "Sun"]];
 
 function Placement({ trainee }) {
-  const [ests, reloadEsts] = useLoad(svc.establishments);
+  const [ests, reloadEsts] = useLoad(() => svc.establishments());
   const { busy, msg, run } = useAction();
   const [f, setF] = usePersistedState(`coord.placement.${trainee.id}`, { establishment_id: "", days: [1, 2, 3, 4, 5], time_in: "08:00", time_out: "17:00", supervisor_name: "" });
   const [n, setN] = usePersistedState("coord.establishment", { name: "", type: "public", address: "" });
@@ -99,13 +95,13 @@ function Placement({ trainee }) {
 }
 
 function TraineeDetail({ trainee, onClose }) {
-  const [data, reload, error] = useLoad(() => svc.traineeEntries(trainee.id));
+  const [data, reload, error, m] = useLoad(() => svc.traineeEntries(trainee.id), { interval: 30000, deps: [trainee.id] });
   const { busy, msg, run } = useAction();
   const h = data?.hours;
   return (
     <>
-      <Card title={`${trainee.name} · ${trainee.student_id}`} actions={<Btn onClick={onClose}>Back to list</Btn>}>
-        <Notice msg={msg} />{error && <p role="alert" className="st-error">{error}</p>}
+      <Card title={`${trainee.name} · ${trainee.student_id}`} actions={<>{refreshBtn(reload, m)}<Btn onClick={onClose}>Back to list</Btn></>}>
+        <Notice msg={msg} />{error && !data && <p role="alert" className="st-error">{error}</p>}<Stale m={m} />
         {h && (
           <div className="st-stat-grid">
             <StatCard label="Required" value={h.required} /><StatCard label="Verified" value={h.verified} />
@@ -125,12 +121,12 @@ function TraineeDetail({ trainee, onClose }) {
 }
 
 function Trainees() {
-  const [data, , error] = useLoad(svc.trainees);
+  const [data, reload, error, m] = useLoad(() => svc.trainees(), { interval: 45000 });
   const [open, setOpen] = useState(null);
   if (open) return <TraineeDetail trainee={open} onClose={() => setOpen(null)} />;
   return (
-    <Card title="My trainees">
-      {error && <p role="alert" className="st-error">{error}</p>}
+    <Card title="My trainees" actions={refreshBtn(reload, m)}>
+      {error && !data && <p role="alert" className="st-error">{error}</p>}<Stale m={m} />
       <Table empty="No trainees in your section yet." rows={data?.trainees} cols={[
         { h: "Student ID", render: (t) => t.student_id }, { h: "Name", render: (t) => t.name }, { h: "Email", render: (t) => t.email },
         { h: "", render: (t) => <Btn onClick={() => setOpen(t)}>Open</Btn> },
@@ -154,13 +150,15 @@ const NAV = [
 /** Coordinator area: dashboard, trainees (with entries + placement), approvals, activity. Scope is enforced by Laravel. */
 export default function CoordinatorDashboard() {
   const [tab, setTab] = usePersistedTab("coordinator", NAV.map((n) => n.key), "dashboard");
-  const [data, , error] = useLoad(svc.overview);
+  const [data, reloadOverview, error, om] = useLoad(() => svc.overview(), { interval: LIVE });
   useEffect(() => { document.title = "Coordinator | OCCDL"; }, []);
   return (
     <AdminShell roleLabel="Coordinator" nav={NAV} phoneTabs={["dashboard","live","trainees","approvals"]} active={tab} onNavigate={setTab}
       title={tab === "dashboard" ? (data?.section ? `Section ${data.section.code}` : "Coordinator dashboard") : NAV.find((n) => n.key === tab)?.label}
       subtitle={tab === "dashboard" ? data?.message : (data?.section ? `Section ${data.section.code}` : undefined)}>
-      {error && <p role="alert" className="st-error">{error}</p>}
+      {error && !data && <p role="alert" className="st-error">{error}</p>}
+      {tab === "dashboard" && <div className="st-toolbar">{refreshBtn(reloadOverview, om)}</div>}
+      {tab === "dashboard" && <Stale m={om} />}
       {tab === "dashboard" && (data ? <OverviewDashboard data={data} scope="coordinator" go={setTab} liveFetcher={svc.live} /> : !error && <OverviewSkeleton />)}
       {tab === "live" && <LiveDutyPanel fetcher={svc.live} />}
       {tab === "trainees" && <Trainees />}

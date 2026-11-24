@@ -479,7 +479,7 @@ textarea.st-inp { min-height: 104px; padding: 12px 14px; resize: vertical; font-
 .st-table tbody tr.is-clickable:hover td { background: rgba(var(--accent-rgb), .06); }
 
 /* Cards / Table switch */
-.st-list-head-row { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.st-list-head-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
 .st-view-toggle { display: inline-flex; align-items: center; gap: 3px; padding: 4px; border-radius: 12px; flex-shrink: 0; background: var(--field); border: 1.5px solid var(--edge-strong); }
 .st-view-btn {
   display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 9px; border: 0; background: none; cursor: pointer;
@@ -620,7 +620,9 @@ textarea.st-inp { min-height: 104px; padding: 12px 14px; resize: vertical; font-
   .st-table td .btn.st-btn { min-height: 38px; padding: 6px 14px; font-size: 13px; }
   .st-table td[colspan] { justify-content: center; text-align: center; }
   /* the Cards / Table switch is pointless here: tables already read as cards */
-  .st-list-head-row { display: none; }
+  .st-list-head-row .st-view-toggle { display: none; }
+  .st-list-head-row { justify-content: stretch; }
+  .st-search { flex: 1 1 100%; max-width: none; }
 
   .st-empty { flex-direction: column; text-align: center; padding: 22px 14px; }
   .st-tabs { display: flex; width: 100%; margin-bottom: 16px; }
@@ -658,3 +660,21 @@ textarea.st-inp { min-height: 104px; padding: 12px 14px; resize: vertical; font-
 .tf-codes { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 .tf-chip { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 6px 8px 6px 12px; border-radius: 10px; background: rgba(128,128,128,.12); }
 .tf-chip code { letter-spacing: .1em; font-weight: 600; }
+
+
+/* ---- Refresh button, "updated" stamp and list search (sclf_APP's RefreshButton / search filter) ---- */
+.st-card-actions { align-items: center; }
+.st-refresh { display: inline-flex; align-items: center; gap: 6px; }
+.st-refresh svg { flex: none; }
+.st-spin { animation: st-rotate .8s linear infinite; }
+@keyframes st-rotate { to { transform: rotate(360deg); } }
+.st-updated { font-size: 12px; font-weight: 600; color: var(--ink-soft); white-space: nowrap; }
+.st-search { position: relative; display: flex; align-items: center; flex: 1 1 260px; max-width: 380px; }
+.st-search > svg { position: absolute; left: 12px; color: var(--ink-soft); pointer-events: none; }
+.st-search .st-inp { width: 100%; padding-left: 36px; padding-right: 34px; }
+.st-search-clear { position: absolute; right: 6px; display: grid; place-items: center; width: 26px; height: 26px; border: 0; border-radius: 50%; background: var(--hover); color: var(--ink-soft); cursor: pointer; }
+.st-search-count { margin: -6px 0 10px; }
+.st-linkbtn { background: none; border: 0; padding: 0; font: inherit; font-weight: 700; color: var(--accent-text); cursor: pointer; text-decoration: underline; }
+.st-stale { margin: 0 0 10px; font-size: 12.5px; font-weight: 700; color: #b45309; }
+@media (prefers-reduced-motion: reduce) { .st-spin { animation: none; } }
+.st-toolbar { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-bottom: 12px; }

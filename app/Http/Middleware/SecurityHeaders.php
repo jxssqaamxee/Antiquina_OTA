@@ -35,6 +35,13 @@ class SecurityHeaders
         // The password-reset token lives in the URL path: never leak it through a Referer header.
         $h->set('Referrer-Policy', $request->is('reset-password/*') ? 'no-referrer' : 'strict-origin-when-cross-origin');
 
+        // Live data: an /api answer is never kept by the browser or a proxy, so every screen shows what the
+        // server has right now (no hard refresh needed). Versioned photos send their own long-lived header
+        // (MediaController, "immutable") and are left alone.
+        if ($request->is('api/*') && ! $h->hasCacheControlDirective('immutable')) {
+            $h->set('Cache-Control', 'no-store, private');
+        }
+
         if ($request->secure()) {
             $h->set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
         }

@@ -43,16 +43,16 @@ export const pendingRoutes = [
   { path: "/pending-approval", component: PendingApprovalPage },
 ];
 export const protectedRoutes = [
-  { path: "/logbook", component: LogbookPage },
+  { path: "/logbook/:tab?", component: LogbookPage },
   { path: "/profile", component: ProfilePage },
   { path: "/announcements", component: AnnouncementsPage },
 ];
 // Management areas (desktop layouts). Each is limited to one role; Laravel checks the role too.
 export const adminRoutes = [
-  { path: "/admin", component: AdminDashboard },
+  { path: "/admin/:tab?", component: AdminDashboard },
 ];
 export const coordinatorRoutes = [
-  { path: "/coordinator", component: CoordinatorDashboard },
+  { path: "/coordinator/:tab?", component: CoordinatorDashboard },
 ];
 // First sign-in of an Admin / Coordinator account created with a password someone else knows.
 export const setupRoutes = [

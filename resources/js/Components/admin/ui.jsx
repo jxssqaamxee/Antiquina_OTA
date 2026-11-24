@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { LayoutList, Table2 } from "lucide-react";
+import { LayoutList, Table2, RefreshCw, Search, X } from "lucide-react";
 import { errorMessage } from "../../config/axiosConfig";
 import { useMediaQuery } from "../../hooks/useIsPhone";
 import { TableSkeleton } from "./Dashboard";
@@ -33,6 +33,56 @@ export const Field = ({ label, children }) => (
 export const Row = ({ children }) => <div className="st-flex">{children}</div>;
 export const Check = ({ children, ...p }) => <label className="st-check"><input type="checkbox" {...p} />{children}</label>;
 
+/** "Refresh" button for a list / panel (same job as sclf_APP's RefreshButton). `onRefresh` may return a promise: the icon spins until it settles. */
+export function RefreshButton({ onRefresh, loading = false, updatedAt, label = "Refresh" }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const spinning = busy || loading;
+  const click = async () => {
+    if (spinning || !onRefresh) return;
+    setBusy(true);
+    try {
+      await onRefresh();
+      toast.success("Showing the latest data.", { title: "Refreshed", key: "admin-refreshed" });
+    } catch { /* the panel shows its own error */ }
+    finally { setBusy(false); }
+  };
+  return (
+    <>
+      {updatedAt && !spinning && <small className="st-updated" title="Data refreshes by itself while this page is open">Updated {new Date(updatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</small>}
+      <button type="button" className="btn st-btn st-refresh" onClick={click} disabled={spinning} aria-label={label} title="Load the latest data now">
+        <RefreshCw size={15} className={spinning ? "st-spin" : ""} /> <span>{spinning ? "Refreshing…" : label}</span>
+      </button>
+    </>
+  );
+}
+
+/** Search box with a clear button. */
+export function SearchBox({ value, onChange, placeholder = "Search…", label = "Search", className = "" }) {
+  return (
+    <div className={`st-search ${className}`.trim()} role="search">
+      <Search size={15} aria-hidden="true" />
+      <input type="search" className="st-inp" value={value} placeholder={placeholder} aria-label={label} onChange={(e) => onChange(e.target.value)} />
+      {value && <button type="button" className="st-search-clear" aria-label="Clear search" onClick={() => onChange("")}><X size={14} /></button>}
+    </div>
+  );
+}
+
+// Everything readable in a row (names, ids, emails, nested course/section...) joined into one lowercase string.
+const haystack = (v, depth = 0) => {
+  if (v == null || depth > 3) return "";
+  if (typeof v === "string" || typeof v === "number") return String(v);
+  if (Array.isArray(v)) return v.map((x) => haystack(x, depth + 1)).join(" ");
+  if (typeof v === "object") return Object.values(v).map((x) => haystack(x, depth + 1)).join(" ");
+  return "";
+};
+export const matchesSearch = (row, q) => {
+  const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return true;
+  const hay = haystack(row).toLowerCase();
+  return words.every((w) => hay.includes(w));
+};
+
 /** Cards / Table switch (same pill as sclf_APP's ViewToggle). */
 export function ViewToggle({ mode, onChange }) {
   return (
@@ -54,12 +104,16 @@ function useViewMode(key, fallback = "table") {
 /** A stat row: 2 up on phones, auto-fit on desktop (sclf_APP's .ds-stat-grid). */
 export const StatGrid = ({ children }) => <div className="st-stat-grid">{children}</div>;
 
-export function Table({ cols, rows, empty = "Nothing here yet.", toggle = true }) {
+export function Table({ cols, rows: allRows, empty = "Nothing here yet.", toggle = true, searchable = true }) {
   const [saved, setView] = useViewMode(cols.map((c) => c.h).join("|").slice(0, 80));
+  const [q, setQ] = useState("");
+  const rows = allRows == null ? allRows : q ? allRows.filter((r) => matchesSearch(r, q)) : allRows;
+  // The search box appears once a list is long enough to need it (or while a search is active).
+  const showSearch = searchable && allRows != null && (allRows.length >= 5 || !!q);
   const phone = useMediaQuery("(max-width: 600px)");
   // rows == null means "still loading" (every screen starts with null/undefined), so show the skeleton, not "nothing here".
   if (rows == null) return <TableSkeleton cols={cols.length} />;
-  if (!rows.length) return <p className="st-empty">{empty}</p>;
+  if (!allRows.length) return <p className="st-empty">{empty}</p>;
   // Phones always get the stacked-card table, so the switch only exists on larger screens.
   const view = phone || !toggle ? "table" : saved;
   const actionCol = cols.length > 1 && !cols[cols.length - 1].h ? cols[cols.length - 1] : null;
@@ -67,10 +121,14 @@ export function Table({ cols, rows, empty = "Nothing here yet.", toggle = true }
   const [first, ...rest] = shown;
   return (
     <div className="st-data" data-view={view}>
-      {toggle && !phone && (
-        <div className="st-list-head-row"><ViewToggle mode={saved} onChange={setView} /></div>
+      {(showSearch || (toggle && !phone)) && (
+        <div className="st-list-head-row">
+          {showSearch ? <SearchBox value={q} onChange={setQ} placeholder="Search this list…" /> : <span />}
+          {toggle && !phone && <ViewToggle mode={saved} onChange={setView} />}
+        </div>
       )}
-      {view === "cards" ? (
+      {showSearch && q && <p className="st-muted st-search-count" role="status">{rows.length} of {allRows.length} match “{q}”</p>}
+      {!rows.length ? <p className="st-empty">No results for “{q}”. <button type="button" className="st-linkbtn" onClick={() => setQ("")}>Clear search</button></p> : view === "cards" ? (
         <ul className="st-list">
           {rows.map((r, i) => (
             <li key={r.id ?? i} className="st-list-item">

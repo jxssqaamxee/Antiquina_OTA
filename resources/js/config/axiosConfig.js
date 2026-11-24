@@ -47,6 +47,11 @@ export function ensureCsrf() {
 
 api.interceptors.request.use(async (config) => {
   const method = String(config.method || "get").toLowerCase();
+  // Live data: never let the browser (or a proxy) answer a read from an old copy. Same-origin, so no preflight.
+  if (method === "get") {
+    config.headers.set ? config.headers.set("Cache-Control", "no-cache") : (config.headers["Cache-Control"] = "no-cache");
+    config.headers.set ? config.headers.set("Pragma", "no-cache") : (config.headers.Pragma = "no-cache");
+  }
   if (method !== "get" && method !== "head" && method !== "options") await ensureCsrf();
 
   // A FormData body (photo upload) must NOT be sent as application/json: drop any
@@ -59,11 +64,25 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
+const RETRY_DELAY_MS = 700;
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
 api.interceptors.response.use(
   (r) => r,
   async (err) => {
+    // A request the app cancelled on purpose (newer search, closed screen) is not a failure.
+    if (axios.isCancel(err)) return Promise.reject(err);
     const status = err.response?.status;
     const config = err.config;
+
+    // A read that hit a blip (no reply, timeout, 502/503/504) is repeated once before anyone sees an error.
+    // Writes are never repeated: they may already have happened.
+    if (config && String(config.method || "get").toLowerCase() === "get" && !config._retried
+        && (!err.response || [502, 503, 504].includes(status)) && (typeof navigator === "undefined" || navigator.onLine !== false)) {
+      config._retried = true;
+      await wait(RETRY_DELAY_MS);
+      return api.request(config);
+    }
 
     // 419 = the CSRF cookie was missing or stale (e.g. the app shell came from the offline cache).
     // GET /config always hands out a fresh one; then the request is repeated once.
