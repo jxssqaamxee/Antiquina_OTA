@@ -4,6 +4,7 @@ import { Btn, Card, Check, Chip, Field, Input, Notice, Row, Select, Table, Tabs,
 import { StatCard } from "./AdminShell";
 import { errorMessage } from "../../config/axiosConfig";
 import usePersistedState from "../../hooks/usePersistedState";
+import { usePopup } from "../../context/PopupContext";
 
 /** Hours report (verified = approved only). `filters` = optional extra controls for Admin; `svc` is the role's service. */
 export function ReportsPanel({ svc, sections = [], courses = [], scope = "admin" }) {
@@ -131,6 +132,7 @@ const fileSize = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Ma
  * decided by the server.
  */
 export function RosterPanel({ svc, sections = [], scope = "admin" }) {
+  const popup = usePopup();
   const isAdmin = sections.length > 0;
   const [sectionId, setSectionId] = usePersistedState(`${scope}.roster.section`, "");
   const [mode, setMode] = usePersistedState(`${scope}.roster.mode`, "file");
@@ -172,7 +174,13 @@ export function RosterPanel({ svc, sections = [], scope = "admin" }) {
     setMsg({ text: `Saved: ${r.counts.added} added, ${r.counts.unchanged} already listed${r.counts.rejected + r.counts.skipped ? `, ${r.counts.rejected + r.counts.skipped} need attention (see below)` : ""}.` });
   };
   const remove = async (id) => {
-    if (!window.confirm(`Remove ${id} from the roster? They will no longer be able to register.`)) return;
+    const ok = await popup.confirm({
+      title: "Remove from roster?",
+      message: `Remove ${id} from the roster? They will no longer be able to register.`,
+      okLabel: "Remove",
+      danger: true,
+    });
+    if (!ok) return;
     if (await run(() => svc.rosterRemove(id, sectionId || undefined), "Removed.")) load();
   };
 

@@ -26,8 +26,31 @@ class CoordinatorAccessService
     {
         $sectionId = $this->section($coordinator)?->id;
 
-        return User::query()->where('role', User::ROLE_TRAINEE)->whereNotNull('email_verified_at')->whereIn('id',
+        return User::query()->where('role', User::ROLE_TRAINEE)->whereNotNull('email_verified_at')->whereNotIn('approval_status', [User::APPROVAL_PENDING, User::APPROVAL_REJECTED])->whereIn('id',
             StudentEnrollment::open()->where('section_id', $sectionId ?? 0)->select('user_id'));
+    }
+
+    /**
+     * Pending self-registrations whose roster row names the coordinator's section. A registration with no
+     * roster section (or no section assigned to the coordinator) is never visible here: only an admin sees it.
+     */
+    public function pendingRegistrationsQuery(User $coordinator): Builder
+    {
+        $sectionId = $this->section($coordinator)?->id;
+
+        return User::query()->where('role', User::ROLE_TRAINEE)->where('approval_status', User::APPROVAL_PENDING)
+            ->whereIn('student_id', \Illuminate\Support\Facades\DB::table('enrolled_students')->where('section_id', $sectionId ?? 0)->select('student_id'));
+    }
+
+    public function findPendingRegistrationOrFail(User $coordinator, int|string $id): User
+    {
+        return $this->pendingRegistrationsQuery($coordinator)->whereKey($id)->firstOrFail();
+    }
+
+    /** The roster section of a registration (for the audit trail). */
+    public function rosterSectionId(User $registrant): ?int
+    {
+        return \Illuminate\Support\Facades\DB::table('enrolled_students')->where('student_id', $registrant->student_id)->value('section_id');
     }
 
     /** Out-of-scope ids behave exactly like missing ones (404), so existence is not leaked. */

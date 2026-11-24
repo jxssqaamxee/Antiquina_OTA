@@ -9,6 +9,7 @@ use App\Models\UserNotification;
 use App\Models\UserSetting;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Reads and writes each synced document in real tables. The app keeps talking JSON
@@ -259,6 +260,12 @@ class LogbookStore
 
     private function writeLogbook(User $user, UserSetting $s, array $doc): void
     {
+        // Submitted/approved entries are already counted toward the trainee's hours. Their stored times are
+        // the truth, whatever the pushed document says (or leaves out), so a new or edited entry may never
+        // clash with them. Runs inside the sync transaction, which holds the settings lock.
+        $lockedRows = DutyEntry::where('user_id', $user->id)->whereIn('status', DutyEntry::LOCKED)->get();
+        $this->assertNoClashWithLocked($doc['entries'], $lockedRows);
+
         $now = now();
         $s->update([
             'student_name' => $doc['studentName'],
@@ -293,7 +300,7 @@ class LogbookStore
 
         // Duty entries. Submitted and approved entries belong to the review process: a push can neither
         // change nor delete them (the response carries the canonical document, which the app adopts).
-        $locked = DutyEntry::where('user_id', $user->id)->whereIn('status', DutyEntry::LOCKED)->pluck('entry_uid')->all();
+        $locked = $lockedRows->pluck('entry_uid')->all();
         DutyEntry::where('user_id', $user->id)->whereNotIn('status', DutyEntry::LOCKED)
             ->whereNotIn('entry_uid', array_column($doc['entries'], 'id'))->delete();
         foreach ($doc['entries'] as $e) {
@@ -313,6 +320,73 @@ class LogbookStore
                 ],
             );
         }
+    }
+
+    /**
+     * Rejects (422) any entry in the pushed document that overlaps, on the same date, the stored times of a
+     * locked entry. An entry that is itself locked is skipped: the store never changes it.
+     *
+     * @param array<int,array<string,mixed>>                       $entries cleaned entries from the validator
+     * @param \Illuminate\Support\Collection<int,DutyEntry>      $lockedRows
+     */
+    private function assertNoClashWithLocked(array $entries, $lockedRows): void
+    {
+        if ($lockedRows->isEmpty()) {
+            return;
+        }
+
+        $lockedUids = $lockedRows->pluck('entry_uid')->all();
+        $byDate = [];
+        foreach ($lockedRows as $row) {
+            $byDate[$row->duty_date->format('Y-m-d')][] = $this->segments([
+                'amIn' => $row->am_in, 'amOut' => $row->am_out, 'pmIn' => $row->pm_in, 'pmOut' => $row->pm_out,
+                'evIn' => $row->ev_in, 'evOut' => $row->ev_out,
+            ]);
+        }
+
+        $errors = [];
+        foreach ($entries as $i => $e) {
+            if (in_array($e['id'], $lockedUids, true) || empty($byDate[$e['date']])) {
+                continue;
+            }
+            foreach ($this->segments($e) as [$a, $b]) {
+                foreach ($byDate[$e['date']] as $segs) {
+                    foreach ($segs as [$c, $d]) {
+                        if ($a < $d && $c < $b) {
+                            $errors["value.entries.$i.date"] = "That overlaps an entry already submitted or approved for {$e['date']}.";
+                            break 3;
+                        }
+                    }
+                }
+            }
+        }
+
+        if ($errors) {
+            throw ValidationException::withMessages($errors);
+        }
+    }
+
+    /** @return array<int,array{0:int,1:int}> [start, end] minutes for each filled am/pm/ev range. */
+    private function segments(array $t): array
+    {
+        $toMin = function ($v): ?int {
+            if (! is_string($v) || ! preg_match('/^(\d{1,2}):(\d{2})/', $v, $m)) {
+                return null;
+            }
+
+            return (int) $m[1] * 60 + (int) $m[2];
+        };
+
+        $out = [];
+        foreach (['am', 'pm', 'ev'] as $seg) {
+            $a = $toMin($t[$seg.'In'] ?? null);
+            $b = $toMin($t[$seg.'Out'] ?? null);
+            if ($a !== null && $b !== null && $b > $a) {
+                $out[] = [$a, $b];
+            }
+        }
+
+        return $out;
     }
 
     private function clearLogbook(User $user, UserSetting $s): void

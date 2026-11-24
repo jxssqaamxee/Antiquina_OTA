@@ -10,6 +10,7 @@ import { REGULAR_THEMES, BLACK_THEMES, THEMES, setTheme, saveThemeToAccount } fr
 import AvatarPhoto from "./AvatarPhoto";
 import "./AccountMenu.css";
 
+import Tooltip from "./Tooltip";
 const themeLabel = (id) => THEMES.find((t) => t.id === id)?.label || "Default";
 
 /** One row with an ON / OFF switch (same look as sclf_APP's avatar menu). */
@@ -154,7 +155,7 @@ export default function AccountMenu() {
 
   return (
     <>
-      <button
+      <Tooltip label={"Account menu"}><button
         type="button"
         ref={triggerRef}
         className={`avatar-btn avatar-btn--menu${open ? " is-open" : ""}`}
@@ -165,7 +166,7 @@ export default function AccountMenu() {
       >
         <AvatarPhoto user={user} />
         <span className="avatar-chevron" aria-hidden="true"><ChevronDown size={11} strokeWidth={3} /></span>
-      </button>
+      </button></Tooltip>
 
       {open && createPortal(
         <div ref={menuRef} className="am-menu" role="menu" aria-label="Account menu" data-occ-theme={theme}>
@@ -196,14 +197,14 @@ export default function AccountMenu() {
             <div className="am-themes" role="menu" aria-label="Choose theme">
               <div className="am-themes-head">
                 <span className="am-themes-title">Choose Theme</span>
-                <button
+                <Tooltip label={blackSet ? "Show the white themes" : "Show the black themes"}><button
                   type="button"
                   className={`am-black-btn${blackSet ? " is-on" : ""}`}
                   onClick={() => setBlackSet((v) => !v)}
                   aria-label={blackSet ? "Show the white themes" : "Show the black themes"}
                 >
                   {blackSet ? "White" : "Black"}
-                </button>
+                </button></Tooltip>
               </div>
               {options.map((t) => (
                 <button

@@ -11,6 +11,7 @@ import { useConfig } from "../../config/serverConfig";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import { photoProblem } from "../../utils/photoFile";
+import Tooltip from "../../Components/shared/Tooltip";
 import {
   FORMAT_HINTS, validateRegister, clean, emailNameSegment,
   filterNameInput, filterStudentIdInput, normalizeEmailInput,
@@ -236,13 +237,13 @@ export default function RegisterPage() {
                 hint={errors.profile_photo ? undefined : `Required so your coordinator can verify you. JPG, PNG or WebP, up to 5 MB.`}
               >
                 <div className="lg-avatar-row">
-                  <button
+                  <Tooltip label={photoUrl ? "Change profile photo" : "Add profile photo"}><button
                     type="button" id="photo-pick" className={`lg-avatar-frame${photoUrl ? " has-photo" : ""}`}
                     onClick={() => setPhotoOpen(true)} aria-label={photoUrl ? "Change profile photo" : "Add profile photo"}
                     aria-required="true" aria-invalid={!!errors.profile_photo}
                   >
                     {photoUrl ? <img src={photoUrl} alt="Your profile photo preview" /> : <Camera size={26} strokeWidth={1.6} style={{ opacity: .55 }} />}
-                  </button>
+                  </button></Tooltip>
                   <div className="lg-avatar-actions">
                     <div className="lg-avatar-btns">
                       <button type="button" className="lg-avatar-btn" onClick={() => setPhotoOpen(true)}>{photoUrl ? "Change photo" : "Add photo"}</button>

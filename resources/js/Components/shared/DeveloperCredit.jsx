@@ -9,6 +9,7 @@ import "./DeveloperCredit.css";
 import developerPhoto from "../../assets/images/developer.jpg";
 import gcashQr from "../../assets/images/gcash-qr.jpg";
 
+import Tooltip from "./Tooltip";
 // ---------------------------------------------------------------------------
 // Developer credit
 //
@@ -389,7 +390,7 @@ export default function DeveloperCredit({ className = "", showTag = true }) {
                         >
                             <span className="dc-grab-bar" />
                         </div>
-                        <button
+                        <Tooltip label={"Close"}><button
                             ref={closeBtnRef}
                             type="button"
                             className="dc-close"
@@ -397,7 +398,7 @@ export default function DeveloperCredit({ className = "", showTag = true }) {
                             onClick={() => close(true)}
                         >
                             <X size={18} />
-                        </button>
+                        </button></Tooltip>
                         <div className="dc-sheet-scroll">
                             <CardBody titleId={titleId} />
                         </div>

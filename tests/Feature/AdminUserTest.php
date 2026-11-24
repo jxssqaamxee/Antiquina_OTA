@@ -20,7 +20,7 @@ class AdminUserTest extends TestCase
 
         $this->signedIn($admin)->putJson("/api/admin/users/{$trainee->id}", [
             'first_name' => 'ana', 'middle_name' => '', 'last_name' => 'lim', 'email' => 'Ana.Lim@Example.com',
-            'student_id' => 'HACK', 'role' => 'admin',
+            'admin_password' => 'password', 'student_id' => 'HACK', 'role' => 'admin',
         ])->assertOk()->assertJsonPath('user.name', 'Ana Lim')->assertJsonPath('user.email', 'ana.lim@example.com');
 
         $trainee->refresh();
@@ -34,7 +34,7 @@ class AdminUserTest extends TestCase
         $a = User::factory()->create();
         $b = User::factory()->create();
 
-        $this->signedIn($admin)->putJson("/api/admin/users/{$a->id}", ['first_name' => 'Ana', 'last_name' => 'Lim', 'email' => $b->email])
+        $this->signedIn($admin)->putJson("/api/admin/users/{$a->id}", ['first_name' => 'Ana', 'last_name' => 'Lim', 'email' => $b->email, 'admin_password' => 'password'])
             ->assertStatus(422)->assertJsonValidationErrors('email');
         $this->signedIn($admin)->putJson("/api/admin/users/{$a->id}", ['first_name' => 'A1', 'last_name' => '', 'email' => 'ok@example.com'])
             ->assertStatus(422)->assertJsonValidationErrors(['first_name', 'last_name']);

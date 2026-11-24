@@ -21,6 +21,7 @@ import Footer from "../../Components/shared/Footer";
 import { subscribe } from "../../utils/pwaInstall";
 import "../../styles/auth.css";
 
+import Tooltip from "../../Components/shared/Tooltip";
 const req = <span className="lg-required" aria-hidden="true">*</span>;
 
 export default function ProfilePage() {
@@ -149,9 +150,9 @@ export default function ProfilePage() {
           <div className="pf-hero-in">
             <div className="pf-avatar-wrap">
               <span className="pf-avatar"><AvatarPhoto user={user} /></span>
-              <button type="button" className="pf-cam" onClick={() => setPhotoOpen(true)} disabled={busy === "photo"} aria-label="Change profile photo">
+              <Tooltip label={"Change profile photo"}><button type="button" className="pf-cam" onClick={() => setPhotoOpen(true)} disabled={busy === "photo"} aria-label="Change profile photo">
                 <Camera size={15} />
-              </button>
+              </button></Tooltip>
             </div>
             <div style={{ minWidth: 0 }}>
               <h2>{user.name}</h2>

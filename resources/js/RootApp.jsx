@@ -1,6 +1,6 @@
 import React, { Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import ProtectedRoute, { GuestRoute, UnverifiedRoute } from "./Components/shared/ProtectedRoute";
+import ProtectedRoute, { GuestRoute, PendingRoute, UnverifiedRoute } from "./Components/shared/ProtectedRoute";
 import { NotificationProvider } from "./context/NotificationContext";
 import { AuthProvider } from "./context/AuthContext";
 import { ToastProvider } from "./context/ToastContext";
@@ -9,7 +9,7 @@ import Splash from "./Components/shared/Splash";
 import OfflineNotice from "./Components/shared/OfflineNotice";
 import UpdateNotice from "./Components/shared/UpdateNotice";
 import InstallPrompt from "./Components/shared/InstallPrompt";
-import { publicRoutes, guestRoutes, unverifiedRoutes, protectedRoutes, adminRoutes, coordinatorRoutes, setupRoutes } from "./routes/index";
+import { publicRoutes, guestRoutes, unverifiedRoutes, pendingRoutes, protectedRoutes, adminRoutes, coordinatorRoutes, setupRoutes } from "./routes/index";
 
 export default function App() {
   return (
@@ -28,6 +28,9 @@ export default function App() {
               ))}
               {unverifiedRoutes.map(({ path, component: C }) => (
                 <Route key={path} path={path} element={<UnverifiedRoute><C /></UnverifiedRoute>} />
+              ))}
+              {pendingRoutes.map(({ path, component: C }) => (
+                <Route key={path} path={path} element={<PendingRoute><C /></PendingRoute>} />
               ))}
               {protectedRoutes.map(({ path, component: C }) => (
                 <Route key={path} path={path} element={<ProtectedRoute><C /></ProtectedRoute>} />

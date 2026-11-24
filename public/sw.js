@@ -4,19 +4,67 @@
 //    and then offline.html, so an installed app still opens with no signal.
 //  - /api/* is NEVER cached (private, per-user data); the app keeps its own
 //    offline copy of the logbook and syncs when the connection returns.
-const VERSION = "occ-v9"; // bumped: drops cached page chunks from older builds
+const VERSION = "occ-v10"; // v10: precaches every file of the build (images included), like sclf_APP
 const SHELL = `${VERSION}-shell`;
 const ASSETS = `${VERSION}-assets`;
 const PRECACHE = ["/offline.html", "/images/icon-192.png", "/images/icon-512.png"];
 
+// Every file the production build made (read from Vite's manifest): scripts, styles AND images (logo,
+// login background, developer photo, QR). They are all on the device after the first visit, so every
+// screen draws its images with no connection, even screens that were never opened. (Same idea as
+// sclf_APP's service worker.) Private photos are NOT here: they come from the database through /api and
+// are kept by the app itself (utils/imageCache.js), never by this worker.
+async function buildFileList() {
+  try {
+    const res = await fetch("/build/manifest.json", { cache: "no-cache" });
+    if (!res.ok) return [];
+    const manifest = await res.json();
+    const urls = new Set();
+    Object.values(manifest).forEach((e) => {
+      if (e.file) urls.add("/build/" + e.file);
+      (e.css || []).forEach((c) => urls.add("/build/" + c));
+      (e.assets || []).forEach((a) => urls.add("/build/" + a));
+    });
+    return [...urls];
+  } catch {
+    return []; // dev server / no build: nothing to precache
+  }
+}
+
+async function precacheBuild() {
+  const assets = await caches.open(ASSETS);
+  const files = await buildFileList();
+  await Promise.allSettled(files.map((u) => assets.add(u).catch(() => {})));
+}
+
+// Drop hashed build files that the current build no longer has (old images and chunks), so the cache
+// does not grow with every deploy. Skipped when there is no manifest: never prune blindly.
+async function pruneOldBuildFiles() {
+  try {
+    const keep = new Set(await buildFileList());
+    if (!keep.size) return;
+    const assets = await caches.open(ASSETS);
+    for (const req of await assets.keys()) {
+      const path = new URL(req.url).pathname;
+      if (path.startsWith("/build/assets/") && !keep.has(path)) await assets.delete(req);
+    }
+  } catch { /* best effort */ }
+}
+
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(SHELL).then((c) => c.addAll(PRECACHE)).catch(() => {}));
+  event.waitUntil(Promise.all([
+    caches.open(SHELL).then((c) => c.addAll(PRECACHE)).catch(() => {}),
+    precacheBuild(),
+  ]));
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => !k.startsWith(VERSION)).map((k) => caches.delete(k))))
+      // Only this worker's OWN old versions (occ-v9-*, ...). The app's caches live beside them and must survive a
+      // deploy: occ-private-photos-v1 (offline profile photos, see utils/imageCache.js) and occ-push-user.
+      .then((keys) => Promise.all(keys.filter((k) => /^occ-v\d+-/.test(k) && !k.startsWith(`${VERSION}-`)).map((k) => caches.delete(k))))
+      .then(pruneOldBuildFiles)
       .then(() => self.clients.claim())
   );
 });

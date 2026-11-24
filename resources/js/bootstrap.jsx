@@ -11,12 +11,15 @@ import { registerServiceWorker } from "./utils/pwa";
 import { preloadImages } from "./utils/imageCache";
 import logo from "./assets/images/site-logo.png";
 import occBg from "./assets/images/occ.webp";
+import developerPhoto from "./assets/images/developer.jpg";
+import gcashQr from "./assets/images/gcash-qr.jpg";
 
 // Loaded by main.jsx only when this device may use the app (see utils/mobileOnly.js).
 export function mount(root) {
   applyTheme(); // saved colour theme (see utils/theme.js)
   registerServiceWorker();
   preloadImages([logo, occBg]); // logo + login background decode ahead of the screens that use them
+  preloadImages([developerPhoto, gcashQr], { late: true }); // footer credit sheet: ready (and cached offline) by the time it is opened
   root.render(
     <React.StrictMode>
       <RootApp />

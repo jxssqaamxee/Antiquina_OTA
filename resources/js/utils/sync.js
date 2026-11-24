@@ -33,7 +33,7 @@ let retryTimer = null;
 let activeUser = null;
 let flushing = null;
 let failures = 0;                  // consecutive failed flushes, drives the backoff
-let paused = false;                // server said "verify your email first" (403 email_unverified): stop pushing
+let paused = false;                // server said "verify your email first" (403 email_unverified) or "waiting for approval" (403 account_pending): stop pushing
 
 const dirtyKey = (userId) => `sync-dirty::u_${userId}`;
 const rejectedKey = (userId, base) => `sync-rejected::u_${userId}::${base}`;
@@ -87,6 +87,9 @@ const emit = (name, detail) => {
   try { window.dispatchEvent(new CustomEvent(name, { detail })); } catch { /* ignore */ }
 };
 const sameValue = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+/** How many logbook documents of this account are saved only on this device (not yet on the server). */
+export const unsyncedCount = (userId) => (userId ? readDirty(userId).length : 0);
 
 /** Called by storage.setUserStorage after every local write. */
 export function queueSync(base, userId) {
@@ -154,7 +157,7 @@ export function flush(userId = activeUser) {
           sessionGone = true;
           break;
         }
-        if (status === 403 && ["email_unverified", "role_forbidden"].includes(e.response?.data?.code)) {
+        if (status === 403 && ["email_unverified", "role_forbidden", "account_pending", "account_rejected"].includes(e.response?.data?.code)) {
           // The account's email is not verified yet (or its role has no logbook), so the server closes
           // /sync for it. This is not an error: pause (no retry loop, no console spam), keep the data dirty, and push it the
           // moment the account is verified (AuthContext.updateUser -> hydrate()).

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { loadRememberedCredentials, saveRememberedCredentials, clearRememberedCredentials } from "../../hooks/useRememberedCredentials";
 import { Link, useNavigate } from "react-router-dom";
-import { IdCard, Lock } from "lucide-react";
+import { IdCard, Lock, ShieldCheck } from "lucide-react";
 import AuthShell, {
   LedgerBanner, LedgerButton, LedgerInput, LedgerPasswordInput, LedgerRow,
 } from "../../Components/auth/AuthShell";
@@ -25,6 +25,10 @@ export default function AdminLoginPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [errors, setErrors] = useState({});
+  // Set when the password was right and the account has two-factor: { tempToken }. Held in memory only.
+  const [challenge, setChallenge] = useState(null);
+  const [codeMode, setCodeMode] = useState("app"); // app | recovery
+  const [code, setCode] = useState("");
 
   useEffect(() => { document.title = "Administrator sign in | OCCDL"; }, []);
 
@@ -33,6 +37,32 @@ export default function AdminLoginPage() {
     const r = loadRememberedCredentials("admin");
     if (r?.adminId) { setAdminId(r.adminId); setRemember(true); }
   }, []);
+
+  async function finishSignIn(data) {
+    await signIn(data, remember);
+    if (remember) saveRememberedCredentials(adminId, "admin"); else clearRememberedCredentials("admin");
+    navigate("/", { replace: true }); // main loading page, then the dashboard
+  }
+
+  async function submitCode(e) {
+    e.preventDefault();
+    setError(""); setBusy(true);
+    try {
+      const { data } = await api.post("/2fa/login-verify", { temp_token: challenge.tempToken, code });
+      await finishSignIn(data);
+    } catch (err) {
+      const message = fieldErrors(err).code || errorMessage(err);
+      setError(message);
+      toast.error(message, { title: "Verification failed", key: "admin-2fa-error" });
+      setBusy(false);
+    }
+  }
+
+  const onCode = (raw) => {
+    if (codeMode === "app") { setCode(raw.replace(/\D/g, "").slice(0, 6)); return; }
+    const clean = raw.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8); // ABCD-EFGH, dash added for you
+    setCode(clean.length > 4 ? `${clean.slice(0, 4)}-${clean.slice(4)}` : clean);
+  };
 
   async function submit(e) {
     e.preventDefault();
@@ -48,9 +78,8 @@ export default function AdminLoginPage() {
     setBusy(true);
     try {
       const { data } = await api.post("/auth/administrator", { admin_id: adminId, password, remember });
-      await signIn(data, remember);
-      if (remember) saveRememberedCredentials(adminId, "admin"); else clearRememberedCredentials("admin");
-      navigate("/", { replace: true }); // main loading page, then the dashboard
+      if (data.two_factor_required) { setChallenge({ tempToken: data.temp_token }); setBusy(false); return; }
+      await finishSignIn(data);
     } catch (err) {
       setErrors(fieldErrors(err));
       const message = errorMessage(err);
@@ -75,6 +104,29 @@ export default function AdminLoginPage() {
     >
       <LedgerBanner>{error}</LedgerBanner>
 
+      {challenge ? (
+        <form onSubmit={submitCode} noValidate>
+          <LedgerBanner tone="notice">Enter the 6-digit code from your authenticator app to finish signing in.</LedgerBanner>
+          <LedgerRow index={1} icon={ShieldCheck} htmlFor="code" label={<>Verification code <span className="lg-required" aria-hidden="true">*</span></>}>
+            <LedgerInput
+              id="code" type="text" value={code} autoFocus required aria-invalid={!!error}
+              inputMode={codeMode === "app" ? "numeric" : "text"} enterKeyHint="go" autoCorrect="off" spellCheck={false}
+              autoCapitalize={codeMode === "app" ? "off" : "characters"} maxLength={codeMode === "app" ? 6 : 9}
+              autoComplete={codeMode === "app" ? "one-time-code" : "off"} placeholder={codeMode === "app" ? "123456" : "ABCD-EFGH"}
+              onChange={(e) => { onCode(e.target.value); setError(""); }}
+            />
+          </LedgerRow>
+          <LedgerButton disabled={busy || !code}>{busy ? <><span className="au-spin" /> Verifying…</> : "Verify & sign in"}</LedgerButton>
+          <button type="button" className="lg-forgot" style={{ display: "block", marginTop: 14, background: "none", border: "none", cursor: "pointer" }}
+            onClick={() => { setCodeMode((m) => (m === "app" ? "recovery" : "app")); setCode(""); setError(""); }}>
+            {codeMode === "app" ? "Use a recovery code instead" : "Use authenticator app code instead"}
+          </button>
+          <button type="button" className="lg-forgot" style={{ display: "block", marginTop: 14, background: "none", border: "none", cursor: "pointer" }}
+            onClick={() => { setChallenge(null); setCode(""); setCodeMode("app"); setError(""); setPassword(""); }}>
+            &larr; Back to sign in
+          </button>
+        </form>
+      ) : (
       <form onSubmit={submit} noValidate>
         <LedgerRow
           index={1} icon={IdCard} htmlFor="admin_id" error={errors.admin_id}
@@ -114,6 +166,7 @@ export default function AdminLoginPage() {
           {busy ? <><span className="au-spin" /> Signing in…</> : "Sign in"}
         </LedgerButton>
       </form>
+      )}
     </AuthShell>
   );
 }

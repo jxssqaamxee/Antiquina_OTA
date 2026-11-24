@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { Boxes, Camera, Check as CheckIcon, ChevronDown, ChevronUp, ClipboardList, IdCard, Lock, LogOut, Mail, ShieldCheck, UserRound, Menu, Palette, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
+import { usePopup } from "../../context/PopupContext";
 import api, { errorMessage } from "../../config/axiosConfig";
 import { useAppTheme } from "../../hooks/useAppTheme";
 import useIsPhone from "../../hooks/useIsPhone";
@@ -15,9 +16,11 @@ import PhotoUploadModal from "../shared/PhotoUploadModal";
 import DeveloperCredit from "../shared/DeveloperCredit";
 import logo from "../../assets/images/site-logo.png";
 import { Btn, Card, Field, Input, Notice, Row } from "./ui";
+import TwoFactorPanel from "./TwoFactorPanel";
 import "../shared/AccountMenu.css";
 import "../../styles/admin.css";
 
+import Tooltip from "../shared/Tooltip";
 const themeLabel = (id) => THEMES.find((t) => t.id === id)?.label || "Default";
 const COLLAPSE_KEY = "occ-sidebar-collapsed";
 const DESKTOP_QUERY = "(min-width: 960px)";
@@ -88,22 +91,22 @@ function AdminAccountMenu({ variant = "top", collapsed = false, onEditProfile, o
   return (
     <>
       {variant === "side" ? (
-        <button type="button" ref={triggerRef} className="ds-user-row ds-user-row-btn" aria-label="Open account menu"
-          aria-haspopup="menu" aria-expanded={open} title={collapsed ? user?.name || "Account" : undefined} onClick={toggle}>
+        <Tooltip label={user?.name || "Account"} disabled={!collapsed}><button type="button" ref={triggerRef} className="ds-user-row ds-user-row-btn" aria-label="Open account menu"
+          aria-haspopup="menu" aria-expanded={open} onClick={toggle}>
           <span className="ds-avatar"><AvatarPhoto user={user} /></span>
           <div className="ds-user-text" style={{ minWidth: 0 }}>
             <div className="ds-user-name">{user?.name || "Account"}</div>
             <div className="ds-user-email">{idLine(user)}</div>
           </div>
           {!collapsed && <ChevronUp size={15} className="ds-user-row-chevron" />}
-        </button>
+        </button></Tooltip>
       ) : (
-        <button type="button" ref={triggerRef} className="ds-profile-btn" aria-label="Open account menu"
+        <Tooltip label={"Account menu"}><button type="button" ref={triggerRef} className="ds-profile-btn" aria-label="Open account menu"
           aria-haspopup="menu" aria-expanded={open} onClick={toggle}>
           <span className="ds-avatar"><AvatarPhoto user={user} /></span>
           <span className="ds-profile-btn-name">{user?.name || "Account"}</span>
           <ChevronDown size={16} className="ds-profile-chevron" />
-        </button>
+        </button></Tooltip>
       )}
 
       {open && createPortal(
@@ -125,8 +128,8 @@ function AdminAccountMenu({ variant = "top", collapsed = false, onEditProfile, o
             <div className="am-themes" role="menu" aria-label="Choose theme">
               <div className="am-themes-head">
                 <span className="am-themes-title">Choose Theme</span>
-                <button type="button" className={`am-black-btn${blackSet ? " is-on" : ""}`} onClick={() => setBlackSet((v) => !v)}
-                  aria-label={blackSet ? "Show the white themes" : "Show the black themes"}>{blackSet ? "White" : "Black"}</button>
+                <Tooltip label={blackSet ? "Show the white themes" : "Show the black themes"}><button type="button" className={`am-black-btn${blackSet ? " is-on" : ""}`} onClick={() => setBlackSet((v) => !v)}
+                  aria-label={blackSet ? "Show the white themes" : "Show the black themes"}>{blackSet ? "White" : "Black"}</button></Tooltip>
               </div>
               {options.map((t) => (
                 <button key={t.id} type="button" className="am-theme-opt" role="menuitemradio" aria-checked={theme === t.id} onClick={() => pick(t.id)}>
@@ -157,6 +160,7 @@ const EMPTY_PW = { current_password: "", password: "", password_confirmation: ""
 function PasswordPanel({ onDone, inline = false }) {
   const { updateUser } = useAuth();
   const toast = useToast();
+  const popup = usePopup();
   const [f, setF] = useState({ current_password: "", password: "", password_confirmation: "" });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
@@ -164,9 +168,15 @@ function PasswordPanel({ onDone, inline = false }) {
   // Inline (Profile Settings > Security) it starts CLOSED, so nothing can be typed or autofilled by mistake.
   const [open, setOpen] = useState(!inline);
   const dirty = !!(f.current_password || f.password || f.password_confirmation);
-  const cancel = () => {
+  const cancel = async () => {
     if (!inline) { onDone?.(); return; }
-    if (dirty && !window.confirm("You started changing your password. Close it and discard what you typed?")) return;
+    if (dirty && !(await popup.confirm({
+      title: "Discard password change?",
+      message: "You started changing your password. Close it and discard what you typed?",
+      okLabel: "Discard",
+      cancelLabel: "Keep editing",
+      danger: true,
+    }))) return;
     setF(EMPTY_PW); setMsg(null); setOpen(false);
   };
 
@@ -265,9 +275,9 @@ function ProfileSettings() {
   return (
     <>
       <div className="st-card" style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
-        <button type="button" className="ds-avatar" style={{ width: 64, height: 64, fontSize: 22, borderRadius: 16, position: "relative" }} onClick={() => setPhotoOpen(true)} aria-label="Change profile photo">
+        <Tooltip label={"Change profile photo"}><button type="button" className="ds-avatar" style={{ width: 64, height: 64, fontSize: 22, borderRadius: 16, position: "relative" }} onClick={() => setPhotoOpen(true)} aria-label="Change profile photo">
           <AvatarPhoto user={user} />
-        </button>
+        </button></Tooltip>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: 18, fontWeight: 800 }}>{user?.name || "Account"}</div>
           <div style={{ fontSize: 13, opacity: 0.6 }}>{user?.email || ""}</div>
@@ -296,6 +306,7 @@ function ProfileSettings() {
       <Card title="Security">
         <p className="ds-card-desc">Keep your sign-in details up to date and your account protected.</p>
         <PasswordPanel inline />
+        <TwoFactorPanel />
       </Card>
 
       <PhotoUploadModal open={photoOpen} onClose={() => setPhotoOpen(false)} onAccept={uploadPhoto} title="Profile photo"
@@ -401,13 +412,13 @@ export default function AdminShell({ roleLabel, nav = [], phoneTabs, active, onN
         {isPhone && (
           <button type="button" className="ds-icon-btn ds-sidebar-close" onClick={() => setSidebarOpen(false)} aria-label="Close menu"><X size={18} /></button>
         )}
-        <div className="ds-brand" title={railCollapsed ? "OCCDL" : undefined}>
+        <Tooltip label={"OCCDL"} disabled={!railCollapsed}><div className="ds-brand">
           <img src={logo} alt="" />
           <span className="ds-brand-text">
             <span className="ds-brand-name">OCCDL</span>
             <span className="ds-brand-sub">Opol Community College</span>
           </span>
-        </div>
+        </div></Tooltip>
 
         <div className="ds-nav-label">{roleLabel}</div>
 
@@ -417,11 +428,11 @@ export default function AdminShell({ roleLabel, nav = [], phoneTabs, active, onN
               const on = key === active && !showProfile;
               return (
                 <li key={key}>
-                  <button type="button" className={`ds-nav-link${on ? " active" : ""}`} aria-current={on ? "page" : undefined}
-                    title={railCollapsed ? label : undefined} onClick={() => go(key)}>
+                  <Tooltip label={label} disabled={!railCollapsed}><button type="button" className={`ds-nav-link${on ? " active" : ""}`} aria-current={on ? "page" : undefined}
+ onClick={() => go(key)}>
                     <span className="ds-nav-icon">{Icon && <Icon size={18} strokeWidth={2} />}</span>
                     <span className="ds-nav-text">{label}</span>
-                  </button>
+                  </button></Tooltip>
                 </li>
               );
             })}
@@ -444,11 +455,11 @@ export default function AdminShell({ roleLabel, nav = [], phoneTabs, active, onN
       <div className="ds-content">
         <header className="ds-topbar">
           <div className="ds-topbar-left">
-            <button type="button" className="ds-icon-btn ds-hamburger" onClick={burger} aria-controls="ds-sidebar"
+            <Tooltip label={!isDesktop ? "Menu" : railCollapsed ? "Expand sidebar" : "Collapse sidebar"}><button type="button" className="ds-icon-btn ds-hamburger" onClick={burger} aria-controls="ds-sidebar"
               aria-label={!isDesktop ? "Open menu" : railCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-              title={!isDesktop ? "Menu" : railCollapsed ? "Expand sidebar" : "Collapse sidebar"}>
+>
               {sidebarOpen ? <X size={18} /> : !isDesktop ? <Menu size={18} /> : railCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
-            </button>
+            </button></Tooltip>
             <div className="ds-topbar-brand">
               <img src={logo} alt="" />
               <span>{showProfile ? "Profile Settings" : (activeItem?.label || "OCCDL")}</span>

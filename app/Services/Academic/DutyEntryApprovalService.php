@@ -17,7 +17,7 @@ class DutyEntryApprovalService
 
     public function submit(User $trainee, string $entryUid): DutyEntry
     {
-        return $this->change($trainee, fn () => DutyEntry::where(['user_id' => $trainee->id, 'entry_uid' => $entryUid])->first(),
+        return $this->change($trainee, fn () => DutyEntry::where(['user_id' => $trainee->id, 'entry_uid' => $entryUid])->lockForUpdate()->first(),
             function (DutyEntry $e) use ($trainee) {
                 if (! in_array($e->status, [DutyEntry::DRAFT, DutyEntry::REJECTED], true)) {
                     throw ValidationException::withMessages(['entry' => 'This entry is already submitted or approved.']);
@@ -41,7 +41,7 @@ class DutyEntryApprovalService
     {
         $trainee = User::findOrFail($entry->user_id);
 
-        return $this->change($trainee, fn () => DutyEntry::find($entry->id),
+        return $this->change($trainee, fn () => DutyEntry::whereKey($entry->id)->lockForUpdate()->first(),
             function (DutyEntry $e) use ($reviewer, $trainee, $outcome, $reason, $verified) {
                 if ($e->status !== DutyEntry::SUBMITTED) {
                     throw ValidationException::withMessages(['entry' => 'Only a submitted entry can be reviewed.']);
@@ -60,7 +60,12 @@ class DutyEntryApprovalService
             });
     }
 
-    /** Runs $apply on the entry inside one transaction holding the trainee's settings lock, then bumps the logbook revision. */
+    /**
+     * Runs $apply on the entry inside one transaction holding the trainee's settings lock, then bumps the logbook revision.
+     * $find must return the entry with lockForUpdate(): a plain read here would use the transaction's snapshot, taken before
+     * the settings lock was won, so a request that queued behind another review would re-check a stale status (MariaDB/MySQL
+     * REPEATABLE READ) and review the same entry twice. A locking read always sees the latest committed row.
+     */
     private function change(User $trainee, \Closure $find, \Closure $apply): DutyEntry
     {
         return DB::transaction(function () use ($trainee, $find, $apply) {

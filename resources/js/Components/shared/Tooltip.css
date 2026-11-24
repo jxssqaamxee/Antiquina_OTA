@@ -1,0 +1,35 @@
+/* Tooltip (see Tooltip.jsx). Same palette as sclf_APP: it follows <html data-theme>, because the
+   tooltip lives in <body>, outside every themed shell. */
+.occ-tooltip {
+  position: fixed;
+  z-index: 10200; /* above sheets, toasts and the install banner (10100) */
+  max-width: 220px;
+  width: max-content;
+  --tt-bg: #1b1f2e;
+  --tt-fg: #f4f6fb;
+  --tt-border: transparent;
+  --tt-shadow: rgba(15, 23, 42, 0.25);
+  background: var(--tt-bg);
+  color: var(--tt-fg);
+  border: 1px solid var(--tt-border);
+  font: 500 12px/1.4 var(--font-body, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
+  padding: 6px 10px;
+  border-radius: 8px;
+  box-shadow: 0 8px 20px var(--tt-shadow);
+  pointer-events: none;
+  text-align: center;
+  overflow-wrap: anywhere;
+  animation: occ-tooltip-in 0.12s ease both;
+}
+@keyframes occ-tooltip-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .occ-tooltip { animation: none; } }
+@media (max-width: 420px) { .occ-tooltip { max-width: 160px; font-size: 11.5px; } }
+
+[data-theme="black"] .occ-tooltip { --tt-bg: #e7ecf3; --tt-fg: #0b1220; --tt-border: rgba(255, 255, 255, 0.35); --tt-shadow: rgba(0, 0, 0, 0.55); }
+[data-theme="maroon"] .occ-tooltip { --tt-bg: linear-gradient(135deg, #7f1d2e, #9f1239 55%, #dc2626); --tt-fg: #fff5f6; --tt-border: rgba(255, 255, 255, 0.18); --tt-shadow: rgba(159, 18, 57, 0.4); }
+[data-theme="blue"] .occ-tooltip { --tt-bg: linear-gradient(135deg, #1e40af, #2563eb 55%, #38bdf8); --tt-fg: #f3f8ff; --tt-border: rgba(255, 255, 255, 0.18); --tt-shadow: rgba(37, 99, 235, 0.4); }
+[data-theme="yellow"] .occ-tooltip { --tt-bg: linear-gradient(135deg, #b45309, #d97706 55%, #f59e0b); --tt-fg: #1c1408; --tt-border: rgba(255, 255, 255, 0.25); --tt-shadow: rgba(217, 119, 6, 0.4); }
+[data-theme="dark-white"] .occ-tooltip { --tt-bg: #f2f2f2; --tt-fg: #000; --tt-border: rgba(255, 255, 255, 0.35); --tt-shadow: rgba(0, 0, 0, 0.6); }
+[data-theme="dark-blue"] .occ-tooltip { --tt-bg: linear-gradient(135deg, #1e40af, #2563eb 50%, #38bdf8); --tt-fg: #fff; --tt-border: rgba(255, 255, 255, 0.18); --tt-shadow: rgba(37, 99, 235, 0.4); }
+[data-theme="dark-yellow"] .occ-tooltip { --tt-bg: linear-gradient(135deg, #b45309, #d97706 50%, #f59e0b); --tt-fg: #1c1408; --tt-border: rgba(255, 255, 255, 0.18); --tt-shadow: rgba(217, 119, 6, 0.4); }
+[data-theme="dark-maroon"] .occ-tooltip { --tt-bg: linear-gradient(135deg, #7f1d2e, #9f1239 50%, #dc2626); --tt-fg: #fff; --tt-border: rgba(255, 255, 255, 0.18); --tt-shadow: rgba(159, 18, 57, 0.45); }

@@ -176,6 +176,7 @@ class LogbookValidator
         $out = [];
         $ids = [];
         $ranges = []; // date => [[start, end, label], ...]
+        $today = \Illuminate\Support\Carbon::now(config('occ.timezone', 'Asia/Manila'))->format('Y-m-d'); // the app's "today", not the browser's
         foreach ($list as $i => $e) {
             $p = "value.entries.$i";
             if (! is_array($e)) {
@@ -198,6 +199,10 @@ class LogbookValidator
             $dt = is_string($date) ? \DateTimeImmutable::createFromFormat('!Y-m-d', $date) : false;
             if (! $dt || $dt->format('Y-m-d') !== $date || $date < '2000-01-01' || $date > '2100-12-31') {
                 $this->fail("$p.date", 'Please pick a valid date.');
+                continue;
+            }
+            if ($date > $today) {
+                $this->fail("$p.date", "Entries can't be dated in the future (today is $today).");
                 continue;
             }
 

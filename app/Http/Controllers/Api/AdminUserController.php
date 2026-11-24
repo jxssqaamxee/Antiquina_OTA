@@ -4,7 +4,13 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\Academic\AccountStatusService;
 use App\Services\Academic\ActivityLogService;
+use App\Services\Auth\SessionLogin;
+use App\Support\SecurityLog;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\ValidationException;
 use App\Support\Formats;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -28,6 +34,7 @@ class AdminUserController extends Controller
             'name' => $u->fullName(),
             'login_id' => $u->student_id ?: $u->admin_id,
             'email' => $u->email,
+            'is_active' => $u->isActive(),
         ];
     }
 
@@ -47,7 +54,7 @@ class AdminUserController extends Controller
         return response()->json(['users' => $users->map(fn (User $u) => $this->present($u))->values()]);
     }
 
-    public function update(Request $request, User $user, ActivityLogService $log): JsonResponse
+    public function update(Request $request, User $user, ActivityLogService $log, SessionLogin $sessions): JsonResponse
     {
         $request->merge([
             'first_name' => Formats::squish($request->input('first_name')),
@@ -75,11 +82,81 @@ class AdminUserController extends Controller
             'email' => $data['email'],
         ];
         $changed = array_keys(array_filter($new, fn ($v, $k) => $user->{$k} !== $v, ARRAY_FILTER_USE_BOTH));
+        $emailChanged = in_array('email', $changed, true);
+        $oldEmail = $user->email;
+
+        // Rewriting someone's email is the first step of an account takeover (with "forgot password"),
+        // so it needs the acting administrator's own current password.
+        if ($emailChanged) {
+            $actor = $request->user();
+            if (! Hash::check((string) $request->input('admin_password', ''), (string) $actor->password)) {
+                SecurityLog::failure('admin_email_change_bad_password', ['target_id' => $user->id]);
+                throw ValidationException::withMessages(['admin_password' => 'Enter your own current password to change an email address.']);
+            }
+        }
 
         if ($changed) {
-            $user->update($new);
-            $log->record($request->user(), 'user.updated', 'user', $user->id, null, ['fields' => $changed]);
+            $old = [];
+            foreach ($changed as $f) {
+                $old[$f] = $user->{$f};
+            }
+            DB::transaction(function () use ($user, $new, $emailChanged, $log, $request, $changed, $old) {
+                $user->fill($new);
+                if ($emailChanged) {
+                    $user->email_verified_at = null; // the new address must prove it is theirs
+                }
+                $user->save();
+                $log->record($request->user(), 'user.updated', 'user', $user->id, null, [
+                    'fields' => $changed,
+                    'old' => $old,
+                    'new' => array_intersect_key($new, $old),
+                ]);
+            });
+
+            if ($emailChanged) {
+                // Whoever holds a session (or a reset link sent to the old address) loses it now.
+                $keep = $user->id === $request->user()->id ? $request->session()->getId() : null;
+                $sessions->revokeOthers($user, $keep);
+                if ($keep === null) {
+                    $user->pushSubscriptions()->delete();
+                }
+                DB::table(config('auth.passwords.users.table', 'password_reset_tokens'))->where('email', $oldEmail)->delete();
+                \App\Mail\EmailChangedMail::notifyOld($user->first_name ?: $user->fullName(), $oldEmail, $user->email);
+                \App\Http\Controllers\Api\EmailVerificationController::send($user);
+            }
         }
+
+        return response()->json(['user' => $this->present($user->fresh())]);
+    }
+
+    public function deactivate(Request $request, User $user, AccountStatusService $status): JsonResponse
+    {
+        $data = $request->validate(['reason' => ['required', 'string', 'min:3', 'max:255']]);
+        $status->deactivate($request->user(), $user, trim($data['reason']));
+
+        return response()->json(['user' => $this->present($user->fresh())]);
+    }
+
+    public function reactivate(Request $request, User $user, AccountStatusService $status): JsonResponse
+    {
+        $data = $request->validate(['reason' => ['required', 'string', 'min:3', 'max:255']]);
+        $status->reactivate($request->user(), $user, trim($data['reason']));
+
+        return response()->json(['user' => $this->present($user->fresh())]);
+    }
+
+    /** Lost phone and no recovery codes: an administrator clears another staff account's two-factor (own password needed). */
+    public function resetTwoFactor(Request $request, User $user, ActivityLogService $log, SessionLogin $sessions, \App\Services\Auth\TwoFactorService $tf): JsonResponse
+    {
+        abort_if($user->id === $request->user()->id, 422, 'Use your own settings to change your two-factor.');
+        abort_unless($user->hasAdminAccess() && $user->hasTwoFactor(), 409, 'That account has no two-factor to reset.');
+        if (! Hash::check((string) $request->input('admin_password', ''), (string) $request->user()->password)) {
+            SecurityLog::failure('admin_2fa_reset_bad_password', ['target_id' => $user->id]);
+            throw ValidationException::withMessages(['admin_password' => 'Enter your own current password to reset two-factor.']);
+        }
+        $tf->disable($user);
+        $sessions->revokeAll($user);
+        $log->record($request->user(), 'two_factor.reset_by_admin', 'user', $user->id);
 
         return response()->json(['user' => $this->present($user->fresh())]);
     }

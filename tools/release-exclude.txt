@@ -1,0 +1,20 @@
+# Files that must never go into a release zip or a public repo.
+# Use:  zip -r occdl-release.zip . -x@tools/release-exclude.txt
+# (public/build must stay IN the zip: it is the compiled frontend.)
+.env
+.envpro.txt
+.env.local
+.env.production
+.env.backup
+.phpunit.result.cache
+vendor/*
+node_modules/*
+storage/app/private/*
+storage/app/public/*
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/views/*
+storage/framework/testing/*
+storage/logs/*
+bootstrap/cache/*.php
+database/*.sqlite

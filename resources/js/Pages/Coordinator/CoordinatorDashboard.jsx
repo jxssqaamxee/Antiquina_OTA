@@ -1,14 +1,16 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Radio, LayoutDashboard, Users, ClipboardCheck, FileBarChart, Megaphone, ShieldCheck, Upload } from "lucide-react";
+import { Radio, LayoutDashboard, Users, ClipboardCheck, FileBarChart, Megaphone, ShieldCheck, Upload, UserCheck } from "lucide-react";
 import AdminShell, { StatCard } from "../../Components/admin/AdminShell";
 import { Btn, Card, Check, Chip, Field, Input, Notice, Row, Select, Table, statusTone, useAction } from "../../Components/admin/ui";
 import { OverviewDashboard, OverviewSkeleton } from "../../Components/admin/Dashboard";
 import { LiveDutyPanel } from "../../Components/admin/LiveDuty";
+import RegistrationsPanel from "../../Components/admin/RegistrationsPanel";
 import { AnnouncementsPanel, AuditPanel, ReportsPanel, RosterPanel } from "../../Components/admin/panels";
 import { coordinatorService as svc } from "../../services/coordinatorService";
 import { errorMessage } from "../../config/axiosConfig";
 import usePersistedTab from "../../hooks/usePersistedTab";
 import usePersistedState from "../../hooks/usePersistedState";
+import { usePopup } from "../../context/PopupContext";
 
 function useLoad(fn) {
   const [data, setData] = useState(null);
@@ -21,10 +23,19 @@ function useLoad(fn) {
 /** Approve (optionally with verified hours) or reject (reason required) one submitted entry. */
 function ReviewButtons({ entry, onDone, run, busy }) {
   const [hrs, setHrs] = useState("");
+  const popup = usePopup();
   const approve = async () => { if (await run(() => svc.approve(entry.id, hrs), "Entry approved.")) onDone(); };
   const reject = async () => {
-    const reason = window.prompt("Reason for rejecting (the trainee will see this):");
-    if (reason && reason.trim().length >= 3 && await run(() => svc.reject(entry.id, reason.trim()), "Entry rejected.")) onDone();
+    const reason = await popup.prompt({
+      title: "Reject this entry?",
+      message: "Tell the trainee why. They will see this reason.",
+      placeholder: "e.g. Time-out doesn't match the attendance sheet",
+      okLabel: "Reject entry",
+      required: true,
+      minLength: 3,
+      danger: true,
+    });
+    if (reason && await run(() => svc.reject(entry.id, reason), "Entry rejected.")) onDone();
   };
   return (
     <Row>
@@ -132,6 +143,7 @@ const NAV = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "live", label: "Live duty", icon: Radio },
   { key: "trainees", label: "Trainees", icon: Users },
+  { key: "registrations", label: "Registrations", icon: UserCheck },
   { key: "roster", label: "Import roster", icon: Upload },
   { key: "approvals", label: "Logbook approvals", short: "Approvals", icon: ClipboardCheck },
   { key: "reports", label: "Reports", icon: FileBarChart },
@@ -152,6 +164,7 @@ export default function CoordinatorDashboard() {
       {tab === "dashboard" && (data ? <OverviewDashboard data={data} scope="coordinator" go={setTab} liveFetcher={svc.live} /> : !error && <OverviewSkeleton />)}
       {tab === "live" && <LiveDutyPanel fetcher={svc.live} />}
       {tab === "trainees" && <Trainees />}
+      {tab === "registrations" && <RegistrationsPanel svc={svc} />}
       {tab === "roster" && <RosterPanel svc={svc} scope="coord" />}
       {tab === "approvals" && <Approvals />}
       {tab === "reports" && <ReportsPanel svc={svc} scope="coord" />}

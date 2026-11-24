@@ -9,6 +9,7 @@ export const loaders = {
   announcements: () => import("../Pages/Announcements/AnnouncementsPage"),
   profile: () => import("../Pages/Profile/ProfilePage"),
   verify: () => import("../Pages/Auth/VerifyEmailPage"),
+  pending: () => import("../Pages/Auth/PendingApprovalPage"),
   adminLogin: () => import("../Pages/Auth/AdminLoginPage"),
   admin: () => import("../Pages/Admin/AdminDashboard"),
   coordinator: () => import("../Pages/Coordinator/CoordinatorDashboard"),

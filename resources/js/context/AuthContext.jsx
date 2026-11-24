@@ -1,17 +1,29 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import api, { setSignedIn } from "../config/axiosConfig";
 import { KEYS, EVENTS } from "../config/constant";
-import { hydrate, releaseUser, stopSync } from "../utils/sync";
+import { hydrate, releaseUser, stopSync, unsyncedCount } from "../utils/sync";
+import { showToast } from "../utils/eventBus";
 import { setTheme } from "../utils/theme";
 import { clearPhotoCache, preloadPhoto } from "../utils/imageCache";
 import { forgetThisDevice, getInstallId } from "../utils/push";
-import { isTrainee } from "../utils/roles";
+import { isBlockedByApproval, isTrainee } from "../utils/roles";
 
 const AuthContext = createContext(null);
 
 // A cached copy of the profile lets an installed PWA open (and keep logging
 // hours) with no connection; it is refreshed from /api/me whenever online.
 const ME_CACHE = KEYS.me;
+// Unsynced work is KEPT on the device (deleting it would lose hours), but the person must be told, because on a
+// shared phone it stays until that same account signs in again.
+const warnUnsynced = (userId, why) => {
+  const n = unsyncedCount(userId);
+  if (n > 0) {
+    showToast({
+      type: "warning", key: "unsynced-on-exit", duration: 12000, title: "Not saved to your account yet",
+      message: `${why} Some logbook changes are saved only on this device. Sign in again with your own account to save them. Do not leave them on a shared phone.`,
+    });
+  }
+};
 const readMe = () => { try { return JSON.parse(localStorage.getItem(ME_CACHE)); } catch { return null; } };
 const writeMe = (u) => { try { u ? localStorage.setItem(ME_CACHE, JSON.stringify(u)) : localStorage.removeItem(ME_CACHE); } catch { /* ignore */ } };
 
@@ -40,7 +52,7 @@ export function AuthProvider({ children }) {
   // for it), so its documents are pulled the moment it becomes verified (updateUser).
   const establish = useCallback(async (u) => {
     // Only trainees have a logbook to pull; Admin / Coordinator accounts have no /sync (403).
-    if (u.email_verified !== false && isTrainee(u)) await hydrate(u.sub);
+    if (u.email_verified !== false && !isBlockedByApproval(u) && isTrainee(u)) await hydrate(u.sub);
     if (u.theme) setTheme(u.theme); // colour theme saved on the account wins over this device's
     writeMe(u);
     preloadPhoto(u.picture); // warm the avatar cache so every screen shows it at once (no await)
@@ -80,7 +92,7 @@ export function AuthProvider({ children }) {
 
   // Session expired / ended on the server while the app was open.
   useEffect(() => {
-    const onUnauthorized = () => { stopSync(); setUser(null); writeMe(null); clearPhotoCache(); };
+    const onUnauthorized = () => { warnUnsynced(userRef.current?.sub, "Your session ended."); stopSync(); setUser(null); writeMe(null); clearPhotoCache(); };
     window.addEventListener(EVENTS.unauthorized, onUnauthorized);
     return () => window.removeEventListener(EVENTS.unauthorized, onUnauthorized);
   }, []);
@@ -133,6 +145,7 @@ export function AuthProvider({ children }) {
       try { await api.post("/auth/logout", { install_id: getInstallId() || undefined }, { timeout: 8000 }); ended = true; }
       catch (e) { if (e.response && (e.response.status === 401 || e.response.status === 419)) ended = true; /* already gone */ }
     }
+    if (current) warnUnsynced(current.sub, "You signed out, but the server could not be reached.");
     stopSync();
     setSignedIn(false);
     writeMe(null);
@@ -141,7 +154,10 @@ export function AuthProvider({ children }) {
   }, []);
 
   const updateUser = useCallback(async (u) => {
-    const justVerified = userRef.current?.email_verified === false && u.email_verified !== false;
+    const was = userRef.current;
+    // The logbook opens (and its documents are pulled) once the account is verified AND approved.
+    const ready = (x) => !!x && x.email_verified !== false && !isBlockedByApproval(x);
+    const justVerified = !ready(was) && ready(u);
     if (justVerified && isTrainee(u)) await hydrate(u.sub);
     writeMe(u);
     preloadPhoto(u.picture); // a new upload gets a new address: load it before the avatar asks

@@ -1,7 +1,7 @@
 import React from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import { SETUP_PATH, homePath, loginPathFor, needsSetup, roleOf } from "../../utils/roles";
+import { PENDING_PATH, SETUP_PATH, homePath, isBlockedByApproval, loginPathFor, needsSetup, roleOf } from "../../utils/roles";
 import Splash from "./Splash";
 
 /**
@@ -18,6 +18,7 @@ export default function ProtectedRoute({ children, roles = ["trainee"] }) {
   if (loading) return <Splash />;
   if (!isAuthenticated) return <Navigate to={loginPathFor(location.pathname)} replace state={{ from: location.pathname }} />;
   if (user?.email_verified === false) return <Navigate to="/verify-email" replace />;
+  if (isBlockedByApproval(user)) return <Navigate to={PENDING_PATH} replace />;
   if (!roles.includes(roleOf(user))) return <Navigate to={homePath(user)} replace />;
   // First sign-in of an Admin / Coordinator: only the setup page is reachable until it is done.
   if (needsSetup(user) && location.pathname !== SETUP_PATH) return <Navigate to={SETUP_PATH} replace />;
@@ -31,6 +32,16 @@ export function UnverifiedRoute({ children }) {
   if (loading) return <Splash />;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   if (user?.email_verified !== false) return <Navigate to={homePath(user)} replace />;
+  return children;
+}
+
+/** The waiting screen: signed in, email verified, registration not approved yet. Everyone else has nothing to do here. */
+export function PendingRoute({ children }) {
+  const { loading, isAuthenticated, user } = useAuth();
+  if (loading) return <Splash />;
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (user?.email_verified === false) return <Navigate to="/verify-email" replace />;
+  if (!isBlockedByApproval(user)) return <Navigate to={homePath(user)} replace />;
   return children;
 }
 

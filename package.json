@@ -6,6 +6,7 @@
     "type": "module",
     "scripts": {
         "build": "vite build",
+        "test": "node tests/js/sync.test.mjs resources/js/utils/sync.js && node tests/js/imageCache.test.mjs",
         "dev": "vite"
     },
     "dependencies": {
@@ -13,6 +14,7 @@
         "jspdf": "^4.2.1",
         "jspdf-autotable": "^5.0.9",
         "lucide-react": "^1.73.0",
+        "qrcode": "^1.5.4",
         "react": "^19.3.1",
         "react-dom": "^19.3.1",
         "react-router-dom": "^7.18.5"

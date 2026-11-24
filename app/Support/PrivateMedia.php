@@ -18,10 +18,22 @@ class PrivateMedia
     /** Only these folders can ever be served. */
     public const DIRECTORIES = ['profile-pictures'];
 
+    /**
+     * Cache-buster for a stored photo. Every upload gets a new random file name, so this value changes
+     * exactly when the picture changes. Anything that serves a photo with a long browser cache
+     * (see MediaController::image) MUST put this in its address, or a replaced photo would never refresh.
+     */
+    public static function version(?string $path): ?string
+    {
+        return self::split($path) ? substr(sha1((string) $path), 0, 16) : null;
+    }
+
     /** URL the app puts in <img src> for the OWNER's stored path, or null. */
     public static function url(?string $path): ?string
     {
-        return self::split($path) ? '/api/me/photo?v='.substr(sha1((string) $path), 0, 16) : null;
+        $v = self::version($path);
+
+        return $v ? '/api/me/photo?v='.$v : null;
     }
 
     /**

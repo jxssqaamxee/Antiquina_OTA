@@ -4,6 +4,7 @@ import { toastBus } from "../utils/eventBus";
 import { useAppTheme } from "../hooks/useAppTheme";
 import "../Components/shared/Toast.css";
 
+import Tooltip from "../Components/shared/Tooltip";
 // Toasts are for RESULTS ("Entry added"). Hints belong inline next to the
 // field, and one-off explanations belong in a popup (see PopupContext).
 // This is the sclf_APP toast plus the anti-spam rules OCC needs:
@@ -186,9 +187,9 @@ export function ToastProvider({ children }) {
                 {t.title && <div className="occ-toast-title">{t.title}</div>}
                 <div className="occ-toast-message">{t.message}</div>
               </div>
-              <button type="button" className="occ-toast-close" onClick={() => dismiss(t.id)} aria-label="Dismiss notification">
+              <Tooltip label={"Dismiss notification"}><button type="button" className="occ-toast-close" onClick={() => dismiss(t.id)} aria-label="Dismiss notification">
                 <X size={14} />
-              </button>
+              </button></Tooltip>
             </div>
           );
         })}

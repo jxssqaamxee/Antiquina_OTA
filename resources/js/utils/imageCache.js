@@ -10,22 +10,35 @@
 //     sign-out and when the session ends (clearPhotoCache), and the service worker itself
 //     never caches /api/*.
 //
+//  3. REVIEW photos: the registration photo an Admin / Coordinator checks before approving
+//     (GET /api/{admin|coordinator}/registrations/{id}/photo) goes through the same private
+//     cache, so "View" opens at once and a reviewed list is preloaded while the staff member
+//     reads it. syncPhotoSet() drops the ones that are no longer pending.
+//
 //  A photo that answers 404 is remembered for the rest of the page, so a missing file costs
 //  one request, not one per avatar on screen.
 
 const PHOTO_CACHE = "occ-private-photos-v1";
 const PRIVATE_PREFIX = "/api/me/photo";
+const REVIEW_PHOTO = /^\/api\/(admin|coordinator)\/registrations\/\d+\/photo/;
 
 const keep = new Set();        // decoded <img> objects (stops them being garbage-collected early)
 const blobUrls = new Map();    // photo url -> blob: url
 const missing = new Set();     // photo urls the server said do not exist
 const inflight = new Map();    // photo url -> Promise<string|null>
 
-/** True for the signed-in owner's own photo address. */
-export const isPrivatePhotoUrl = (url) => typeof url === "string" && url.startsWith(PRIVATE_PREFIX);
+const isOwnerPhotoUrl = (url) => typeof url === "string" && url.startsWith(PRIVATE_PREFIX);
+const isReviewPhotoUrl = (url) => typeof url === "string" && REVIEW_PHOTO.test(url);
 
-/** Starts loading + decoding static images (hashed build URLs). Safe to call repeatedly. */
-export function preloadImages(urls) {
+/** True for a private photo address: the owner's own photo, or a registration photo being reviewed. */
+export const isPrivatePhotoUrl = (url) => isOwnerPhotoUrl(url) || isReviewPhotoUrl(url);
+
+/**
+ * Starts loading + decoding static images (hashed build URLs). Safe to call repeatedly.
+ * `{ late: true }` is for images no screen needs at first paint (developer photo, QR): they wait
+ * until the page has finished loading, so they never compete with the screen being opened.
+ */
+export function preloadImages(urls, { late = false } = {}) {
   if (typeof Image === "undefined") return;
   const run = () => {
     for (const url of urls) {
@@ -38,8 +51,15 @@ export function preloadImages(urls) {
     }
   };
   // Never compete with the first paint: wait for an idle moment (or 300 ms at most).
-  if (typeof requestIdleCallback === "function") requestIdleCallback(run, { timeout: 300 });
-  else setTimeout(run, 0);
+  const schedule = () => {
+    if (typeof requestIdleCallback === "function") requestIdleCallback(run, { timeout: late ? 4000 : 300 });
+    else setTimeout(run, late ? 1500 : 0);
+  };
+  if (late && typeof document !== "undefined" && document.readyState !== "complete") {
+    window.addEventListener("load", schedule, { once: true });
+  } else {
+    schedule();
+  }
 }
 
 /** The photo's in-memory blob: url if it was already preloaded, else null. */
@@ -59,12 +79,39 @@ async function writeCached(url, response) {
     const c = cacheApi();
     if (!c) return;
     const cache = await c.open(PHOTO_CACHE);
-    // One account's photo at a time: older versions (the ?v= changed) are dropped.
-    for (const req of await cache.keys()) {
-      if (new URL(req.url).pathname + new URL(req.url).search !== url) await cache.delete(req);
+    // One owner photo at a time: older versions (the ?v= changed) are dropped.
+    // Review photos are one per registration, so they are never pruned here (see syncPhotoSet).
+    if (isOwnerPhotoUrl(url)) {
+      for (const req of await cache.keys()) {
+        const key = new URL(req.url).pathname + new URL(req.url).search;
+        if (isOwnerPhotoUrl(key) && key !== url) await cache.delete(req);
+      }
     }
     await cache.put(url, response);
   } catch { /* storage full / blocked: the in-memory copy still works */ }
+}
+
+// A download that fails for a passing reason (server busy or restarting, a dropped connection) is
+// retried a few times with a growing pause, as the sclf_APP avatar loader does, instead of giving up
+// on the first hiccup. A real answer (404 no photo, 401/403 not allowed) and being offline are final.
+export const RETRY_DELAYS = [0, 700, 1800]; // ms before each attempt
+const retryable = (status) => status >= 500 || status === 408 || status === 429;
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function download(url, delays = RETRY_DELAYS) {
+  for (const delay of delays) {
+    if (delay) {
+      if (typeof navigator !== "undefined" && navigator.onLine === false) return null; // offline: retrying is pointless
+      await sleep(delay);
+    }
+    try {
+      const res = await fetch(url, { credentials: "same-origin", headers: { Accept: "image/*" }, cache: delay ? "reload" : "default" });
+      if (res.status === 404) { missing.add(url); return null; }
+      if (res.ok) return res;
+      if (!retryable(res.status)) return null;
+    } catch { /* network error: try again */ }
+  }
+  return null;
 }
 
 /**
@@ -80,9 +127,8 @@ export function preloadPhoto(url) {
     try {
       let res = await readCached(url);
       if (!res) {
-        res = await fetch(url, { credentials: "same-origin", headers: { Accept: "image/*" } });
-        if (res.status === 404) { missing.add(url); return null; }
-        if (!res.ok) return null;                          // 401 / 5xx / offline: try again later
+        res = await download(url);
+        if (!res) return null;                             // 404 / 401 / still failing / offline: try again later
         writeCached(url, res.clone());
       }
       const blob = await res.blob();
@@ -101,6 +147,41 @@ export function preloadPhoto(url) {
 
   inflight.set(url, job);
   return job;
+}
+
+/** Preloads a list of private photos one after another (idle time, at most `max`). */
+export function preloadPhotos(urls, max = 20) {
+  const list = [...new Set((urls || []).filter(isPrivatePhotoUrl))].slice(0, max);
+  if (!list.length) return;
+  const run = async () => { for (const u of list) await preloadPhoto(u); };
+  if (typeof requestIdleCallback === "function") requestIdleCallback(run, { timeout: 500 });
+  else setTimeout(run, 0);
+}
+
+/**
+ * Keeps only the review photos still on screen: a registration that was approved, rejected or
+ * removed no longer needs its photo kept on this device.
+ */
+export function syncPhotoSet(urls) {
+  const keepSet = new Set(urls || []);
+  for (const [u, objectUrl] of [...blobUrls]) {
+    if (isReviewPhotoUrl(u) && !keepSet.has(u)) {
+      try { URL.revokeObjectURL(objectUrl); } catch { /* ignore */ }
+      blobUrls.delete(u);
+    }
+  }
+  for (const u of [...missing]) if (isReviewPhotoUrl(u) && !keepSet.has(u)) missing.delete(u);
+  (async () => {
+    try {
+      const c = cacheApi();
+      if (!c) return;
+      const cache = await c.open(PHOTO_CACHE);
+      for (const req of await cache.keys()) {
+        const key = new URL(req.url).pathname + new URL(req.url).search;
+        if (isReviewPhotoUrl(key) && !keepSet.has(key)) await cache.delete(req);
+      }
+    } catch { /* storage blocked: nothing to prune */ }
+  })();
 }
 
 /** Sign-out / session end: forget the photo everywhere (shared phones). */

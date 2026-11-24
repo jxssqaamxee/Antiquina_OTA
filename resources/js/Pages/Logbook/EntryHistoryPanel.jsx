@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { Search, ArrowUpDown } from "lucide-react";
 import EntryCard from "../../Components/logbook/EntryCard";
 import logo from "../../assets/images/site-logo.png";
+import Tooltip from "../../Components/shared/Tooltip";
 import {
   formatHours,
   formatDateLong,
@@ -94,9 +95,9 @@ export default function EntryHistoryPanel({ entries, clients, now = new Date(), 
               {m.id === "all" && <Search size={14} />}{m.label}
             </button>
           ))}
-          <button type="button" className="chip" onClick={() => setSortOrder((o) => (o === "asc" ? "desc" : "asc"))} aria-label="Toggle chronological order">
+          <Tooltip label={"Toggle chronological order"}><button type="button" className="chip" onClick={() => setSortOrder((o) => (o === "asc" ? "desc" : "asc"))} aria-label="Toggle chronological order">
             <ArrowUpDown size={14} /> {sortOrder === "asc" ? "Oldest first" : "Newest first"}
-          </button>
+          </button></Tooltip>
         </div>
 
         {filterMode === "day" && (

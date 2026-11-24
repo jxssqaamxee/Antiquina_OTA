@@ -34,6 +34,13 @@
         <env name="INITIAL_ADMIN_EMAIL" value=""/>
         <env name="INITIAL_ADMIN_PASSWORD" value=""/>
         <env name="INITIAL_ADMIN_ID" value=""/>
+        <!-- Pin the OCC switches so a .env copied from .env.example cannot change test outcomes. -->
+        <env name="OCC_FORCE_HTTPS" value="false"/>
+        <env name="OCC_CSP_ENFORCE" value="false"/>
+        <env name="OCC_ROSTER_ENFORCE" value="false"/>
+        <env name="OCC_REGISTRATION_APPROVAL" value="false"/>
+        <env name="OCC_2FA_REQUIRED" value="false"/>
+        <env name="OCC_TRUSTED_PROXIES" value=""/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>

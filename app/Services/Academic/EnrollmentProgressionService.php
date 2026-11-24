@@ -56,6 +56,7 @@ class EnrollmentProgressionService
                     continue;
                 }
                 $kind = $item['kind'];
+                $this->assertEligible($e, $target, $kind, $i);
                 $new = null;
                 if ($kind !== 'complete') {
                     $section = Section::find($item['section_id'] ?? 0);
@@ -84,6 +85,27 @@ class EnrollmentProgressionService
         });
 
         return ['confirmed' => $done, 'skipped' => $skipped];
+    }
+
+    /**
+     * Server-side twin of prepare(): the same rows, and only the decisions that make sense for them. A forged
+     * or stale request can name any enrollment id, so the screen's filtering cannot be trusted. Any violation
+     * aborts the whole batch (nothing is written).
+     */
+    private function assertEligible(StudentEnrollment $e, AcademicYear $target, string $kind, int|string $i): void
+    {
+        $listed = $e->academic_year_id !== $target->id
+            && in_array($e->status, [StudentEnrollment::ACTIVE, StudentEnrollment::REPEATING], true)
+            && $e->year_level !== null;
+        $sensible = match ($kind) {
+            'promote' => $e->status === StudentEnrollment::ACTIVE && $e->year_level < self::FINAL_YEAR,
+            'repeat' => true,
+            'complete' => $e->year_level >= self::FINAL_YEAR,
+            default => false,
+        };
+        if (! $listed || ! $sensible) {
+            throw ValidationException::withMessages(["items.$i.enrollment_id" => 'This enrollment cannot be moved that way (it is not in the rollover list, or the decision does not fit its year level / status).']);
+        }
     }
 
     /** Admin-only course/section transfer. The previous enrollment is kept, closed as `transferred`. */

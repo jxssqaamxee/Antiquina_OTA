@@ -15,6 +15,7 @@ const LogbookPage = lazy(loaders.logbook);
 const ProfilePage = lazy(loaders.profile);
 const AnnouncementsPage = lazy(loaders.announcements);
 const VerifyEmailPage = lazy(loaders.verify);
+const PendingApprovalPage = lazy(loaders.pending);
 const AdminLoginPage = lazy(loaders.adminLogin);
 const AdminDashboard = lazy(loaders.admin);
 const CoordinatorDashboard = lazy(loaders.coordinator);
@@ -36,6 +37,10 @@ export const guestRoutes = [
 // Signed in but email not verified yet (see UnverifiedRoute).
 export const unverifiedRoutes = [
   { path: "/verify-email", component: VerifyEmailPage },
+];
+// Verified but waiting for a coordinator / admin to approve the registration (see PendingRoute).
+export const pendingRoutes = [
+  { path: "/pending-approval", component: PendingApprovalPage },
 ];
 export const protectedRoutes = [
   { path: "/logbook", component: LogbookPage },

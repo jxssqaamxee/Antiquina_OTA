@@ -16,6 +16,10 @@ class User extends Authenticatable implements MustVerifyEmail
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
+    public const APPROVAL_PENDING = 'pending';
+    public const APPROVAL_APPROVED = 'approved';
+    public const APPROVAL_REJECTED = 'rejected';
+
     public const ROLE_ADMIN = 'admin';
     public const ROLE_COORDINATOR = 'coordinator';
     public const ROLE_TRAINEE = 'trainee';
@@ -33,7 +37,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'course', 'password', 'profile_photo', 'email_verified_at',
     ];
 
-    protected $hidden = ['password', 'remember_token'];
+    protected $hidden = ['password', 'remember_token', 'two_factor_secret', 'two_factor_recovery_codes'];
 
     protected function casts(): array
     {
@@ -43,6 +47,9 @@ class User extends Authenticatable implements MustVerifyEmail
             'is_active' => 'boolean',
             'must_change_password' => 'boolean',
             'deactivated_at' => 'datetime',
+            'two_factor_secret' => 'encrypted',
+            'two_factor_recovery_codes' => 'encrypted:array',
+            'two_factor_confirmed_at' => 'datetime',
         ];
     }
 
@@ -77,6 +84,12 @@ class User extends Authenticatable implements MustVerifyEmail
         return in_array($this->roleName(), self::ADMIN_ACCESS_ROLES, true);
     }
 
+    /** Only "pending" and "rejected" block; a row without the column yet counts as approved. */
+    public function isApproved(): bool
+    {
+        return ! in_array($this->approval_status, [self::APPROVAL_PENDING, self::APPROVAL_REJECTED], true);
+    }
+
     /** Only an explicit false deactivates (a row without the column yet counts as active). */
     public function isActive(): bool
     {
@@ -93,6 +106,12 @@ class User extends Authenticatable implements MustVerifyEmail
     public function reactivate(): void
     {
         $this->forceFill(['is_active' => true, 'deactivated_at' => null])->save();
+    }
+
+    /** Two-factor is ON only after the first code was confirmed. */
+    public function hasTwoFactor(): bool
+    {
+        return $this->two_factor_secret !== null && $this->two_factor_confirmed_at !== null;
     }
 
     public function enrollments(): HasMany
@@ -187,6 +206,11 @@ class User extends Authenticatable implements MustVerifyEmail
             'theme' => $this->settings?->theme,
             // The React app sends unverified accounts to /verify-email.
             'email_verified' => $this->hasVerifiedEmail(),
+            // pending / approved / rejected: the app shows a waiting screen while pending.
+            'approval_status' => $this->approval_status ?? self::APPROVAL_APPROVED,
+            // Staff two-factor: the app sends staff without it to the enrolment screen when it is required.
+            'two_factor_enabled' => $this->hasTwoFactor(),
+            'two_factor_required' => $this->hasAdminAccess() && (bool) config('occ.two_factor_required'),
         ];
     }
 

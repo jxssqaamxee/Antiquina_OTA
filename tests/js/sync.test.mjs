@@ -186,4 +186,15 @@ await t("403 role_forbidden (admin account) pauses the same way", async () => {
   assert.equal(calls.filter((c) => c[0] === "put").length, 1);
 });
 
+await t("unsyncedCount reports documents still only on the device, and drops to 0 once pushed", async () => {
+  assert.equal(sync.unsyncedCount(U), 0);
+  assert.equal(sync.unsyncedCount(null), 0);
+  mock.put = async () => { throw err(500, {}); };
+  edit({ a: "offline edit" }); await sync.flush(U);
+  assert.equal(sync.unsyncedCount(U), 1);
+  mock.put = async () => ({ data: { ok: true, revision: 9 } });
+  await sync.flush(U);
+  assert.equal(sync.unsyncedCount(U), 0);
+});
+
 console.log(`\n${n} scenarios passed`); fs.rmSync(dir, { recursive: true, force: true }); process.exit(process.exitCode || 0);

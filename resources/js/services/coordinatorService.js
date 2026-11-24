@@ -34,6 +34,11 @@ export const coordinatorService = {
   activityFiltered: (action) => d(api.get("/coordinator/activity", { params: action ? { action } : {} })),
   report: (params) => d(api.get("/coordinator/reports/trainees", { params })),
   reportCsvUrl: (params) => `/api/coordinator/reports/trainees.csv${params && Object.keys(params).length ? "?" + new URLSearchParams(params) : ""}`,
+  // Pending self-registrations (the server limits a coordinator to their own section).
+  registrations: () => d(api.get("/coordinator/registrations")),
+  approveRegistration: (id) => d(api.post(`/coordinator/registrations/${id}/approve`)),
+  rejectRegistration: (id, reason) => d(api.post(`/coordinator/registrations/${id}/reject`, { reason })),
+  registrationPhotoUrl: (id, v) => `/api/coordinator/registrations/${id}/photo${v ? `?v=${encodeURIComponent(v)}` : ""}`, // v = photo version: a new picture is a new address, so the cache never shows an old one
   announcements: () => d(api.get("/coordinator/announcements")),
   publishAnnouncement: (body) => d(api.post("/coordinator/announcements", body)),
 };

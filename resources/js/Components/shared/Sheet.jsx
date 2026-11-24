@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
+import Tooltip from "./Tooltip";
 // Bottom sheet — dialogs slide up from the bottom edge like a native app
 // (sclf_APP's sheets). On wide screens it becomes a centred card.
 export default function Sheet({ open, onClose, title, children, footer, dismissible = true, footerClass = "", hideClose = false, labelId = "sheet-title" }) {
@@ -23,7 +24,7 @@ export default function Sheet({ open, onClose, title, children, footer, dismissi
           <div className="sheet-head">
             <h2 id={labelId}>{title}</h2>
             {dismissible && !hideClose && (
-              <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><X size={18} /></button>
+              <Tooltip label={"Close"}><button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><X size={18} /></button></Tooltip>
             )}
           </div>
         )}

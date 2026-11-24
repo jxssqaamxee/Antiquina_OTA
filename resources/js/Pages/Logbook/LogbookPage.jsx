@@ -45,6 +45,7 @@ import { clientProblem, traineeNameProblem, targetHoursProblem, filterTraineeNam
 import { COMPANY_TYPES, WEEKDAYS, normalizeClient, isWorkDay, dailyHoursFor, scheduleDaysLabel, defaultsForType, clientCoverage } from "../../utils/schedule";
 import "./logbook.css";
 
+import Tooltip from "../../Components/shared/Tooltip";
 const STORAGE_KEY = "logbook-v2";
 const MILESTONES_KEY = "milestones-v1";
 const REMINDER_KEY = "shift-reminder-v1";
@@ -1243,9 +1244,9 @@ export default function LogbookPage() {
                   <small>{greeting}</small>
                   <b>{firstName}</b>
                 </div>
-                <button type="button" className="hero-edit" onClick={() => setSetupSheet(true)} aria-label="Edit trainee name and required hours">
+                <Tooltip label={"Edit trainee name and required hours"}><button type="button" className="hero-edit" onClick={() => setSetupSheet(true)} aria-label="Edit trainee name and required hours">
                   <Settings2 size={19} />
-                </button>
+                </button></Tooltip>
               </div>
               <div className="hero-body">
                 <ProgressRing percent={scoped ? viewPercent : percent} complete={scoped ? viewPercent >= 100 : complete}>
@@ -1329,7 +1330,7 @@ export default function LogbookPage() {
                         </small>
                       </div>
                       {c.managed ? <div className="client-actions"><span className="badge mute"><Lock size={11} /> Set by school</span></div> : <div className="client-actions">
-                        <button type="button" className="icon-btn sm" onClick={() => startEditClient(c.id)} aria-label={`Edit ${c.name}`}><Pencil size={15} /></button>
+                        <Tooltip label={`Edit ${c.name}`}><button type="button" className="icon-btn sm" onClick={() => startEditClient(c.id)} aria-label={`Edit ${c.name}`}><Pencil size={15} /></button></Tooltip>
                         <button
                           type="button" className="icon-btn sm danger" onClick={() => requestDeleteClient(c.id)}
                           aria-label={inUseCount > 0 ? `${c.name} is used on ${inUseCount} duty log entries and can't be removed` : `Remove ${c.name}`}

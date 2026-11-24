@@ -29,6 +29,8 @@ class SecurityHeaders
         $h = $response->headers;
         $h->set('X-Content-Type-Options', 'nosniff');
         $h->set('X-Frame-Options', 'DENY');
+        // Keeps other sites' windows from holding a reference to this app's window.
+        $h->set('Cross-Origin-Opener-Policy', 'same-origin');
         $h->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=()');
         // The password-reset token lives in the URL path: never leak it through a Referer header.
         $h->set('Referrer-Policy', $request->is('reset-password/*') ? 'no-referrer' : 'strict-origin-when-cross-origin');

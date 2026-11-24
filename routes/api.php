@@ -16,7 +16,9 @@ use App\Http\Controllers\Api\PasswordResetController;
 use App\Http\Controllers\Api\PlacementController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ReportController;
+use App\Http\Controllers\Api\RegistrationApprovalController;
 use App\Http\Controllers\Api\RosterController;
+use App\Http\Controllers\Api\TwoFactorController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\PushController;
 use Illuminate\Support\Facades\Route;
@@ -25,6 +27,8 @@ Route::get('/config', [AuthController::class, 'config']);
 // Open to visitors: answers 200 { user: null } instead of a 401 (see AuthController::session).
 Route::middleware('session.fresh')->get('/session', [AuthController::class, 'session']);
 
+// Finishes a sign-in that answered { two_factor_required, temp_token } (no session exists before this).
+Route::middleware('throttle:10,1')->post('/2fa/login-verify', [TwoFactorController::class, 'verifyLogin']);
 Route::middleware('throttle:10,1')->group(function () {
     Route::post('/auth/login', [AuthController::class, 'login']);
     Route::post('/auth/administrator', [AuthController::class, 'adminLogin']);
@@ -41,7 +45,7 @@ Route::middleware('throttle:30,1')->post('/password/reset-token/check', [Passwor
 
 // Signed in, but the email may still be unverified: /me, logout and the /email/* calls stay
 // open for unverified accounts (see EnsureEmailVerified); everything else needs a verified email.
-Route::middleware(['auth', 'session.fresh', 'active', 'email.verified', 'setup.complete'])->group(function () {
+Route::middleware(['auth', 'session.fresh', 'active', 'email.verified', 'approved', 'setup.complete', 'two_factor'])->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     // Own profile photo: only the signed-in owner's session can open it (no shareable links).
     Route::get('/me/photo', [MediaController::class, 'mine']);
@@ -70,7 +74,16 @@ Route::middleware(['auth', 'session.fresh', 'active', 'email.verified', 'setup.c
     Route::put('/profile/preferences', [ProfileController::class, 'preferences']);
     // First-login setup for an Admin / Coordinator account (photo, name, own password).
     Route::middleware(['role:admin,coordinator', 'throttle:10,1'])->post('/profile/complete-setup', [ProfileController::class, 'completeSetup']);
-    Route::put('/profile/password', [ProfileController::class, 'password']);
+    // Authenticator-app (TOTP) two-factor for Admin / Coordinator accounts (same routes as the SCLF app).
+    Route::middleware('role:admin,coordinator')->prefix('2fa')->group(function () {
+        Route::post('/setup', [TwoFactorController::class, 'setup'])->middleware('throttle:10,1');
+        Route::post('/confirm', [TwoFactorController::class, 'confirm'])->middleware('throttle:10,1');
+        Route::post('/disable', [TwoFactorController::class, 'disable'])->middleware('throttle:5,1');
+        Route::get('/status', [TwoFactorController::class, 'status']);
+        Route::post('/recovery-codes', [TwoFactorController::class, 'regenerateRecoveryCodes'])->middleware('throttle:5,1');
+    });
+    // Each wrong "current password" is a password guess for a stolen session: 5 tries per minute per user + IP.
+    Route::middleware('throttle:5,1')->put('/profile/password', [ProfileController::class, 'password']);
     Route::middleware('throttle:10,1')->group(function () {
         Route::post('/profile/photo', [ProfileController::class, 'photo']);
         Route::delete('/profile/photo', [ProfileController::class, 'destroyPhoto']);
@@ -93,6 +106,12 @@ Route::middleware(['auth', 'session.fresh', 'active', 'email.verified', 'setup.c
 
     // Management areas. Each group is closed to every other role; later phases add the real modules.
     Route::prefix('admin')->middleware('role:admin')->group(function () {
+        // Pending self-registrations (see RegistrationApprovalController).
+        Route::get('/registrations', [RegistrationApprovalController::class, 'index']);
+        Route::get('/registrations/{id}/photo', [RegistrationApprovalController::class, 'registrationPhoto'])->whereNumber('id');
+        Route::middleware('throttle:60,1')->post('/registrations/{id}/approve', [RegistrationApprovalController::class, 'approve'])->whereNumber('id');
+        Route::middleware('throttle:60,1')->post('/registrations/{id}/reject', [RegistrationApprovalController::class, 'reject'])->whereNumber('id');
+        Route::get('/trainees/{id}/photo', [RegistrationApprovalController::class, 'adminTraineePhoto'])->whereNumber('id');
         Route::get('/overview', [AdminDashboardController::class, 'show']);
         Route::get('/live', [AdminDashboardController::class, 'live']);
         // Roster: Student ID + course allowed to register, one list per section (see RosterController).
@@ -126,7 +145,10 @@ Route::middleware(['auth', 'session.fresh', 'active', 'email.verified', 'setup.c
         Route::post('/trainees/{user}/hour-exception', [AdminTrainingController::class, 'setException'])->whereNumber('user');
         // Account details of every user: only the Administrator can change them (Profile Settings is read-only).
         Route::get('/users', [AdminUserController::class, 'index']);
-        Route::put('/users/{user}', [AdminUserController::class, 'update'])->whereNumber('user');
+        Route::middleware('throttle:20,1')->put('/users/{user}', [AdminUserController::class, 'update'])->whereNumber('user');
+        Route::middleware('throttle:30,1')->post('/users/{user}/deactivate', [AdminUserController::class, 'deactivate'])->whereNumber('user');
+        Route::middleware('throttle:10,1')->post('/users/{user}/two-factor/reset', [AdminUserController::class, 'resetTwoFactor'])->whereNumber('user');
+        Route::middleware('throttle:30,1')->post('/users/{user}/reactivate', [AdminUserController::class, 'reactivate'])->whereNumber('user');
         // Phase 3: coordinators.
         Route::get('/coordinators', [AdminCoordinatorController::class, 'index']);
         Route::post('/coordinators', [AdminCoordinatorController::class, 'store']);
@@ -140,6 +162,12 @@ Route::middleware(['auth', 'session.fresh', 'active', 'email.verified', 'setup.c
         Route::middleware('throttle:10,1')->post('/announcements', [ReportController::class, 'publish']);
     });
     Route::prefix('coordinator')->middleware('role:coordinator')->group(function () {
+        // Pending self-registrations (see RegistrationApprovalController).
+        Route::get('/registrations', [RegistrationApprovalController::class, 'index']);
+        Route::get('/registrations/{id}/photo', [RegistrationApprovalController::class, 'registrationPhoto'])->whereNumber('id');
+        Route::middleware('throttle:60,1')->post('/registrations/{id}/approve', [RegistrationApprovalController::class, 'approve'])->whereNumber('id');
+        Route::middleware('throttle:60,1')->post('/registrations/{id}/reject', [RegistrationApprovalController::class, 'reject'])->whereNumber('id');
+        Route::get('/trainees/{id}/photo', [RegistrationApprovalController::class, 'traineePhoto'])->whereNumber('id');
         Route::get('/overview', [CoordinatorDashboardController::class, 'show']);
         Route::get('/live', [CoordinatorDashboardController::class, 'live']);
         // Roster: Student ID + course allowed to register, one list per section (see RosterController).

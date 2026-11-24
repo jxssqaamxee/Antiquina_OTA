@@ -54,7 +54,23 @@ return [
     'force_https' => filter_var(env('OCC_FORCE_HTTPS', false), FILTER_VALIDATE_BOOLEAN),
 
         // true = only Student IDs imported with `php artisan roster:import file.csv` can register.
-    'roster_enforce' => filter_var(env('OCC_ROSTER_ENFORCE', false), FILTER_VALIDATE_BOOLEAN),
+    // Default is ON: an unlisted Student ID cannot register. Turn off only for a throw-away demo.
+    'roster_enforce' => filter_var(env('OCC_ROSTER_ENFORCE', true), FILTER_VALIDATE_BOOLEAN),
+
+    // true = a new self-registered trainee stays "pending" (cannot use the app, is not enrolled) until a
+    // coordinator of the roster's section, or an admin, approves the account.
+    'registration_approval' => filter_var(env('OCC_REGISTRATION_APPROVAL', true), FILTER_VALIDATE_BOOLEAN),
+
+    // true = Admin / Coordinator accounts must enrol an authenticator app (TOTP) before they can use the API.
+    // Keep false until the enrolment screens are in the app; the API for it exists (see TwoFactorController).
+    'two_factor_required' => filter_var(env('OCC_2FA_REQUIRED', false), FILTER_VALIDATE_BOOLEAN),
+
+    // Proxy IPs/CIDRs (comma separated) whose X-Forwarded-* headers are believed. Empty = trust none.
+    // Read by bootstrap/app.php directly from the environment (config is not loaded yet there).
+    'trusted_proxies' => env('OCC_TRUSTED_PROXIES', ''),
+
+    // Only read by occ:preflight so it can fail while the bootstrap password is still configured.
+    'initial_admin_password' => env('INITIAL_ADMIN_PASSWORD'),
 
     'timezone' => env('OCC_TIMEZONE', 'Asia/Manila'),
     // How many minutes before the scheduled time-in / time-out the reminder is sent.

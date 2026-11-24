@@ -13,12 +13,11 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         // Behind a reverse proxy / Cloudflare / Hostinger: trust forwarded headers.
-        // Which proxies may tell us the real client IP / https. '*' = trust the direct sender, which is
-        // only safe when the container is reachable ONLY through your host's proxy. Better: list the
-        // proxy IPs/CIDRs, comma separated, in OCC_TRUSTED_PROXIES (a forged X-Forwarded-For then
-        // cannot dodge the rate limits).
-        $proxies = trim((string) env('OCC_TRUSTED_PROXIES', '*'));
-        $middleware->trustProxies(at: $proxies === '*' ? '*' : array_map('trim', explode(',', $proxies)));
+        // Which proxies may tell us the real client IP / https. Default: none (a forged X-Forwarded-For
+        // cannot dodge the rate limits). Behind a host proxy / CDN list ITS IPs/CIDRs, comma separated,
+        // in OCC_TRUSTED_PROXIES. '*' trusts whoever connects and is rejected by occ:preflight.
+        $proxies = trim((string) env('OCC_TRUSTED_PROXIES', ''));
+        $middleware->trustProxies(at: $proxies === '*' ? '*' : array_values(array_filter(array_map('trim', explode(',', $proxies)))));
         $middleware->append(\App\Http\Middleware\ForceHttps::class);
         $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
 
@@ -32,6 +31,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'session.fresh' => \App\Http\Middleware\EnforceSessionLifetime::class,
             'role' => \App\Http\Middleware\EnsureRole::class,
             'active' => \App\Http\Middleware\EnsureActiveAccount::class,
+            'approved' => \App\Http\Middleware\EnsureApproved::class,
+            'two_factor' => \App\Http\Middleware\EnsureTwoFactorEnrolled::class,
             'setup.complete' => \App\Http\Middleware\EnsureProfileSetupComplete::class,
         ]);
 

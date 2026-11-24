@@ -41,13 +41,25 @@ class Preflight extends Command
         $ok ? $this->row('PASS', $label) : $this->row($level, $label, $failHint);
     }
 
+    /** A real Laravel key: "base64:" + 32 random bytes (AES-256) or exactly 32 raw characters. */
+    private function appKeyIsValid(string $key): bool
+    {
+        if (str_starts_with($key, 'base64:')) {
+            $raw = base64_decode(substr($key, 7), true);
+
+            return $raw !== false && strlen($raw) === 32;
+        }
+
+        return strlen($key) === 32;
+    }
+
     public function handle(): int
     {
         $prod = ! $this->option('local');
         $this->info('OCCDL preflight'.($prod ? ' (production)' : ' (local)'));
 
         $this->line('Application');
-        $this->check(config('app.key') !== null && config('app.key') !== '', 'APP_KEY is set', 'run php artisan key:generate (never change it later: sessions and encrypted data break)');
+        $this->check($this->appKeyIsValid((string) config('app.key')), 'APP_KEY is set', 'missing or not a real key: run php artisan key:generate (never change it later: sessions and encrypted data break)');
         if ($prod) {
             $this->check(config('app.env') === 'production', 'APP_ENV=production', 'set APP_ENV=production');
             $this->check(config('app.debug') === false, 'APP_DEBUG=false', 'debug pages leak secrets; set APP_DEBUG=false');
@@ -55,9 +67,16 @@ class Preflight extends Command
             $this->check((bool) config('occ.force_https'), 'OCC_FORCE_HTTPS=true', 'set OCC_FORCE_HTTPS=true behind HTTPS');
             $this->check((bool) config('occ.csp_enforce'), 'OCC_CSP_ENFORCE=true', 'set OCC_CSP_ENFORCE=true (report-only does not block anything)');
             $this->check((bool) config('session.secure'), 'session cookie is Secure', 'set SESSION_SECURE_COOKIE=true');
-            $proxies = trim((string) env('OCC_TRUSTED_PROXIES', '*'));
-            $this->check($proxies !== '*' && $proxies !== '', 'OCC_TRUSTED_PROXIES is a real list', 'list your proxy IPs/CIDRs; "*" lets anyone forge X-Forwarded-For and dodge rate limits', 'WARN');
+            $this->check((bool) config('occ.roster_enforce'), 'OCC_ROSTER_ENFORCE=true', 'with false anyone can claim any Student ID; set OCC_ROSTER_ENFORCE=true and import the roster');
+            $proxies = trim((string) config('occ.trusted_proxies'));
+            $this->check($proxies !== '*' && $proxies !== '**', 'OCC_TRUSTED_PROXIES is not "*"', 'list your proxy IPs/CIDRs; "*" lets anyone forge X-Forwarded-For and dodge rate limits');
+            if ($proxies === '') {
+                $this->row('WARN', 'OCC_TRUSTED_PROXIES is empty', 'no proxy is trusted: behind a host proxy/CDN every visitor shares one IP and https detection fails; list the proxy IPs');
+            }
+            $this->check(blank(config('occ.initial_admin_password')), 'INITIAL_ADMIN_PASSWORD removed from .env', 'remove INITIAL_ADMIN_PASSWORD (and INITIAL_ADMIN_*) from .env once the first admin exists');
             $this->check(! in_array(config('mail.default'), ['log', 'array'], true), 'mail is really sent', 'MAIL_MAILER=log means verification and reset emails are never delivered');
+            $dbUser = (string) config('database.connections.'.config('database.default').'.username');
+            $this->check(strtolower($dbUser) !== 'root', 'database user is not root', 'create a dedicated DB user with rights on this database only; root can read and drop every database on the server', 'WARN');
             $this->check(config('database.default') === 'mysql' || config('database.default') === 'mariadb', 'database is MySQL/MariaDB', 'production should not run on SQLite', 'WARN');
         }
         $this->check(config('session.driver') === 'database', 'sessions are stored in the database', 'set SESSION_DRIVER=database (sessions can be revoked per user)');

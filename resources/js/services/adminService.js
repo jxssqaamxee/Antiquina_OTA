@@ -42,6 +42,11 @@ export const adminService = {
   activityFiltered: (action) => d(api.get("/admin/activity", { params: action ? { action } : {} })),
   report: (params) => d(api.get("/admin/reports/trainees", { params })),
   reportCsvUrl: (params) => `/api/admin/reports/trainees.csv${params && Object.keys(params).length ? "?" + new URLSearchParams(params) : ""}`,
+  // Pending self-registrations (the server limits a coordinator to their own section).
+  registrations: () => d(api.get("/admin/registrations")),
+  approveRegistration: (id) => d(api.post(`/admin/registrations/${id}/approve`)),
+  rejectRegistration: (id, reason) => d(api.post(`/admin/registrations/${id}/reject`, { reason })),
+  registrationPhotoUrl: (id, v) => `/api/admin/registrations/${id}/photo${v ? `?v=${encodeURIComponent(v)}` : ""}`, // v = photo version: a new picture is a new address, so the cache never shows an old one
   announcements: () => d(api.get("/admin/announcements")),
   publishAnnouncement: (body) => d(api.post("/admin/announcements", body)),
 };

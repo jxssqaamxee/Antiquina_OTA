@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import Sheet from "./Sheet";
+import Tooltip from "./Tooltip";
 import {
   HelpCircle,
   X,
@@ -111,15 +112,15 @@ export function HelpButton() {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button
+      <Tooltip label={"How to use the Duty Log"}><button
         type="button"
         className="icon-btn"
         onClick={() => setOpen(true)}
         aria-label="How to use the Duty Log"
-        title="How to use the Duty Log"
+
       >
         <HelpCircle size={19} />
-      </button>
+      </button></Tooltip>
       <Sheet open={open} onClose={() => setOpen(false)} title="How the Duty Log works" labelId="help-title">
         <GuideContent />
       </Sheet>

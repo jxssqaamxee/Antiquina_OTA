@@ -6,7 +6,7 @@ import { preloadPage } from "../../routes/loaders";
 import { homePath, roleOf } from "../../utils/roles";
 
 // Which page chunk to fetch while the loading screen is up.
-const chunkFor = (u) => (!u ? "login" : u.email_verified === false ? "verify" : ({ admin: "admin", coordinator: "coordinator" }[roleOf(u)] || "logbook"));
+const chunkFor = (u) => (!u ? "login" : u.email_verified === false ? "verify" : u.approval_status === "pending" || u.approval_status === "rejected" ? "pending" : ({ admin: "admin", coordinator: "coordinator" }[roleOf(u)] || "logbook"));
 
 // Main loading page at "/" (same idea as sclf_APP's MainPage). The logo on the sign-in pages and in
 // the logbook app bar opens it, so tapping the logo behaves like a refresh: the branded loading

@@ -12,6 +12,7 @@ import PhotoUploadModal from "../../Components/shared/PhotoUploadModal";
 import { clean, filterNameInput, passwordProblem, validateProfile } from "../../utils/validators";
 import { homePath } from "../../utils/roles";
 
+import Tooltip from "../../Components/shared/Tooltip";
 const req = <span className="lg-required" aria-hidden="true">*</span>;
 
 /**
@@ -160,11 +161,11 @@ export default function SetupAccountPage() {
               <LedgerRow index={1} icon={Camera} htmlFor="photo-pick" error={errors.photo} label={<>Profile photo {req}</>}
                 hint={errors.photo ? undefined : "A clear photo of your face. JPG, PNG or WebP, up to 5 MB."}>
                 <div className="lg-avatar-row">
-                  <button type="button" id="photo-pick" className={`lg-avatar-frame${shownPhoto ? " has-photo" : ""}`}
+                  <Tooltip label={shownPhoto ? "Change profile photo" : "Add profile photo"}><button type="button" id="photo-pick" className={`lg-avatar-frame${shownPhoto ? " has-photo" : ""}`}
                     onClick={() => setPhotoOpen(true)} aria-label={shownPhoto ? "Change profile photo" : "Add profile photo"}
                     aria-required="true" aria-invalid={!!errors.photo}>
                     {shownPhoto ? <img src={shownPhoto} alt="Your profile photo preview" /> : <Camera size={26} strokeWidth={1.6} style={{ opacity: 0.55 }} />}
-                  </button>
+                  </button></Tooltip>
                   <div className="lg-avatar-actions">
                     <div className="lg-avatar-btns">
                       <button type="button" className="lg-avatar-btn" onClick={() => setPhotoOpen(true)}>{shownPhoto ? "Change photo" : "Add photo"}</button>

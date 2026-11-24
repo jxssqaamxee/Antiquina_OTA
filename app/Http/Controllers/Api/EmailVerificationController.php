@@ -164,7 +164,8 @@ class EmailVerificationController extends Controller
      */
     public static function enrollWhenVerified(User $user): void
     {
-        if (! $user->isTrainee()) {
+        // Pending / rejected registrations are enrolled only when approved (RegistrationApprovalService).
+        if (! $user->isTrainee() || ! $user->isApproved()) {
             return;
         }
         try {

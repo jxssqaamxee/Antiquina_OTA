@@ -31,6 +31,9 @@ class AuthController extends Controller
     {
         $data = $request->validated();
 
+        // Refuse an undecodable picture BEFORE the account exists (no half-registered user left behind).
+        ProfilePhotoStorage::reencode($request->file('profile_photo'), 'profile_photo');
+
         $user = User::create([
             'student_id' => $data['student_id'],
             'first_name' => Formats::titleCase($data['first_name']),
@@ -44,10 +47,15 @@ class AuthController extends Controller
             'email_verified_at' => null,
         ]);
 
+        // role/approval are not mass-assignable. With approval on, the account stays closed until reviewed.
+        if (config('occ.registration_approval')) {
+            $user->forceFill(['approval_status' => User::APPROVAL_PENDING])->save();
+        }
+
         // No enrollment yet: the student joins their section (and shows up for the coordinator / admin)
         // only once the email is verified, see EmailVerificationController::enrollWhenVerified().
 
-        ProfilePhotoStorage::save($user, $request->file('profile_photo'));
+        ProfilePhotoStorage::save($user, $request->file('profile_photo'), 'profile_photo');
 
         // Sends the 6-digit code + link. Never fails registration if the mail server is down:
         // the verify screen has a "Resend email" button.
@@ -55,6 +63,25 @@ class AuthController extends Controller
 
         // Registering has no checkbox; it has always meant a persistent session.
         return response()->json($this->sessions->start($request, $user, true), 201);
+    }
+
+    /**
+     * Always spends one full password hash, even for an unknown ID or an account with no password,
+     * so the response time does not reveal which IDs exist (a real check took ~250 ms, a miss ~3 ms).
+     */
+    private function passwordMatches(?User $user, string $plain): bool
+    {
+        $hash = $user?->password;
+        if (! $hash) {
+            // A valid hash made with the app's current cost; computed once per process.
+            static $dummy = null;
+            $dummy ??= Hash::make(bin2hex(random_bytes(16)));
+            Hash::check($plain, $dummy);
+
+            return false;
+        }
+
+        return Hash::check($plain, $hash);
     }
 
     public function login(LoginRequest $request): JsonResponse
@@ -77,7 +104,7 @@ class AuthController extends Controller
 
         // Same message for "no such ID", "no password set" and "wrong password"
         // so the form never reveals which Student IDs exist.
-        if (! $user || ! $user->password || ! Hash::check($data['password'], $user->password)) {
+        if (! $this->passwordMatches($user, $data['password'])) {
             RateLimiter::hit($limiterKey, 300);
             RateLimiter::hit($accountKey, 1800); // all IPs together: 15 wrong tries per 30 min
             SecurityLog::failure('login_failed', ['student_id' => $data['student_id']]);
@@ -87,6 +114,11 @@ class AuthController extends Controller
         if (! $user->isActive()) {
             SecurityLog::failure('login_deactivated', ['student_id' => $user->student_id]);
             throw ValidationException::withMessages(['student_id' => 'This account has been deactivated. Please contact an administrator.']);
+        }
+
+        if ($user->approval_status === User::APPROVAL_REJECTED) {
+            SecurityLog::failure('login_rejected', ['student_id' => $user->student_id]);
+            throw ValidationException::withMessages(['student_id' => 'Your registration was not approved. Please contact your coordinator.']);
         }
 
         RateLimiter::clear($limiterKey);
@@ -116,7 +148,7 @@ class AuthController extends Controller
         $user = User::where('admin_id', $data['admin_id'])->whereIn('role', User::ADMIN_ACCESS_ROLES)->first();
 
         // One message for "no such ID", "no password set" and "wrong password".
-        if (! $user || ! $user->password || ! Hash::check($data['password'], $user->password)) {
+        if (! $this->passwordMatches($user, $data['password'])) {
             RateLimiter::hit($limiterKey, 300);
             RateLimiter::hit($accountKey, 1800);
             SecurityLog::failure('admin_login_failed', ['admin_id' => $data['admin_id']]);
@@ -126,6 +158,17 @@ class AuthController extends Controller
         if (! $user->isActive()) {
             SecurityLog::failure('admin_login_deactivated', ['admin_id' => $user->admin_id]);
             throw ValidationException::withMessages(['admin_id' => 'This account has been deactivated. Please contact an administrator.']);
+        }
+
+        // Password was right. With two-factor on, no session is created yet: the client must answer the challenge.
+        if ($user->hasTwoFactor()) {
+            RateLimiter::clear($limiterKey);
+            SecurityLog::event('admin_login_password_ok_2fa_pending', ['admin_id' => $user->admin_id], 'info');
+
+            return response()->json([
+                'two_factor_required' => true,
+                'temp_token' => app(\App\Services\Auth\TwoFactorService::class)->issueChallenge($user, (bool) ($data['remember'] ?? false)),
+            ]);
         }
 
         RateLimiter::clear($limiterKey);

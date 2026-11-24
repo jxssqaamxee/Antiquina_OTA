@@ -5,6 +5,7 @@ import { useAppTheme } from "../../hooks/useAppTheme";
 import { setTheme, isDarkId } from "../../utils/theme";
 import logo from "../../assets/images/site-logo.png";
 import occBg from "../../assets/images/occ.webp";
+import Tooltip from "../shared/Tooltip";
 import "../../styles/ledger.css"; // sclf_APP "Intake Ledger" design (ported 1:1)
 import "../../styles/auth.css";   // au-* fields used by the Profile page
 
@@ -159,12 +160,12 @@ export default function AuthShell({
             <span>OCCDL<span>Opol Community College</span></span>
           </Link>
           <div className="lg-toggle-group">
-            <button
+            <Tooltip label={isDark ? "Switch to light theme" : "Switch to dark theme"}><button
               type="button" className="lg-theme-toggle" onClick={() => toggleDark(theme)}
               aria-label={isDark ? "Switch to light theme" : "Switch to dark theme"}
             >
               {isDark ? <Sun size={15} strokeWidth={2} /> : <Moon size={15} strokeWidth={2} />}
-            </button>
+            </button></Tooltip>
           </div>
         </header>
 
@@ -259,9 +260,9 @@ export function LedgerPasswordInput({ show, onToggle, ...props }) {
   return (
     <div className="lg-password-wrap lg-pass">
       <input className="lg-input" type={show ? "text" : "password"} {...props} />
-      <button type="button" className="lg-eye" onClick={onToggle} aria-label={show ? "Hide password" : "Show password"} tabIndex={-1}>
+      <Tooltip label={show ? "Hide password" : "Show password"}><button type="button" className="lg-eye" onClick={onToggle} aria-label={show ? "Hide password" : "Show password"} tabIndex={-1}>
         {show ? <EyeOff size={15} /> : <Eye size={15} />}
-      </button>
+      </button></Tooltip>
     </div>
   );
 }

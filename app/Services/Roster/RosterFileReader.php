@@ -171,6 +171,9 @@ class RosterFileReader
     /** @return list<string> */
     private function pdf(string $path): array
     {
+        if (filesize($path) > $this->pdfMaxBytes()) {
+            throw new RosterReadException('That PDF is too large to read. Upload the Excel / Word / CSV version, or split the list.');
+        }
         $text = '';
         if (class_exists(\Smalot\PdfParser\Parser::class)) {
             try {
@@ -192,7 +195,17 @@ class RosterFileReader
         return preg_split('/\R/u', $text) ?: [];
     }
 
-    private function pdftotextBinary(): ?string
+    protected function pdfMaxBytes(): int
+    {
+        return 10 * 1024 * 1024;
+    }
+
+    protected function pdfTimeoutSeconds(): float
+    {
+        return 10.0;
+    }
+
+    protected function pdftotextBinary(): ?string
     {
         if (! function_exists('proc_open')) {
             return null;
@@ -212,11 +225,40 @@ class RosterFileReader
         if ($bin === null) {
             return '';
         }
+        // Argument array: no shell, so the file name can never be interpreted as a command.
         $proc = @proc_open([$bin, '-layout', '-enc', 'UTF-8', $path, '-'], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
         if (! is_resource($proc)) {
             return '';
         }
-        $out = (string) stream_get_contents($pipes[1], 20 * 1024 * 1024);
+        stream_set_blocking($pipes[1], false);
+        stream_set_blocking($pipes[2], false);
+        $out = '';
+        $limit = 20 * 1024 * 1024;
+        $deadline = microtime(true) + $this->pdfTimeoutSeconds();
+        $timedOut = false;
+        while (true) {
+            $read = array_filter([$pipes[1], $pipes[2]], fn ($p) => ! feof($p));
+            if ($read === []) {
+                break;
+            }
+            if (microtime(true) >= $deadline || strlen($out) > $limit) {
+                $timedOut = true;
+                break;
+            }
+            $w = $e = null;
+            if (@stream_select($read, $w, $e, 0, 200000) > 0) {
+                foreach ($read as $p) {
+                    $chunk = (string) fread($p, 65536);
+                    if ($p === $pipes[1]) {
+                        $out .= $chunk;
+                    }
+                }
+            }
+        }
+        if ($timedOut) {
+            proc_terminate($proc, 9); // a hostile PDF must not hold a PHP worker forever
+            $out = '';
+        }
         fclose($pipes[1]);
         fclose($pipes[2]);
         proc_close($proc);
@@ -240,13 +282,57 @@ class RosterFileReader
         return $xml === false ? null : $xml;
     }
 
+    /**
+     * Office / OpenDocument XML never needs a DOCTYPE or entity. The check runs on UTF-8 text AFTER the
+     * encoding is normalised: a UTF-16 (or UTF-7) file hides the ASCII string "<!DOCTYPE" from a plain
+     * search while libxml still honours it. Anything we cannot normalise with certainty is refused.
+     */
+    private function safeXml(string $xml): string
+    {
+        $unsafe = new RosterReadException('That file contains unsafe content and was refused.');
+        $enc = null;
+        if (str_starts_with($xml, "\xFF\xFE\x00\x00") || str_starts_with($xml, "\x00\x00\xFE\xFF")) {
+            throw $unsafe; // UTF-32
+        }
+        if (str_starts_with($xml, "\xEF\xBB\xBF")) {
+            $xml = substr($xml, 3);
+        } elseif (str_starts_with($xml, "\xFF\xFE")) {
+            $enc = 'UTF-16LE'; $xml = substr($xml, 2);
+        } elseif (str_starts_with($xml, "\xFE\xFF")) {
+            $enc = 'UTF-16BE'; $xml = substr($xml, 2);
+        } elseif (preg_match('/^<\x00[\x00-\x7F]\x00/', $xml)) {
+            $enc = 'UTF-16LE';
+        } elseif (preg_match('/^\x00<\x00[\x00-\x7F]/', $xml)) {
+            $enc = 'UTF-16BE';
+        }
+        if ($enc !== null) {
+            $xml = (string) mb_convert_encoding($xml, 'UTF-8', $enc);
+        }
+        if (str_contains($xml, "\0")) {
+            throw $unsafe; // NUL bytes in UTF-8 text: an encoding we did not recognise
+        }
+        // Only ASCII-compatible encodings that libxml reads the same way we searched.
+        if (preg_match('/^\s*<\?xml[^>]*?encoding\s*=\s*(["\'])([^"\']*)\1/i', $xml, $m)) {
+            $declared = strtolower($m[2]);
+            if (! in_array($declared, ['utf-8', 'utf8', 'us-ascii', 'ascii', 'iso-8859-1', 'windows-1252', 'utf-16', 'utf-16le', 'utf-16be'], true)) {
+                throw $unsafe;
+            }
+            // Already UTF-8 now, so the declaration must say so.
+            $xml = preg_replace('/^(\s*<\?xml[^>]*?encoding\s*=\s*)(["\'])[^"\']*\2/i', '$1"UTF-8"', $xml, 1) ?? $xml;
+        }
+        if (stripos($xml, '<!DOCTYPE') !== false || stripos($xml, '<!ENTITY') !== false) {
+            throw $unsafe;
+        }
+
+        return $xml;
+    }
+
     private function dom(string $xml): DOMDocument
     {
-        if (stripos($xml, '<!ENTITY') !== false) {
-            throw new RosterReadException('That file contains unsafe content and was refused.');
-        }
+        $xml = $this->safeXml($xml);
         $dom = new DOMDocument();
-        if (! @$dom->loadXML($xml, LIBXML_NONET | LIBXML_COMPACT | LIBXML_PARSEHUGE)) {
+        // No LIBXML_PARSEHUGE: libxml's own depth / text-node limits stay on. The zip entry size is capped above.
+        if (! @$dom->loadXML($xml, LIBXML_NONET | LIBXML_COMPACT)) {
             throw new RosterReadException('That file looks damaged and could not be read.');
         }
 

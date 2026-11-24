@@ -3,6 +3,7 @@ import { Bell, BellRing, Trash2 } from "lucide-react";
 import { useNotifications } from "../../context/NotificationContext";
 import Sheet from "./Sheet";
 
+import Tooltip from "./Tooltip";
 function timeAgo(iso) {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);
@@ -27,10 +28,10 @@ export function NotificationBell() {
 
   return (
     <>
-      <button type="button" className="icon-btn bell-btn" onClick={toggle} aria-label="Notifications">
+      <Tooltip label={"Notifications"}><button type="button" className="icon-btn bell-btn" onClick={toggle} aria-label="Notifications">
         {unreadCount > 0 ? <BellRing size={19} /> : <Bell size={19} />}
         {unreadCount > 0 && <span className="bell-badge">{unreadCount > 9 ? "9+" : unreadCount}</span>}
-      </button>
+      </button></Tooltip>
 
       <Sheet
         open={open}

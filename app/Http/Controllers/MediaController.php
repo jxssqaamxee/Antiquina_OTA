@@ -17,7 +17,12 @@ class MediaController extends Controller
 
     public function mine(Request $request)
     {
-        $user = $request->user();
+        return $this->forUser($request->user());
+    }
+
+    /** Callers decide WHO may see this account's photo (own session, scoped coordinator, admin). */
+    public function forUser(\App\Models\User $user)
+    {
 
         // 1) The database copy (survives redeploys).
         $row = $user->photo;

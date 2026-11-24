@@ -3,6 +3,7 @@ import { LayoutList, Table2 } from "lucide-react";
 import { errorMessage } from "../../config/axiosConfig";
 import { useMediaQuery } from "../../hooks/useIsPhone";
 import { TableSkeleton } from "./Dashboard";
+import { useToast } from "../../context/ToastContext";
 
 // Admin / Coordinator building blocks, styled by styles/admin.css + theme.css (sclf_APP look).
 
@@ -109,8 +110,21 @@ export function Tabs({ tabs, value, onChange }) {
 export const Chip = ({ children, tone }) => <span className={`st-chip${tone ? ` is-${tone}` : ""}`}>{children}</span>;
 export const statusTone = (s) => ({ approved: "good", rejected: "bad", submitted: "warn", active: "good", pending_placement: "warn" }[s]);
 
-/** Small status line for a screen's last action. */
-export const Notice = ({ msg }) => !msg ? null : <p role={msg.bad ? "alert" : "status"} className={`st-notice${msg.bad ? " is-bad" : ""}`}>{msg.text}</p>;
+/**
+ * Result of a screen's last action ({ text, bad }). It no longer draws an inline strip:
+ * it raises the same toast the trainee screens use, so every role gets one consistent look.
+ * The key includes the text, so the same message twice in a row still shows again (instead of
+ * being de-duplicated) while an identical toast already on screen is replaced, not stacked.
+ */
+export function Notice({ msg }) {
+  const toast = useToast();
+  useEffect(() => {
+    if (!msg?.text) return;
+    const type = ["success", "error", "warning", "info"].includes(msg.type) ? msg.type : msg.bad ? "error" : "success";
+    toast[type](msg.text, { key: `notice:${type}:${msg.text}` });
+  }, [msg]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
 
 /** Runs an async action, tracks busy + a result message. */
 export function useAction() {

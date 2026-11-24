@@ -5,7 +5,9 @@ namespace App\Support;
 use App\Models\User;
 use App\Models\UserPhoto;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Saves a profile picture on the private disk as a small, upright JPEG.
@@ -14,25 +16,30 @@ use Illuminate\Support\Facades\Storage;
  * draws has to decode the full image, which iOS Safari handles badly. An avatar
  * never needs more than ~640 px.
  *
- * Falls back to storing the original untouched if GD cannot read the file, so an
- * upload is never lost because of this step.
+ * A file GD cannot decode is REJECTED (422), never stored as-is: the picture is always re-encoded here, which
+ * also drops EXIF / GPS and any bytes hidden after the image data. The stored extension is always .jpg.
  */
 class ProfilePhotoStorage
 {
     public const MAX_SIDE = 640;
     public const DIRECTORY = 'profile-pictures';
 
-    /** Stores the upload and returns the path, e.g. "profile-pictures/abc.jpg". */
-    public static function store(UploadedFile $file): string
+    /** JPEG bytes of the upload, or a 422 on the given form field when it is not a readable picture. */
+    public static function reencode(UploadedFile $file, string $field = 'photo'): string
     {
-        $resized = self::shrink((string) $file->getRealPath());
-
-        if ($resized === null) {
-            return (string) $file->store(self::DIRECTORY, PrivateMedia::DISK);
+        $bytes = self::shrink((string) $file->getRealPath());
+        if ($bytes === null) {
+            throw ValidationException::withMessages([$field => 'That picture could not be read. Use a different JPG, PNG or WebP photo.']);
         }
 
+        return $bytes;
+    }
+
+    /** Stores the upload and returns the path, e.g. "profile-pictures/abc.jpg". */
+    public static function store(UploadedFile $file, string $field = 'photo'): string
+    {
         $path = self::DIRECTORY.'/'.bin2hex(random_bytes(20)).'.jpg';
-        Storage::disk(PrivateMedia::DISK)->put($path, $resized);
+        Storage::disk(PrivateMedia::DISK)->put($path, self::reencode($file, $field));
 
         return $path;
     }
@@ -41,21 +48,18 @@ class ProfilePhotoStorage
      * Saves the photo for a user: in the DATABASE (authoritative, survives redeploys) and, as a
      * best-effort extra copy, on the private disk. Replaces and cleans up any previous photo.
      */
-    public static function save(User $user, UploadedFile $file): void
+    public static function save(User $user, UploadedFile $file, string $field = 'photo'): void
     {
         $old = $user->profile_photo;
-        $bytes = self::shrink((string) $file->getRealPath());
+        $bytes = self::reencode($file, $field);
         $mime = 'image/jpeg';
-        if ($bytes === null) {
-            $bytes = (string) @file_get_contents((string) $file->getRealPath());
-            $info = @getimagesizefromstring($bytes);
-            $mime = in_array($info['mime'] ?? '', ['image/jpeg', 'image/png', 'image/webp'], true) ? $info['mime'] : 'image/jpeg';
-        }
-        $ext = ['image/png' => 'png', 'image/webp' => 'webp'][$mime] ?? 'jpg';
-        $path = self::DIRECTORY.'/'.bin2hex(random_bytes(20)).'.'.$ext;
+        $path = self::DIRECTORY.'/'.bin2hex(random_bytes(20)).'.jpg';
 
-        UserPhoto::updateOrCreate(['user_id' => $user->id], ['mime' => $mime, 'data' => base64_encode($bytes)]);
-        $user->update(['profile_photo' => $path]);
+        // Both writes or neither: the stored picture and the pointer to it can never disagree.
+        DB::transaction(function () use ($user, $mime, $bytes, $path) {
+            UserPhoto::updateOrCreate(['user_id' => $user->id], ['mime' => $mime, 'data' => base64_encode($bytes)]);
+            $user->update(['profile_photo' => $path]);
+        });
 
         try {
             Storage::disk(PrivateMedia::DISK)->put($path, $bytes);

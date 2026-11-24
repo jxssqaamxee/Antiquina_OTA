@@ -35,6 +35,12 @@
   font-family: var(--font-body, "Inter", system-ui, sans-serif);
   animation: occ-popup-pop 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+/* Per-type outline: same colours as the toast (success / error / warning / info). */
+.occ-popup-card-success { border-color: #16a34a !important; }
+.occ-popup-card-error   { border-color: #ef4444 !important; }
+.occ-popup-card-warning { border-color: #f59e0b !important; }
+.occ-popup-card-info    { border-color: #0ea5e9 !important; }
+
 .occ-popup-icon {
   width: 44px; height: 44px; border-radius: 50%;
   display: inline-flex; align-items: center; justify-content: center; margin: 0 auto 14px;
@@ -54,6 +60,29 @@
 .occ-popup-btn:hover { opacity: 0.92; }
 .occ-popup-btn:active { transform: translateY(1px); }
 .occ-popup-btn:focus-visible { outline: 2px solid var(--pt-accent-solid); outline-offset: 2px; }
+
+/* ---- confirm / prompt additions ---- */
+.occ-popup-actions { display: flex; gap: 10px; }
+.occ-popup-actions .occ-popup-btn { flex: 1; width: auto; }
+.occ-popup-btn-ghost {
+  background: transparent; color: var(--pt-fg);
+  border: 1.5px solid var(--pt-edge);
+}
+.occ-popup-btn-ghost:hover { opacity: 1; background: color-mix(in srgb, var(--pt-fg) 8%, transparent); }
+.occ-popup-btn-danger { background: #dc2626; color: #ffffff; }
+.occ-popup-btn-danger:focus-visible { outline-color: #dc2626; }
+.occ-popup-field { text-align: left; margin: -8px 0 18px; }
+.occ-popup-input {
+  width: 100%; box-sizing: border-box; resize: vertical; min-height: 76px;
+  padding: 10px 12px; border-radius: 10px;
+  font: inherit; font-size: 13.5px; line-height: 1.45;
+  background: transparent; color: var(--pt-fg);
+  border: 1.5px solid var(--pt-edge);
+}
+.occ-popup-input::placeholder { color: var(--pt-fg); opacity: 0.4; }
+.occ-popup-input:focus { outline: none; border-color: var(--pt-accent-solid); box-shadow: 0 0 0 3px color-mix(in srgb, var(--pt-accent-solid) 25%, transparent); }
+.occ-popup-input.is-invalid { border-color: #ef4444; }
+.occ-popup-error { margin: 6px 2px 0; font-size: 12px; font-weight: 600; color: #ef4444; }
 
 @keyframes occ-popup-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes occ-popup-pop {
