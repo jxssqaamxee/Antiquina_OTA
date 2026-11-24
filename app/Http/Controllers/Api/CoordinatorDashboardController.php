@@ -44,4 +44,10 @@ class CoordinatorDashboardController extends Controller
 
         return response()->json($section ? $log->feed(\App\Models\ActivityLog::where('section_id', $section->id), $request->query('action')) : []);
     }
+
+    /** Live duty board for the coordinator's own section only (empty when no section is assigned). */
+    public function live(Request $request, \App\Services\Academic\LiveDutyService $live): JsonResponse
+    {
+        return response()->json($live->today($this->scope->traineesQuery($request->user())));
+    }
 }

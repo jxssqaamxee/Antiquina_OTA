@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { LayoutDashboard, UserCog, Layers, ClipboardList, Users as UsersIcon, TrendingUp, Target, FileBarChart, Megaphone, ShieldCheck } from "lucide-react";
+import { Radio, LayoutDashboard, UserCog, Layers, ClipboardList, Users as UsersIcon, TrendingUp, Target, FileBarChart, Megaphone, ShieldCheck } from "lucide-react";
 import AdminShell, { StatCard } from "../../Components/admin/AdminShell";
 import { Btn, Card, Chip, Field, Input, Notice, Row, Select, Table, statusTone, useAction } from "../../Components/admin/ui";
 import { OverviewDashboard, OverviewSkeleton } from "../../Components/admin/Dashboard";
+import { LiveDutyPanel } from "../../Components/admin/LiveDuty";
 import { AnnouncementsPanel, AuditPanel, ReportsPanel } from "../../Components/admin/panels";
 import { adminService as svc } from "../../services/adminService";
 import { errorMessage } from "../../config/axiosConfig";
@@ -25,7 +26,7 @@ function Overview({ go }) {
     <>
       {error && <p role="alert" className="st-error">{error}</p>}
       {!data && !error && <OverviewSkeleton />}
-      <OverviewDashboard data={data} scope="admin" go={go} />
+      <OverviewDashboard data={data} scope="admin" go={go} liveFetcher={svc.live} />
     </>
   );
 }
@@ -326,6 +327,7 @@ function Training({ sections }) {
 
 const NAV = [
   { key: "overview", label: "Overview", icon: LayoutDashboard },
+  { key: "live", label: "Live duty", icon: Radio },
   { key: "coordinators", label: "Coordinators", icon: UserCog },
   { key: "users", label: "Users", icon: UsersIcon },
   { key: "sections", label: "Sections", icon: Layers },
@@ -352,6 +354,7 @@ export default function AdminDashboard() {
     <AdminShell roleLabel="System Administrator" nav={NAV} active={tab} onNavigate={setTab}
       title={NAV.find((n) => n.key === tab)?.label} subtitle={year ? `Current academic year: ${year.name}` : undefined}>
       {tab === "overview" && <Overview go={setTab} />}
+      {tab === "live" && <LiveDutyPanel fetcher={svc.live} />}
       {tab === "users" && <Users />}
       {tab === "coordinators" && <Coordinators sections={sections} year={year} goTo={setTab} />}
       {tab === "sections" && <Sections courses={courses || []} year={year} onChanged={refresh} goTo={setTab} />}

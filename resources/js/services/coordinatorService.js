@@ -14,6 +14,7 @@ const rosterForm = (file, { dryRun, assumeCourse, sectionId }) => {
 /** Coordinator API calls. The server limits every one of them to the Coordinator's own section. */
 export const coordinatorService = {
   overview: () => d(api.get("/coordinator/overview")),
+  live: () => d(api.get("/coordinator/live")),
   trainees: () => d(api.get("/coordinator/trainees")),
   trainee: (id) => d(api.get(`/coordinator/trainees/${id}`)),
   traineeEntries: (id) => d(api.get(`/coordinator/trainees/${id}/entries`)),

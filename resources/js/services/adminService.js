@@ -5,6 +5,7 @@ const d = (p) => p.then((r) => r.data);
 /** Admin API calls (all closed to other roles by Laravel). */
 export const adminService = {
   overview: () => d(api.get("/admin/overview")),
+  live: () => d(api.get("/admin/live")),
   courses: () => d(api.get("/admin/courses")),
   years: () => d(api.get("/admin/academic-years")),
   createYear: (name, is_current) => d(api.post("/admin/academic-years", { name, is_current })),

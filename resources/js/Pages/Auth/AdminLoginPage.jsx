@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { loadRememberedCredentials, saveRememberedCredentials, clearRememberedCredentials } from "../../hooks/useRememberedCredentials";
 import { Link, useNavigate } from "react-router-dom";
 import { IdCard, Lock } from "lucide-react";
 import AuthShell, {
@@ -27,6 +28,12 @@ export default function AdminLoginPage() {
 
   useEffect(() => { document.title = "Administrator sign in | OCCDL"; }, []);
 
+  // Prefill only the Admin / Coordinator ID remembered by "Keep this session open" (never the password).
+  useEffect(() => {
+    const r = loadRememberedCredentials("admin");
+    if (r?.adminId) { setAdminId(r.adminId); setRemember(true); }
+  }, []);
+
   async function submit(e) {
     e.preventDefault();
     setError(""); setErrors({});
@@ -42,6 +49,7 @@ export default function AdminLoginPage() {
     try {
       const { data } = await api.post("/auth/administrator", { admin_id: adminId, password, remember });
       await signIn(data, remember);
+      if (remember) saveRememberedCredentials(adminId, "admin"); else clearRememberedCredentials("admin");
       navigate(homePath(data.user), { replace: true });
     } catch (err) {
       setErrors(fieldErrors(err));

@@ -27,4 +27,10 @@ class AdminDashboardController extends Controller
             ],
         ]);
     }
+
+    /** Live duty board: today's entries of every enrolled trainee (the clock part runs in the browser). */
+    public function live(\App\Services\Academic\LiveDutyService $live): JsonResponse
+    {
+        return response()->json($live->today());
+    }
 }

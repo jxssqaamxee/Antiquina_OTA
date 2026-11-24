@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { LayoutDashboard, Users, ClipboardCheck, FileBarChart, Megaphone, ShieldCheck, Upload } from "lucide-react";
+import { Radio, LayoutDashboard, Users, ClipboardCheck, FileBarChart, Megaphone, ShieldCheck, Upload } from "lucide-react";
 import AdminShell, { StatCard } from "../../Components/admin/AdminShell";
 import { Btn, Card, Check, Chip, Field, Input, Notice, Row, Select, Table, statusTone, useAction } from "../../Components/admin/ui";
 import { OverviewDashboard, OverviewSkeleton } from "../../Components/admin/Dashboard";
+import { LiveDutyPanel } from "../../Components/admin/LiveDuty";
 import { AnnouncementsPanel, AuditPanel, ReportsPanel, RosterPanel } from "../../Components/admin/panels";
 import { coordinatorService as svc } from "../../services/coordinatorService";
 import { errorMessage } from "../../config/axiosConfig";
@@ -129,6 +130,7 @@ function Trainees() {
 
 const NAV = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { key: "live", label: "Live duty", icon: Radio },
   { key: "trainees", label: "Trainees", icon: Users },
   { key: "roster", label: "Import roster", icon: Upload },
   { key: "approvals", label: "Logbook approvals", icon: ClipboardCheck },
@@ -147,7 +149,8 @@ export default function CoordinatorDashboard() {
       title={tab === "dashboard" ? (data?.section ? `Section ${data.section.code}` : "Coordinator dashboard") : NAV.find((n) => n.key === tab)?.label}
       subtitle={tab === "dashboard" ? data?.message : (data?.section ? `Section ${data.section.code}` : undefined)}>
       {error && <p role="alert" className="st-error">{error}</p>}
-      {tab === "dashboard" && (data ? <OverviewDashboard data={data} scope="coordinator" go={setTab} /> : !error && <OverviewSkeleton />)}
+      {tab === "dashboard" && (data ? <OverviewDashboard data={data} scope="coordinator" go={setTab} liveFetcher={svc.live} /> : !error && <OverviewSkeleton />)}
+      {tab === "live" && <LiveDutyPanel fetcher={svc.live} />}
       {tab === "trainees" && <Trainees />}
       {tab === "roster" && <RosterPanel svc={svc} scope="coord" />}
       {tab === "approvals" && <Approvals />}

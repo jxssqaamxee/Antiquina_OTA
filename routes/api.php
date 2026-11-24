@@ -92,6 +92,7 @@ Route::middleware(['auth', 'session.fresh', 'active', 'email.verified', 'setup.c
     // Management areas. Each group is closed to every other role; later phases add the real modules.
     Route::prefix('admin')->middleware('role:admin')->group(function () {
         Route::get('/overview', [AdminDashboardController::class, 'show']);
+        Route::get('/live', [AdminDashboardController::class, 'live']);
         // Roster: Student ID + course allowed to register, one list per section (see RosterController).
         Route::get('/roster', [RosterController::class, 'index']);
         Route::middleware('throttle:10,1')->get('/roster.csv', [RosterController::class, 'export']);
@@ -138,6 +139,7 @@ Route::middleware(['auth', 'session.fresh', 'active', 'email.verified', 'setup.c
     });
     Route::prefix('coordinator')->middleware('role:coordinator')->group(function () {
         Route::get('/overview', [CoordinatorDashboardController::class, 'show']);
+        Route::get('/live', [CoordinatorDashboardController::class, 'live']);
         // Roster: Student ID + course allowed to register, one list per section (see RosterController).
         Route::get('/roster', [RosterController::class, 'index']);
         Route::middleware('throttle:10,1')->get('/roster.csv', [RosterController::class, 'export']);

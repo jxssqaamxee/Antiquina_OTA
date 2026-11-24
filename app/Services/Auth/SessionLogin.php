@@ -24,6 +24,9 @@ class SessionLogin
     /** Session key holding the hard expiry (unix timestamp). */
     public const EXPIRES_KEY = 'occ_expires_at';
 
+    /** Session key: true when "Keep this session open" was ticked (such a sign-in renews itself while it is used). */
+    public const REMEMBER_KEY = 'occ_remember';
+
     /** @return array{status:string,expires_at:string,user:array} */
     public function start(Request $request, User $user, bool $remember): array
     {
@@ -38,6 +41,7 @@ class SessionLogin
         $session->regenerate();      // fresh session id for the signed-in state
         $session->regenerateToken(); // fresh CSRF token too
         $session->put(self::EXPIRES_KEY, $expires->getTimestamp());
+        $session->put(self::REMEMBER_KEY, $remember);
 
         return [
             'status' => 'ok',

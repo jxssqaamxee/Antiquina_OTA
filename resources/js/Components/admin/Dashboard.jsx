@@ -1,5 +1,6 @@
 import React from "react";
 import { Users, Clock, Gauge, ClipboardCheck, AlertTriangle, Building2, UserX, Layers, UserCog, ChevronRight, Activity, PieChart, BarChart3 } from "lucide-react";
+import { LiveDutyCard } from "./LiveDuty";
 import { AnimatedNumber, AreaChart, DonutChart, RankedBars, Sparkline } from "../charts";
 
 /* ---------- skeletons (same boxes as the real thing, so nothing jumps when data arrives) ---------- */
@@ -81,7 +82,7 @@ const Empty = ({ text }) => <p className="st-empty">{text}</p>;
  * Overview for Admin / Coordinator. `data` = response of /api/{role}/overview ({ kpis, accounts? }).
  * `go` jumps to another tab (the "needs attention" rows are shortcuts).
  */
-export function OverviewDashboard({ data, scope = "admin", go }) {
+export function OverviewDashboard({ data, scope = "admin", go, liveFetcher }) {
   const k = data?.kpis;
   if (data && !k) return <section className="st-card"><p className="st-empty">{data.message || "No data to show yet."}</p></section>;
   if (!k) return null;
@@ -107,6 +108,8 @@ export function OverviewDashboard({ data, scope = "admin", go }) {
         <KpiCard icon={Gauge} label="Average completion" value={k.avg_percent} decimals={1} suffix="%" hint="across all trainees" />
         <KpiCard icon={ClipboardCheck} label="Awaiting review" value={k.awaiting_review} hint="submitted entries" tone={k.awaiting_review ? "warn" : ""} />
       </div>
+
+      {liveFetcher && <LiveDutyCard fetcher={liveFetcher} onOpen={() => go?.("live")} />}
 
       <div className="st-chart-row st-2-1">
         <ChartCard icon={Activity} title="Hours per week" subtitle="Last 8 weeks: verified by coordinators vs everything logged">
