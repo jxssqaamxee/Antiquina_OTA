@@ -323,3 +323,60 @@ textarea.st-inp { min-height: 104px; padding: 12px 14px; resize: vertical; font-
 .st-kpi-progress-top span { font-size: 12.5px; font-weight: 700; color: var(--ink-soft); }
 .st-kpi-bar { height: 10px; border-radius: 99px; background: var(--edge); overflow: hidden; }
 .st-kpi-bar i { display: block; height: 100%; border-radius: 99px; background: var(--accent-text); transition: width .4s ease; }
+
+/* ======================================================================
+ * Overview dashboard: KPI cards, charts, skeletons, attention list.
+ * (Replaces the plain stat boxes. Charts come from Components/charts, copied from sclf_APP.)
+ * ====================================================================== */
+.st-kpi-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; }
+@media (max-width: 1180px) { .st-kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .st-kpi-row { grid-template-columns: minmax(0, 1fr); } }
+.st-kpi-card { min-width: 0; display: flex; flex-direction: column; padding: 18px 20px; }
+.st-kpi-icon { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; margin-bottom: 12px; color: var(--accent-text); background: color-mix(in srgb, var(--accent-text) 12%, transparent); }
+.st-kpi-value { font-size: 30px; font-weight: 800; letter-spacing: -.02em; line-height: 1.1; color: var(--ink); font-variant-numeric: tabular-nums; }
+.st-kpi-label { margin-top: 4px; font-size: 13px; font-weight: 700; color: var(--ink); }
+.st-kpi-hint { margin-top: 2px; font-size: 12px; color: var(--ink-soft); }
+.st-kpi-card.is-warn .st-kpi-icon { color: #b45309; background: rgba(245, 158, 11, .16); }
+.st-kpi-card .ch-spark-wrap { margin-top: auto; padding-top: 10px; }
+
+.st-chart-row { display: grid; gap: 16px; margin-bottom: 16px; align-items: stretch; }
+.st-chart-row.st-2-1 { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+.st-chart-row.st-1-1 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 1000px) { .st-chart-row.st-2-1, .st-chart-row.st-1-1 { grid-template-columns: minmax(0, 1fr); } }
+.st-chart { min-width: 0; margin-bottom: 0; }
+.st-chart-row + .st-chart, .st-chart-row + .st-card, .st-chart + .st-chart, .st-chart + .st-card { margin-top: 16px; }
+.st-chart-row > .st-chart { margin-top: 0; }
+.st-chart-head { display: flex; align-items: flex-start; gap: 11px; margin-bottom: 14px; }
+.st-chart-head h2 { margin: 0; font-size: 16px; font-weight: 800; letter-spacing: -.01em; }
+.st-chart-head p { margin: 2px 0 0; font-size: 12.5px; color: var(--ink-soft); }
+.st-chart-icon { width: 30px; height: 30px; flex: none; border-radius: 9px; display: grid; place-items: center; color: var(--accent-text); background: color-mix(in srgb, var(--accent-text) 12%, transparent); }
+.st-legend { display: flex; gap: 16px; font-size: 12px; font-weight: 700; color: var(--ink-soft); margin: 0 0 4px; }
+.st-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 6px; }
+.st-legend .d1 { background: var(--ch-1); } .st-legend .d2 { background: var(--ch-2); }
+
+.st-attn { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; }
+@media (max-width: 760px) { .st-attn { grid-template-columns: minmax(0, 1fr); } }
+.st-attn li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1.5px solid var(--edge); border-radius: 14px; }
+.st-attn-icon { width: 30px; height: 30px; flex: none; border-radius: 9px; display: grid; place-items: center; color: var(--ink-soft); background: var(--hover); }
+.st-attn-label { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; }
+.st-attn b { font-size: 18px; font-variant-numeric: tabular-nums; }
+.st-attn li.is-warn .st-attn-icon { color: #b45309; background: rgba(245, 158, 11, .16); }
+.st-attn li.is-bad .st-attn-icon { color: #b91c1c; background: rgba(220, 38, 38, .13); }
+.st-attn-go { padding: 6px 8px; min-width: 0; }
+.st-attn-spacer { width: 34px; flex: none; }
+.st-acct { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; }
+.st-acct > div { padding: 12px 14px; border: 1.5px solid var(--edge); border-radius: 14px; }
+.st-acct b { display: block; font-size: 22px; font-weight: 800; }
+.st-acct span { font-size: 12px; font-weight: 700; color: var(--ink-soft); }
+
+/* ---------- skeleton loading (shimmer) ---------- */
+.st-skel { display: block; background: linear-gradient(90deg, rgba(148,163,184,.10), rgba(148,163,184,.24), rgba(148,163,184,.10)); background-size: 200% 100%; animation: st-shimmer 1.4s ease-in-out infinite; }
+@keyframes st-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .st-skel { animation: none; } }
+
+/* ---------- table polish: aligned columns, compact actions ---------- */
+.st-table th { text-align: left; white-space: nowrap; }
+.st-table td { vertical-align: middle; }
+.st-table td .btn.st-btn { padding: 6px 14px; min-height: 0; font-size: 13px; }
+.st-table td:last-child { text-align: right; }
+.st-table th:last-child:empty { width: 1%; }

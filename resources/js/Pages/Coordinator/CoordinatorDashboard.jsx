@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { LayoutDashboard, Users, ClipboardCheck, FileBarChart, Megaphone, ShieldCheck, Upload } from "lucide-react";
 import AdminShell, { StatCard } from "../../Components/admin/AdminShell";
-import { Btn, Card, Check, Chip, KpiGrid, Field, Input, Notice, Row, Select, Table, statusTone, useAction } from "../../Components/admin/ui";
+import { Btn, Card, Check, Chip, Field, Input, Notice, Row, Select, Table, statusTone, useAction } from "../../Components/admin/ui";
+import { OverviewDashboard, OverviewSkeleton } from "../../Components/admin/Dashboard";
 import { AnnouncementsPanel, AuditPanel, ReportsPanel, RosterPanel } from "../../Components/admin/panels";
 import { coordinatorService as svc } from "../../services/coordinatorService";
 import { errorMessage } from "../../config/axiosConfig";
@@ -146,7 +147,7 @@ export default function CoordinatorDashboard() {
       title={tab === "dashboard" ? (data?.section ? `Section ${data.section.code}` : "Coordinator dashboard") : NAV.find((n) => n.key === tab)?.label}
       subtitle={tab === "dashboard" ? data?.message : (data?.section ? `Section ${data.section.code}` : undefined)}>
       {error && <p role="alert" className="st-error">{error}</p>}
-      {tab === "dashboard" && <><KpiGrid k={data?.kpis} scope="coordinator" /></>}
+      {tab === "dashboard" && (data ? <OverviewDashboard data={data} scope="coordinator" go={setTab} /> : !error && <OverviewSkeleton />)}
       {tab === "trainees" && <Trainees />}
       {tab === "roster" && <RosterPanel svc={svc} scope="coord" />}
       {tab === "approvals" && <Approvals />}

@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { LayoutDashboard, UserCog, Layers, ClipboardList, Users as UsersIcon, TrendingUp, Target, FileBarChart, Megaphone, ShieldCheck } from "lucide-react";
 import AdminShell, { StatCard } from "../../Components/admin/AdminShell";
-import { Btn, Card, Chip, KpiGrid, Field, Input, Notice, Row, Select, Table, statusTone, useAction } from "../../Components/admin/ui";
+import { Btn, Card, Chip, Field, Input, Notice, Row, Select, Table, statusTone, useAction } from "../../Components/admin/ui";
+import { OverviewDashboard, OverviewSkeleton } from "../../Components/admin/Dashboard";
 import { AnnouncementsPanel, AuditPanel, ReportsPanel } from "../../Components/admin/panels";
 import { adminService as svc } from "../../services/adminService";
 import { errorMessage } from "../../config/axiosConfig";
@@ -18,20 +19,13 @@ function useLoad(fn, deps = []) {
   return [data, load, error];
 }
 
-function Overview() {
+function Overview({ go }) {
   const [data, , error] = useLoad(svc.overview);
-  const a = data?.accounts;
   return (
     <>
       {error && <p role="alert" className="st-error">{error}</p>}
-      <KpiGrid k={data?.kpis} scope="admin" />
-      <h3 className="st-h3" style={{ marginTop: 22 }}>Accounts</h3>
-      <div className="st-flex">
-        <StatCard label="Trainees" value={a?.trainees} />
-        <StatCard label="Coordinators" value={a?.coordinators} />
-        <StatCard label="Administrators" value={a?.admins} />
-        <StatCard label="Deactivated accounts" value={a?.deactivated} />
-      </div>
+      {!data && !error && <OverviewSkeleton />}
+      <OverviewDashboard data={data} scope="admin" go={go} />
     </>
   );
 }
@@ -357,7 +351,7 @@ export default function AdminDashboard() {
   return (
     <AdminShell roleLabel="System Administrator" nav={NAV} active={tab} onNavigate={setTab}
       title={NAV.find((n) => n.key === tab)?.label} subtitle={year ? `Current academic year: ${year.name}` : undefined}>
-      {tab === "overview" && <Overview />}
+      {tab === "overview" && <Overview go={setTab} />}
       {tab === "users" && <Users />}
       {tab === "coordinators" && <Coordinators sections={sections} year={year} goTo={setTab} />}
       {tab === "sections" && <Sections courses={courses || []} year={year} onChanged={refresh} goTo={setTab} />}

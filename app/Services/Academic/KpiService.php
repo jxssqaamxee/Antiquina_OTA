@@ -7,6 +7,7 @@ use App\Models\DutyEntry;
 use App\Models\StudentEnrollment;
 use App\Models\TraineePlacement;
 use App\Models\User;
+use Illuminate\Support\Collection;
 
 /**
  * Role dashboards' KPI numbers. Same rule as ReportService: verified hours = APPROVED entries only.
@@ -29,6 +30,7 @@ class KpiService
         $rejected = DutyEntry::whereIn('user_id', $ids)->where('status', DutyEntry::REJECTED)->count();
 
         return [
+            'charts' => $this->charts($rows, $ids),
             'trainees' => $total,
             'verified_hours' => round((float) $rows->sum('verified'), 1),
             'required_hours' => (int) $rows->sum('required'),
@@ -51,5 +53,46 @@ class KpiService
             'coordinators_unassigned' => User::where('role', User::ROLE_COORDINATOR)->where('is_active', true)
                 ->whereNotIn('id', CoordinatorAssignment::open()->select('coordinator_id'))->count(),
         ];
+    }
+
+    /**
+     * Chart series for the overview screens. Everything is bucketed in PHP so it behaves the same on
+     * MySQL and SQLite. `weekly` = last 8 weeks (Mon-Sun) of verified (APPROVED) vs all logged hours.
+     */
+    private function charts(Collection $rows, Collection $ids): array
+    {
+        $start = now()->startOfWeek()->subWeeks(7);
+        $weeks = collect(range(0, 7))->map(fn ($i) => $start->copy()->addWeeks($i));
+        $entries = DutyEntry::whereIn('user_id', $ids)->where('duty_date', '>=', $start->toDateString())
+            ->get(['duty_date', 'status', 'hours', 'verified_hours']);
+
+        $weekly = $weeks->map(function ($w) use ($entries) {
+            $in = $entries->filter(fn ($e) => $e->duty_date->betweenIncluded($w, $w->copy()->endOfWeek()));
+
+            return [
+                'label' => $w->format('M j'),
+                'verified' => round((float) $in->where('status', DutyEntry::APPROVED)->sum('verified_hours'), 1),
+                'logged' => round((float) $in->sum('hours'), 1),
+            ];
+        })->values();
+
+        $counts = DutyEntry::whereIn('user_id', $ids)->selectRaw('status, count(*) as n')->groupBy('status')->pluck('n', 'status');
+        $status = collect([DutyEntry::APPROVED => 'Approved', DutyEntry::SUBMITTED => 'Awaiting review', DutyEntry::REJECTED => 'Rejected', DutyEntry::DRAFT => 'Draft'])
+            ->map(fn ($label, $k) => ['label' => $label, 'value' => (int) ($counts[$k] ?? 0)])->values();
+
+        $bands = [
+            ['label' => 'Completed', 'value' => $rows->where('percent', '>=', 100)->count()],
+            ['label' => '50% to 99%', 'value' => $rows->where('percent', '>=', 50)->where('percent', '<', 100)->count()],
+            ['label' => '1% to 49%', 'value' => $rows->where('percent', '>', 0)->where('percent', '<', 50)->count()],
+            ['label' => 'Not started', 'value' => $rows->where('percent', '<=', 0)->count()],
+        ];
+
+        $bySection = $rows->groupBy(fn ($r) => $r['section'] ?? 'No section')
+            ->map(fn ($g, $k) => ['label' => (string) $k, 'value' => round((float) $g->avg('percent'), 1)])
+            ->sortByDesc('value')->take(8)->values();
+        $byTrainee = $rows->sortByDesc('percent')->take(8)
+            ->map(fn ($r) => ['label' => $r['name'], 'value' => (float) $r['percent']])->values();
+
+        return compact('weekly', 'status', 'bands') + ['sections' => $bySection, 'top_trainees' => $byTrainee];
     }
 }

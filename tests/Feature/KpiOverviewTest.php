@@ -19,7 +19,7 @@ class KpiOverviewTest extends TestCase
     public function test_admin_overview_has_kpis(): void
     {
         $r = $this->signedIn($this->staff('admin', 'ADMIN-001'))->getJson('/api/admin/overview')->assertOk();
-        $r->assertJsonStructure(['kpis' => ['trainees', 'verified_hours', 'avg_percent', 'awaiting_review', 'placed', 'unplaced', 'unassigned', 'coordinators_unassigned'], 'accounts']);
+        $r->assertJsonStructure(['kpis' => ['trainees', 'verified_hours', 'avg_percent', 'charts' => ['weekly', 'status', 'bands', 'sections', 'top_trainees'], 'awaiting_review', 'placed', 'unplaced', 'unassigned', 'coordinators_unassigned'], 'accounts']);
     }
 
     public function test_unassigned_coordinator_gets_no_kpis_and_no_school_wide_data(): void
