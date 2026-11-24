@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import { clearPersistedUi } from "../../hooks/usePersistedTab";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
-import { Camera, Check as CheckIcon, ChevronDown, ChevronUp, KeyRound, Lock, LogOut, UserRound, Menu, Palette, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
+import { Boxes, Camera, Check as CheckIcon, ChevronDown, ChevronUp, ClipboardList, IdCard, KeyRound, Lock, LogOut, Mail, ShieldCheck, UserRound, Menu, Palette, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import api, { errorMessage } from "../../config/axiosConfig";
@@ -10,6 +10,7 @@ import { useAppTheme } from "../../hooks/useAppTheme";
 import { REGULAR_THEMES, BLACK_THEMES, THEMES, setTheme, saveThemeToAccount } from "../../utils/theme";
 import AvatarPhoto from "../shared/AvatarPhoto";
 import PhotoUploadModal from "../shared/PhotoUploadModal";
+import DeveloperCredit from "../shared/DeveloperCredit";
 import { clean, filterNameInput, validateProfile } from "../../utils/validators";
 import logo from "../../assets/images/site-logo.png";
 import { Btn, Card, Field, Input, Notice, Row } from "./ui";
@@ -20,7 +21,7 @@ const themeLabel = (id) => THEMES.find((t) => t.id === id)?.label || "Default";
 const COLLAPSE_KEY = "occ-sidebar-collapsed";
 const DESKTOP_QUERY = "(min-width: 960px)";
 
-const idLine = (user) => (user?.admin_id ? `${user?.role === "admin" ? "Admin" : "Coordinator"} ID: ${user.admin_id}` : (user?.email || ""));
+const idLine = (user) => (user?.admin_id ? `${user?.role === "admin" ? "Administrator" : "Coordinator"} ID: ${user.admin_id}` : (user?.email || ""));
 
 /**
  * Account menu: Change password · Theme (nine themes) · Sign out.
@@ -112,7 +113,7 @@ function AdminAccountMenu({ variant = "top", collapsed = false, onEditProfile, o
           </div>
 
           <button type="button" className="am-item" role="menuitem" onClick={() => { close(); onEditProfile(); }}>
-            <UserRound size={17} /> Edit profile
+            <UserRound size={17} /> Profile settings
           </button>
           <button type="button" className="am-item" role="menuitem" onClick={() => { close(); onChangePassword(); }}>
             <KeyRound size={17} /> Change password
@@ -153,7 +154,7 @@ function AdminAccountMenu({ variant = "top", collapsed = false, onEditProfile, o
  * Change-password form.
  * It opens as a dialog over the page (never inside the dashboard), closed by Cancel, Esc or a click outside.
  */
-function PasswordPanel({ onDone }) {
+function PasswordPanel({ onDone, inline = false }) {
   const { updateUser } = useAuth();
   const toast = useToast();
   const [f, setF] = useState({ current_password: "", password: "", password_confirmation: "" });
@@ -178,8 +179,8 @@ function PasswordPanel({ onDone }) {
     } catch (e) { setMsg({ bad: true, text: errorMessage(e) }); } finally { setBusy(false); }
   }
 
-  const form = (
-    <Card title="Change password">
+  const body = (
+    <>
       <Notice msg={msg} />
       <div className="st-grid st-pw-grid">
         <Field label="Current password"><Input type="password" autoComplete="current-password" autoFocus value={f.current_password} onChange={set("current_password")} /></Field>
@@ -189,24 +190,36 @@ function PasswordPanel({ onDone }) {
       <p className="st-muted" style={{ marginTop: 12 }}>At least 8 characters with upper and lower case letters and a number.</p>
       <div className="st-flex" style={{ marginTop: 14 }}>
         <Btn kind="primary" disabled={busy || !f.current_password || !f.password} onClick={save}>{busy ? "Saving…" : "Save password"}</Btn>
-        <Btn onClick={onDone} disabled={busy}>Cancel</Btn>
+        {!inline && <Btn onClick={onDone} disabled={busy}>Cancel</Btn>}
       </div>
-    </Card>
+    </>
   );
+  if (inline) return body;
 
   return createPortal(
     <div className="st-modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onDone?.(); }}>
-      <div className="st-modal" role="dialog" aria-modal="true" aria-label="Change password">{form}</div>
+      <div className="st-modal" role="dialog" aria-modal="true" aria-label="Change password"><Card title="Change password">{body}</Card></div>
     </div>,
     document.body
   );
 }
 
+const InfoItem = ({ icon: Icon, label, value }) => (
+  <div className="ds-info-item">
+    <span className="ds-info-icon"><Icon size={16} /></span>
+    <div className="ds-info-text">
+      <div className="ds-info-label">{label}</div>
+      <div className="ds-info-value">{value || "—"}</div>
+    </div>
+  </div>
+);
+
 /**
- * Edit profile dialog (Admin / Coordinator): photo, first / middle / last name.
- * The Admin ID and email were set when the account was created and stay locked.
+ * Profile Settings (same layout as sclf_APP's Profile Settings page): hero with photo + chips,
+ * Account details grid, name editing, and Security (change password).
+ * The Administrator / Coordinator ID and email were set when the account was created and stay locked.
  */
-function ProfilePanel({ onDone }) {
+function ProfileSettings() {
   const { user, updateUser } = useAuth();
   const toast = useToast();
   const [f, setF] = useState({ first_name: user?.first_name || "", middle_name: user?.middle_name || "", last_name: user?.last_name || "" });
@@ -215,12 +228,7 @@ function ProfilePanel({ onDone }) {
   const [msg, setMsg] = useState(null);
   const [photoOpen, setPhotoOpen] = useState(false);
   const set = (k) => (e) => { setF({ ...f, [k]: filterNameInput(e.target.value) }); setErrs({ ...errs, [k]: undefined }); };
-
-  useEffect(() => {
-    const onKey = (e) => { if (e.key === "Escape" && !photoOpen) onDone?.(); };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onDone, photoOpen]);
+  const roleLabel = user?.role === "admin" ? "Administrator" : "Coordinator";
 
   async function uploadPhoto(file) {
     const body = new FormData();
@@ -249,39 +257,60 @@ function ProfilePanel({ onDone }) {
       const { data } = await api.put("/profile", { first_name: clean(f.first_name), middle_name: clean(f.middle_name) || null, last_name: clean(f.last_name) });
       await updateUser(data.user);
       toast.success("Profile saved.", { key: "admin-profile-saved" });
-      onDone?.();
     } catch (e) { setMsg({ bad: true, text: errorMessage(e) }); } finally { setBusy(false); }
   }
 
-  return createPortal(
-    <div className="st-modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy && !photoOpen) onDone?.(); }}>
-      <div className="st-modal" role="dialog" aria-modal="true" aria-label="Edit profile">
-        <Card title="Edit profile">
-          <Notice msg={msg} />
-          <div className="st-flex" style={{ marginBottom: 14, alignItems: "center", gap: 14 }}>
-            <button type="button" className="ds-avatar" style={{ width: 72, height: 72, position: "relative" }} onClick={() => setPhotoOpen(true)} aria-label="Change profile photo">
-              <AvatarPhoto user={user} />
-            </button>
-            <Btn onClick={() => setPhotoOpen(true)}><Camera size={15} /> {user?.has_profile_photo ? "Change photo" : "Add photo"}</Btn>
+  return (
+    <>
+      <div className="st-card" style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
+        <button type="button" className="ds-avatar" style={{ width: 64, height: 64, fontSize: 22, borderRadius: 16, position: "relative" }} onClick={() => setPhotoOpen(true)} aria-label="Change profile photo">
+          <AvatarPhoto user={user} />
+        </button>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontSize: 18, fontWeight: 800 }}>{user?.name || "Account"}</div>
+          <div style={{ fontSize: 13, opacity: 0.6 }}>{user?.email || ""}</div>
+          <div className="ds-chip-row">
+            <span className="ds-chip ds-chip-accent">{roleLabel}</span>
+            {user?.admin_id && <span className="ds-chip">{roleLabel} ID: {user.admin_id}</span>}
           </div>
-          <div className="st-grid st-pw-grid">
-            <Field label="First name"><Input value={f.first_name} maxLength={80} autoComplete="given-name" onChange={set("first_name")} />{errs.first_name && <small className="st-muted" role="alert">{errs.first_name}</small>}</Field>
-            <Field label="Middle name"><Input value={f.middle_name} maxLength={80} autoComplete="additional-name" onChange={set("middle_name")} />{errs.middle_name && <small className="st-muted" role="alert">{errs.middle_name}</small>}</Field>
-            <Field label="Last name"><Input value={f.last_name} maxLength={80} autoComplete="family-name" onChange={set("last_name")} />{errs.last_name && <small className="st-muted" role="alert">{errs.last_name}</small>}</Field>
-          </div>
-          <p className="st-muted" style={{ marginTop: 12 }}>
-            <Lock size={12} aria-hidden="true" /> {user?.role === "admin" ? "Admin" : "Coordinator"} ID <b>{user?.admin_id}</b> and email <b>{user?.email}</b> were set when the account was created and can’t be changed here.
-          </p>
-          <div className="st-flex" style={{ marginTop: 14 }}>
-            <Btn kind="primary" disabled={busy} onClick={save}>{busy ? "Saving…" : "Save changes"}</Btn>
-            <Btn onClick={onDone} disabled={busy}>Cancel</Btn>
-          </div>
-        </Card>
-        <PhotoUploadModal open={photoOpen} onClose={() => setPhotoOpen(false)} onAccept={uploadPhoto} title="Profile photo"
-          onRemove={user?.has_profile_photo ? removePhoto : undefined} />
+        </div>
+        <Btn onClick={() => setPhotoOpen(true)}><Camera size={15} /> {user?.has_profile_photo ? "Change photo" : "Add photo"}</Btn>
       </div>
-    </div>,
-    document.body
+
+      <Card title="Account details">
+        <p className="ds-card-desc">Information tied to your OCCDL account.</p>
+        <div className="ds-info-grid">
+          <InfoItem icon={UserRound} label="Full name" value={user?.name} />
+          <InfoItem icon={Mail} label="Email" value={user?.email} />
+          <InfoItem icon={IdCard} label={`${roleLabel} ID`} value={user?.admin_id} />
+          <InfoItem icon={ShieldCheck} label="Role" value={<span className="ds-chip ds-chip-accent">{roleLabel}</span>} />
+        </div>
+        <p className="st-muted" style={{ marginTop: 12 }}>
+          <Lock size={12} aria-hidden="true" /> The {roleLabel} ID and email were set when the account was created and can’t be changed here.
+        </p>
+      </Card>
+
+      <Card title="Personal information">
+        <p className="ds-card-desc">Update how your name appears.</p>
+        <Notice msg={msg} />
+        <div className="st-grid st-pw-grid">
+          <Field label="First name"><Input value={f.first_name} maxLength={80} autoComplete="given-name" onChange={set("first_name")} />{errs.first_name && <small className="st-muted" role="alert">{errs.first_name}</small>}</Field>
+          <Field label="Middle name"><Input value={f.middle_name} maxLength={80} autoComplete="additional-name" onChange={set("middle_name")} />{errs.middle_name && <small className="st-muted" role="alert">{errs.middle_name}</small>}</Field>
+          <Field label="Last name"><Input value={f.last_name} maxLength={80} autoComplete="family-name" onChange={set("last_name")} />{errs.last_name && <small className="st-muted" role="alert">{errs.last_name}</small>}</Field>
+        </div>
+        <div className="st-flex" style={{ marginTop: 14 }}>
+          <Btn kind="primary" disabled={busy} onClick={save}>{busy ? "Saving…" : "Save changes"}</Btn>
+        </div>
+      </Card>
+
+      <Card title="Security">
+        <p className="ds-card-desc">Keep your sign-in details up to date and your account protected.</p>
+        <PasswordPanel inline />
+      </Card>
+
+      <PhotoUploadModal open={photoOpen} onClose={() => setPhotoOpen(false)} onAccept={uploadPhoto} title="Profile photo"
+        onRemove={user?.has_profile_photo ? removePhoto : undefined} />
+    </>
   );
 }
 
@@ -298,7 +327,7 @@ export default function AdminShell({ roleLabel, nav = [], active, onNavigate, ti
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const [showPw, setShowPw] = useState(false);
-  const [showProfile, setShowProfile] = useState(false);
+  const [showProfile, setShowProfile] = useState(() => { try { return window.location.hash === "#profile"; } catch { return false; } });
   const [sidebarOpen, setSidebarOpen] = useState(false); // slide-over on narrow screens
   const [isDesktop, setIsDesktop] = useState(() => (typeof window === "undefined" ? true : window.matchMedia(DESKTOP_QUERY).matches));
   const [collapsed, setCollapsed] = useState(() => {
@@ -334,9 +363,13 @@ export default function AdminShell({ roleLabel, nav = [], active, onNavigate, ti
     try { await logout(); clearPersistedUi(); } finally { navigate("/administrator", { replace: true }); }
   }
 
+  const openProfile = () => {
+    setShowPw(false); setShowProfile(true); setSidebarOpen(false);
+    try { window.history.replaceState(window.history.state, "", `${window.location.pathname}${window.location.search}#profile`); } catch { /* ignore */ }
+  };
   const go = (key) => { setShowPw(false); setShowProfile(false); onNavigate?.(key); setSidebarOpen(false); };
   const activeItem = nav.find((n) => n.key === active);
-  const menuProps = { signingOut: busy, onSignOut: signOut, onChangePassword: () => setShowPw(true), onEditProfile: () => setShowProfile(true) };
+  const menuProps = { signingOut: busy, onSignOut: signOut, onChangePassword: () => setShowPw(true), onEditProfile: openProfile };
 
   return (
     <div className="ds-shell ds-layout">
@@ -357,7 +390,7 @@ export default function AdminShell({ roleLabel, nav = [], active, onNavigate, ti
         <div className="ds-nav-scroll">
           <ul className="ds-nav">
             {nav.map(({ key, label, icon: Icon }) => {
-              const on = key === active;
+              const on = key === active && !showProfile;
               return (
                 <li key={key}>
                   <button type="button" className={`ds-nav-link${on ? " active" : ""}`} aria-current={on ? "page" : undefined}
@@ -389,7 +422,7 @@ export default function AdminShell({ roleLabel, nav = [], active, onNavigate, ti
             </button>
             <div className="ds-topbar-brand">
               <img src={logo} alt="" />
-              <span>{activeItem?.label || "OCCDL"}</span>
+              <span>{showProfile ? "Profile Settings" : (activeItem?.label || "OCCDL")}</span>
             </div>
           </div>
           <div className="ds-topbar-actions">
@@ -399,7 +432,16 @@ export default function AdminShell({ roleLabel, nav = [], active, onNavigate, ti
 
         <main className="ds-main" id="main-content" tabIndex={-1}>
           <>
-              {(title || subtitle || actions) && (
+              {showProfile ? (
+                <div className="ds-header">
+                  <div className="ds-header-text">
+                    <span className="ds-eyebrow">Account</span>
+                    <h1 className="ds-title">Profile Settings</h1>
+                    <p className="ds-subtitle">Your account details for OCCDL.</p>
+                  </div>
+                  <div className="ds-actions"><Btn onClick={() => go(active)}>Back to {activeItem?.label || "dashboard"}</Btn></div>
+                </div>
+              ) : (title || subtitle || actions) && (
                 <div className="ds-header">
                   <div className="ds-header-text">
                     {roleLabel && <span className="ds-eyebrow">{roleLabel}</span>}
@@ -410,16 +452,30 @@ export default function AdminShell({ roleLabel, nav = [], active, onNavigate, ti
                 </div>
               )}
               {showPw && <PasswordPanel onDone={() => setShowPw(false)} />}
-              {showProfile && <ProfilePanel onDone={() => setShowProfile(false)} />}
-              {children}
+              {showProfile ? <ProfileSettings /> : children}
           </>
         </main>
 
         <footer className="ds-footer">
           <div className="ds-footer-inner">
-            <span className="ds-footer-credit">OCCDL · On-the-Job Training Duty Logbook</span>
+            <span className="ds-footer-credit">
+              {"</> "}Developed by{" "}
+              <DeveloperCredit showTag={false} />
+            </span>
+
             <span className="ds-footer-sep ds-footer-extra" aria-hidden="true">|</span>
-            <span className="ds-footer-copy ds-footer-extra">© {new Date().getFullYear()} Opol Community College</span>
+
+            <div className="ds-footer-links ds-footer-extra">
+              <span className="ds-footer-badge"><ShieldCheck size={12} /> Secure</span>
+              <span className="ds-footer-dot">•</span>
+              <span className="ds-footer-badge"><ClipboardList size={12} /> Duty Logbook</span>
+              <span className="ds-footer-dot">•</span>
+              <span className="ds-footer-badge"><Boxes size={12} /> Opol Community College</span>
+            </div>
+
+            <span className="ds-footer-sep ds-footer-extra" aria-hidden="true">|</span>
+
+            <span className="ds-footer-copy ds-footer-extra">© {new Date().getFullYear()} OCCDL • Built with ❤️</span>
           </div>
         </footer>
       </div>
