@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import FullCalendar from "@fullcalendar/react";
 import timeGridPlugin from "@fullcalendar/timegrid";
-import { CalendarDays, ChevronLeft, ChevronRight, Download, FileImage, FileText, Maximize2, Minimize2, Minus, Plus, RefreshCw, WifiOff, X } from "lucide-react";
+import { ArrowLeftRight, CalendarDays, ChevronLeft, ChevronRight, Download, FileImage, FileText, Maximize2, Minimize2, Minus, Plus, RefreshCw, WifiOff, X } from "lucide-react";
 import useLoad from "../../hooks/useLoad";
 import { TYPE, DAY_FULL, DAY_NAME, buildBlocks, hourRange, hhmm, fmt12, dur, daysText, fileBase } from "../../utils/timetableModel";
 import { saveTimetable, loadTimetable } from "../../utils/timetableCache";
@@ -201,6 +201,8 @@ export default function WeekTimetable({ fetcher, resetKey = "", interval = 0, ca
               </div>
             )}
           </div>
+
+          {view === "week" && <p className="tt-swipe"><ArrowLeftRight size={13} aria-hidden="true" /> Swipe sideways to see every day.</p>}
 
           <div className="tt-scroll" ref={boxRef}>
             <div className={`tt-cal${view === "day" ? " is-day" : ""}`} aria-label={`Duty timetable, ${w.label}`}>

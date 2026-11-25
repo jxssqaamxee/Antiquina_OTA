@@ -233,13 +233,10 @@ function PasswordPanel({ onDone, inline = false }) {
   );
 }
 
-const InfoItem = ({ icon: Icon, label, value }) => (
-  <div className="ds-info-item">
-    <span className="ds-info-icon"><Icon size={16} /></span>
-    <div className="ds-info-text">
-      <div className="ds-info-label">{label}</div>
-      <div className="ds-info-value">{value || "—"}</div>
-    </div>
+const Fact = ({ icon: Icon, label, value, wide }) => (
+  <div className={`ds-fact${wide ? " is-wide" : ""}`}>
+    <dt><Icon size={13} aria-hidden="true" /> {label}</dt>
+    <dd>{value || "—"}</dd>
   </div>
 );
 
@@ -277,9 +274,12 @@ function ProfileSettings() {
   return (
     <>
       <div className="st-card ds-me">
-        <Tooltip label={"Change profile photo"}><button type="button" className="ds-avatar ds-me-avatar" onClick={() => setPhotoOpen(true)} aria-label="Change profile photo">
-          <AvatarPhoto user={user} />
-        </button></Tooltip>
+        <span className="ds-me-avatar-wrap">
+          <Tooltip label={"Change profile photo"}><button type="button" className="ds-avatar ds-me-avatar" onClick={() => setPhotoOpen(true)} aria-label="Change profile photo">
+            <AvatarPhoto user={user} />
+          </button></Tooltip>
+          <span className="ds-me-cam" aria-hidden="true"><Camera size={12} /></span>
+        </span>
         <div className="ds-me-text">
           <h2 className="ds-me-name">{user?.name || "Account"}</h2>
           {user?.email && <p className="ds-me-email">{user.email}</p>}
@@ -293,14 +293,13 @@ function ProfileSettings() {
 
       <Notice msg={msg} />
       <Card title="Account details">
-        <p className="ds-card-desc">Information tied to your OCCDL account.</p>
-        <div className="ds-info-grid">
-          <InfoItem icon={UserRound} label="Full name" value={user?.name} />
-          <InfoItem icon={Mail} label="Email" value={user?.email} />
-          <InfoItem icon={IdCard} label={`${roleLabel} ID`} value={user?.admin_id} />
-          <InfoItem icon={ShieldCheck} label="Role" value={<span className="ds-chip ds-chip-accent">{roleLabel}</span>} />
-        </div>
-        <p className="st-muted" style={{ marginTop: 12 }}>
+        <dl className="ds-facts">
+          <Fact wide icon={UserRound} label="Full name" value={user?.name} />
+          <Fact wide icon={Mail} label="Email" value={user?.email} />
+          <Fact icon={IdCard} label={`${roleLabel} ID`} value={user?.admin_id} />
+          <Fact icon={ShieldCheck} label="Role" value={<span className="ds-chip ds-chip-accent">{roleLabel}</span>} />
+        </dl>
+        <p className="st-muted ds-facts-note">
           <Lock size={12} aria-hidden="true" /> These details can only be changed by an administrator.
         </p>
       </Card>

@@ -149,3 +149,19 @@
 .tt-sheet-wrap { z-index: 400; align-items: flex-end; padding: env(safe-area-inset-top, 0px) 0 0; }
 .tt-sheet { max-height: 80vh; max-height: 80dvh; padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px)); box-shadow: 0 -12px 40px rgba(0,0,0,.28); }
 @media (min-width: 641px) { .tt-sheet-wrap { align-items: center; padding: 16px; } }
+
+/* ---------- v3: student profile – the week scrolls inside its own box, exactly like the coordinator's ---------- */
+/* .pf-stack is a grid with an automatic column: the 840px week made that column (and the card, and the page) wider,
+   which looked "destroyed". A 0-minimum column keeps every card the width of the screen. */
+.pf-stack { grid-template-columns: minmax(0, 1fr); }
+.pf-stack > *, .pf-form, .pf-form .pf-body { min-width: 0; max-width: 100%; }
+.pf-form .tt { width: 100%; }
+.pf-form .tt-scroll { width: 100%; }
+
+/* Small hint under the Week / Day switch on phones. */
+.tt-swipe { display: none; margin: 0 0 8px; font-size: 12px; color: var(--ink-soft); }
+@media (max-width: 640px) {
+  .tt-swipe { display: flex; align-items: center; gap: 6px; }
+  .tt-scroll { scroll-snap-type: x proximity; scroll-padding-left: 44px; }
+  .tt-cal .fc-col-header-cell, .tt-cal .fc-timegrid-col { scroll-snap-align: start; }
+}
