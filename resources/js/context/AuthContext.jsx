@@ -5,6 +5,7 @@ import { hydrate, releaseUser, stopSync, unsyncedCount } from "../utils/sync";
 import { showToast } from "../utils/eventBus";
 import { setTheme } from "../utils/theme";
 import { clearPhotoCache, preloadPhoto } from "../utils/imageCache";
+import { clearTimetableCache } from "../utils/timetableCache";
 import { forgetThisDevice, getInstallId } from "../utils/push";
 import { isBlockedByApproval, isTrainee } from "../utils/roles";
 
@@ -82,7 +83,7 @@ export function AuthProvider({ children }) {
           setSignedIn(true);
           preloadPhoto(cached.picture); // served from Cache Storage when offline
           setUser(cached);
-        } else if (e.response) { writeMe(null); clearPhotoCache(); }
+        } else if (e.response) { writeMe(null); clearPhotoCache(); clearTimetableCache(); }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -92,7 +93,7 @@ export function AuthProvider({ children }) {
 
   // Session expired / ended on the server while the app was open.
   useEffect(() => {
-    const onUnauthorized = () => { warnUnsynced(userRef.current?.sub, "Your session ended."); stopSync(); setUser(null); writeMe(null); clearPhotoCache(); };
+    const onUnauthorized = () => { warnUnsynced(userRef.current?.sub, "Your session ended."); stopSync(); setUser(null); writeMe(null); clearPhotoCache(); clearTimetableCache(); };
     window.addEventListener(EVENTS.unauthorized, onUnauthorized);
     return () => window.removeEventListener(EVENTS.unauthorized, onUnauthorized);
   }, []);
@@ -113,11 +114,11 @@ export function AuthProvider({ children }) {
       const me = await probeSession();
       if (me) { setSignedIn(true); await establish(me); }
       else if (userRef.current) {
-        stopSync(); setSignedIn(false); setUser(null); writeMe(null); clearPhotoCache();
+        stopSync(); setSignedIn(false); setUser(null); writeMe(null); clearPhotoCache(); clearTimetableCache();
       }
     } catch (e) {
       if (e.response && userRef.current) {
-        stopSync(); setSignedIn(false); setUser(null); writeMe(null); clearPhotoCache();
+        stopSync(); setSignedIn(false); setUser(null); writeMe(null); clearPhotoCache(); clearTimetableCache();
       }
     }
   }, [establish]);
@@ -150,6 +151,7 @@ export function AuthProvider({ children }) {
     setSignedIn(false);
     writeMe(null);
     clearPhotoCache();
+    clearTimetableCache(); // a shared phone keeps no timetable after sign-out
     setUser(null);
   }, []);
 

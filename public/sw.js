@@ -4,7 +4,7 @@
 //    and then offline.html, so an installed app still opens with no signal.
 //  - /api/* is NEVER cached (private, per-user data); the app keeps its own
 //    offline copy of the logbook and syncs when the connection returns.
-const VERSION = "occ-v10"; // v10: precaches every file of the build (images included), like sclf_APP
+const VERSION = "occ-v11"; // v11: weekly timetable calendar + PNG/PDF download; v10: precaches every file of the build (images included)
 const SHELL = `${VERSION}-shell`;
 const ASSETS = `${VERSION}-assets`;
 const PRECACHE = ["/offline.html", "/images/icon-192.png", "/images/icon-512.png"];

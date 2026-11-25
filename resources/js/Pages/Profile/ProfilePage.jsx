@@ -233,7 +233,7 @@ export default function ProfilePage() {
               </button>
               <div className="pf-body" hidden={openSec !== "timetable"}>
                 <p className="pf-muted" style={{ margin: "0 0 10px" }}>Your week at a glance, based on your logbook. Green is on time, yellow is up to 30 minutes late, red is later than that.</p>
-                {openSec === "timetable" && <WeekTimetable fetcher={timetableFetcher} />}
+                {openSec === "timetable" && <WeekTimetable fetcher={timetableFetcher} canDownload />}
               </div>
             </section>
           )}

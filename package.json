@@ -10,6 +10,9 @@
         "dev": "vite"
     },
     "dependencies": {
+        "@fullcalendar/core": "^6.1.22",
+        "@fullcalendar/react": "^6.1.22",
+        "@fullcalendar/timegrid": "^6.1.22",
         "axios": "^1.21.1",
         "jspdf": "^4.2.1",
         "jspdf-autotable": "^5.0.9",
