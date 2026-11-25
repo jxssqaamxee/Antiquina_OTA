@@ -23,6 +23,8 @@ export { fmt12, dur };
 
 const ZOOM = [60, 80, 100, 130, 160];   // % of the base hour height
 const BASE_HOUR = 56;                   // px
+const WIDE_COL = 190;                   // px: width of a widened day column
+const WIDE_EXTRA = 80;                  // px: how much the calendar grows per widened day
 
 function eventBody({ event }) {
   const p = event.extendedProps;
@@ -45,6 +47,7 @@ export default function WeekTimetable({ fetcher, resetKey = "", interval = 0, ca
   const [dayDate, setDayDate] = useState(null);   // YYYY-MM-DD shown in day view
   const [sel, setSel] = useState(null);           // id of the tapped card (bottom sheet)
   const [full, setFull] = useState(false);        // whole timetable expanded to the full screen
+  const [wide, setWide] = useState([]);           // weekdays (1 = Mon … 7 = Sun) whose column is widened a little
   const closeRef = useRef(null);
   const boxRef = useRef(null);
 
@@ -119,6 +122,14 @@ export default function WeekTimetable({ fetcher, resetKey = "", interval = 0, ca
     ro.observe(el);
     return () => { cancelAnimationFrame(raf); ro.disconnect(); };
   }, [hasData]);
+  const toggleWide = (dow) => setWide((cur) => (cur.includes(dow) ? cur.filter((x) => x !== dow) : [...cur, dow]));
+  const wideKey = wide.join(",");
+  useEffect(() => { const t = setTimeout(() => cal.current?.getApi().updateSize(), 60); return () => clearTimeout(t); }, [wideKey, w?.start]);
+  // Widened columns: only that weekday's column gets wider (header + body); the calendar's own width grows by the same
+  // amount so the other days keep their size and the box simply scrolls a little further sideways.
+  const wideCss = useMemo(() => (data?.days || []).filter((d) => wide.includes(d.dow))
+    .map((d) => `.tt-cal th[data-date="${d.date}"], .tt-cal td.fc-timegrid-col[data-date="${d.date}"] { width: ${WIDE_COL}px; min-width: ${WIDE_COL}px; }`).join("\n"), [data, wide]);
+  const wideCount = view === "week" ? (data?.days || []).filter((d) => wide.includes(d.dow)).length : 0;
   const picked = sel ? blocks.find((b) => b.id === sel) : null;
   const pickedDay = picked ? data?.days?.find((d) => d.date === picked.date) : null;
 
@@ -205,7 +216,8 @@ export default function WeekTimetable({ fetcher, resetKey = "", interval = 0, ca
           {view === "week" && <p className="tt-swipe"><ArrowLeftRight size={13} aria-hidden="true" /> Swipe sideways to see every day.</p>}
 
           <div className="tt-scroll" ref={boxRef}>
-            <div className={`tt-cal${view === "day" ? " is-day" : ""}`} aria-label={`Duty timetable, ${w.label}`}>
+            <div className={`tt-cal${view === "day" ? " is-day" : ""}`} style={{ "--tt-extra": `${wideCount * WIDE_EXTRA}px` }} aria-label={`Duty timetable, ${w.label}`}>
+              {wideCss && view === "week" && <style>{wideCss}</style>}
               <FullCalendar
                 ref={cal}
                 plugins={[timeGridPlugin]}
@@ -231,7 +243,7 @@ export default function WeekTimetable({ fetcher, resetKey = "", interval = 0, ca
                   return (
                     <div className="tt-dh">
                       <div className="tt-dh-t"><b>{DAY_FULL[a.date.getDay() || 7]}</b><small>{day ? day.day : ""}{day?.is_today ? " · Today" : ""}</small></div>
-                      {view === "week" && day && <button type="button" className="tt-dh-x" aria-label={`Open ${DAY_FULL[a.date.getDay() || 7]} in day view`} title="Expand this day" onClick={(e) => { e.stopPropagation(); setDayDate(day.date); setView("day"); }}><Maximize2 size={13} /></button>}
+                      {view === "week" && day && (() => { const on = wide.includes(day.dow); return <button type="button" className="tt-dh-x" aria-pressed={on} aria-label={`${on ? "Make" : "Widen"} ${DAY_FULL[a.date.getDay() || 7]} ${on ? "narrow again" : "a little"}`} title={on ? "Make narrow" : "Widen this day"} onClick={(e) => { e.stopPropagation(); toggleWide(day.dow); }}>{on ? <Minimize2 size={13} /> : <Maximize2 size={13} />}</button>; })()}
                     </div>
                   );
                 }}

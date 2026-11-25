@@ -165,3 +165,9 @@
   .tt-scroll { scroll-snap-type: x proximity; scroll-padding-left: 44px; }
   .tt-cal .fc-col-header-cell, .tt-cal .fc-timegrid-col { scroll-snap-align: start; }
 }
+
+/* ---------- v4: per-day "widen" – only that weekday's column grows; the calendar grows by the same amount ---------- */
+.tt-cal:not(.is-day) { min-width: calc(760px + var(--tt-extra, 0px)); }
+@media (max-width: 640px) { .tt-cal:not(.is-day) { min-width: calc(840px + var(--tt-extra, 0px)); } }
+.tt.is-full .tt-cal:not(.is-day) { min-width: calc(1000px + var(--tt-extra, 0px)); }
+.tt-dh-x[aria-pressed="true"] { background: rgba(var(--accent-rgb, 37, 99, 235), .12); color: rgb(var(--accent-rgb, 37, 99, 235)); }
