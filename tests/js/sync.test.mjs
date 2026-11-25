@@ -7,7 +7,7 @@ const src = path.resolve(process.argv[2] || "sync.js");
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "synctest-"));
 fs.mkdirSync(path.join(dir, "utils")); fs.mkdirSync(path.join(dir, "config"));
 fs.writeFileSync(path.join(dir, "package.json"), '{"type":"module"}');
-fs.writeFileSync(path.join(dir, "utils/sync.js"), fs.readFileSync(src, "utf8").replace('"../config/axiosConfig"', '"../config/axiosConfig.js"').replace('"./storage"', '"./storage.js"'));
+fs.writeFileSync(path.join(dir, "utils/sync.js"), fs.readFileSync(src, "utf8").replace('"../config/axiosConfig"', '"../config/axiosConfig.js"').replace('"../config/constant"', '"../config/constant.js"').replace('"./storage"', '"./storage.js"'));
 fs.writeFileSync(path.join(dir, "utils/storage.js"), `
 export const store = new Map();
 export const getStorage = (k) => store.has(k) ? JSON.parse(store.get(k)) : undefined;
@@ -15,6 +15,7 @@ export const setStorage = (k, v) => { store.set(k, JSON.stringify(v)); };
 export const removeStorage = (k) => { store.delete(k); };
 export const getUserKey = (b, u) => "u_" + u + "::" + b;
 `);
+fs.writeFileSync(path.join(dir, "config/constant.js"), `export const EVENTS = { flush: "occ:flush" };`);
 fs.writeFileSync(path.join(dir, "config/axiosConfig.js"), `
 export const calls = [];
 export const mock = { put: null, get: null };
@@ -196,5 +197,61 @@ await t("unsyncedCount reports documents still only on the device, and drops to 
   await sync.flush(U);
   assert.equal(sync.unsyncedCount(U), 0);
 });
+
+
+// ---- live refresh (pull) ----------------------------------------------------------------------------------
+const route = (revs, docs) => { mock.get = async (url) => ({ data: url === "/sync/revisions" ? { revisions: revs } : { documents: docs, revisions: revs } }); };
+const urls = () => calls.filter((c) => c[0] === "get").map((c) => c[1]);
+
+await t("pull: nothing changed on the server -> only the tiny revisions call, no download, no event", async () => {
+  await hydrateWith({ documents: { [K]: { a: 1 } }, revisions: { [K]: 4 } });
+  calls.length = 0;
+  route({ [K]: 4 }, { [K]: { a: 1 } });
+  assert.equal(await sync.pull(U), false);
+  assert.deepEqual(urls(), ["/sync/revisions"]); assert.equal(events.length, 0);
+});
+
+await t("pull: server revision moved -> documents downloaded, local copy replaced, revision remembered, event raised", async () => {
+  await hydrateWith({ documents: { [K]: { a: 1 } }, revisions: { [K]: 4 } });
+  calls.length = 0;
+  route({ [K]: 5 }, { [K]: { a: 2 } });
+  assert.equal(await sync.pull(U), true);
+  assert.deepEqual(urls(), ["/sync/revisions", "/sync"]);
+  assert.deepEqual(local(), { a: 2 }); assert.equal(rev(), 5);
+  assert.deepEqual(events, [["occ-sync-applied", { key: K, source: "pull" }]]);
+  assert.deepEqual(dirty(), []); // a pull never queues a save (no ping-pong)
+});
+
+await t("pull: a key with an unsynced local edit is never overwritten", async () => {
+  await hydrateWith({ documents: { [K]: { a: 1 } }, revisions: { [K]: 4 } });
+  mock.put = async () => { throw err(500, {}); };
+  edit({ a: "mine" }); await sync.flush(U);
+  calls.length = 0;
+  route({ [K]: 5 }, { [K]: { a: "theirs" } });
+  assert.equal(await sync.pull(U), false);
+  assert.deepEqual(local(), { a: "mine" }); assert.deepEqual(urls(), ["/sync/revisions"]);
+});
+
+await t("pull: a notice created by the server (notifications-v1 appears) reaches the device", async () => {
+  const N = "notifications-v1";
+  await hydrateWith({ documents: { [K]: { a: 1 } }, revisions: { [K]: 4 } });
+  route({ [K]: 4, [N]: 1 }, { [K]: { a: 1 }, [N]: [{ id: "s1", type: "announcement", title: "Orientation", message: "Fri", time: "2026-11-25T01:00:00.000Z", read: false }] });
+  assert.equal(await sync.pull(U), true);
+  assert.equal(local(N)[0].title, "Orientation");
+  assert.deepEqual(events, [["occ-sync-applied", { key: N, source: "pull" }]]);
+});
+
+await t("pull: offline / server error is swallowed, local data kept", async () => {
+  await hydrateWith({ documents: { [K]: { a: 1 } }, revisions: { [K]: 4 } });
+  mock.get = async () => { throw err(500, {}); };
+  assert.equal(await sync.pull(U), false); assert.deepEqual(local(), { a: 1 });
+});
+
+await t("pull: another account is signed in -> does nothing", async () => {
+  await hydrateWith({ documents: { [K]: { a: 1 } }, revisions: { [K]: 4 } });
+  calls.length = 0;
+  assert.equal(await sync.pull(999), false); assert.equal(calls.length, 0);
+});
+
 
 console.log(`\n${n} scenarios passed`); fs.rmSync(dir, { recursive: true, force: true }); process.exit(process.exitCode || 0);

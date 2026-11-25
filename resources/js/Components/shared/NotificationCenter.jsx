@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { Bell, BellRing, Trash2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Bell, BellRing, CheckCheck, Megaphone, Trash2 } from "lucide-react";
 import { useNotifications } from "../../context/NotificationContext";
 import Sheet from "./Sheet";
 
@@ -15,15 +16,21 @@ function timeAgo(iso) {
 }
 
 export function NotificationBell() {
-  const { history, unreadCount, markAllRead, clearHistory } = useNotifications();
+  const { history, unreadCount, markAllRead, markGeneralRead, markRead, clearHistory } = useNotifications();
   const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
 
   function toggle() {
-    setOpen((v) => {
-      const next = !v;
-      if (next) markAllRead();
-      return next;
-    });
+    const next = !open;
+    setOpen(next);
+    if (next) markGeneralRead(); // announcements stay unread until the person taps them
+  }
+
+  // An announcement notice: mark it read, close the bell and open the Announcements page.
+  function openAnnouncement(n) {
+    markRead(n.id);
+    setOpen(false);
+    navigate("/announcements");
   }
 
   return (
@@ -39,20 +46,35 @@ export function NotificationBell() {
         title="Notifications"
         labelId="notif-title"
         footer={history.length > 0 ? (
-          <button type="button" className="btn" onClick={clearHistory}><Trash2 size={16} /> Clear all</button>
+          <>
+            {unreadCount > 0 && <button type="button" className="btn" onClick={markAllRead}><CheckCheck size={16} /> Mark all read</button>}
+            <button type="button" className="btn" onClick={clearHistory}><Trash2 size={16} /> Clear all</button>
+          </>
         ) : null}
       >
         <div className="notif-list">
           {history.length === 0 && (
             <div className="empty"><b>Nothing yet</b>Your milestones and shift reminders will show up here.</div>
           )}
-          {history.map((n) => (
-            <div className={`notif-item type-${n.type}`} key={n.id}>
-              <div className="notif-item-title">{n.title}</div>
-              {n.message && <div className="notif-item-msg">{n.message}</div>}
-              <div className="notif-item-time">{timeAgo(n.time)}</div>
-            </div>
-          ))}
+          {history.map((n) => {
+            const body = (
+              <>
+                <div className="notif-item-title">
+                  {n.type === "announcement" && <Megaphone size={13} aria-hidden="true" style={{ marginRight: 6, verticalAlign: "-2px" }} />}
+                  {n.title}
+                  {!n.read && <i aria-label="Unread" style={{ display: "inline-block", width: 8, height: 8, borderRadius: 99, marginLeft: 8, background: "var(--accent-text, #4f46e5)" }} />}
+                </div>
+                {n.message && <div className="notif-item-msg">{n.message}</div>}
+                <div className="notif-item-time">{timeAgo(n.time)}{n.type === "announcement" ? " · Tap to open" : ""}</div>
+              </>
+            );
+            return n.type === "announcement" ? (
+              <button type="button" key={n.id} className={`notif-item type-${n.type}`} onClick={() => openAnnouncement(n)}
+                style={{ textAlign: "left", width: "100%", font: "inherit", color: "inherit", cursor: "pointer" }}>{body}</button>
+            ) : (
+              <div className={`notif-item type-${n.type}`} key={n.id}>{body}</div>
+            );
+          })}
         </div>
       </Sheet>
     </>

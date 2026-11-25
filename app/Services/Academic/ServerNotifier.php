@@ -19,6 +19,9 @@ class ServerNotifier
         ]);
         // A stale device holding the old list now gets a 409 and reloads instead of overwriting.
         UserSetting::firstOrCreate(['user_id' => $user->id]);
+        // The notifications document only exists for sync once it has been "saved" at least once. A trainee who never
+        // had a client-made notice would otherwise never receive this one in the bell.
+        UserSetting::where('user_id', $user->id)->whereNull('notifications_saved_at')->update(['notifications_saved_at' => now()]);
         UserSetting::where('user_id', $user->id)->increment('notifications_revision');
     }
 }

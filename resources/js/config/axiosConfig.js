@@ -109,6 +109,8 @@ export function errorMessage(err, fallback = "Something went wrong. Please try a
   const d = err.response.data;
   if (d?.errors) return Object.values(d.errors)[0]?.[0] || fallback;
   if (err.response.status === 429) return "Too many attempts. Please wait a minute and try again.";
+  // Laravel's bare "Server Error" (HTTP 500) tells the person nothing: say what to do instead.
+  if (err.response.status >= 500) return "The server had a problem. Please try again in a moment.";
   return d?.message || fallback;
 }
 

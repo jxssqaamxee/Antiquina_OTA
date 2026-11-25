@@ -92,6 +92,7 @@ Route::middleware(['auth', 'session.fresh', 'active', 'email.verified', 'approve
     // The app debounces writes (one PUT per changed key), so 120/min is far above normal use.
     Route::middleware(['role:trainee', 'throttle:120,1'])->group(function () {
         Route::get('/sync', [DocumentController::class, 'index']);
+        Route::get('/sync/revisions', [DocumentController::class, 'revisions']);
         Route::put('/sync/{key}', [DocumentController::class, 'update']);
         Route::delete('/sync/{key}', [DocumentController::class, 'destroy']);
     });

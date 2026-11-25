@@ -29,6 +29,17 @@ class DocumentController extends Controller
         return response()->json($body);
     }
 
+    /**
+     * Cheap change check for live refresh: only the revision numbers (a few bytes). The app polls this and
+     * downloads the documents only when a number moved (a coordinator reviewed an entry, an announcement
+     * arrived, another device saved).
+     */
+    public function revisions(Request $request): JsonResponse
+    {
+        return response()->json(['revisions' => (object) $this->store->revisions($request->user())])
+            ->header('Cache-Control', 'no-store');
+    }
+
     public function update(Request $request, string $key): JsonResponse
     {
         abort_unless(in_array($key, LogbookRules::KEYS, true), 404);

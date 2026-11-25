@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { getUserStorage, setUserStorage } from "../utils/storage";
 import { useAuth } from "./AuthContext";
 import {
@@ -9,6 +9,7 @@ import {
 } from "../utils/notifications";
 import { uid } from "../utils/time";
 import { isTrainee } from "../utils/roles";
+import { showToast } from "../utils/eventBus";
 import { alertsTurnedOff, disablePush, enablePush, isPushSupported, needsHomeScreenInstall, sendTestPush, syncPush } from "../utils/push";
 
 const HISTORY_KEY = "notifications-v1";
@@ -33,6 +34,12 @@ export function NotificationProvider({ children }) {
     (next) => setStore((prev) => ({ ...prev, items: typeof next === "function" ? next(prev.items) : next })),
     []
   );
+  // What the screen holds right now, readable from event listeners without re-subscribing them.
+  const storeRef = useRef(store);
+  storeRef.current = store;
+  // Set when the list was just replaced by the server's copy: the save effect must not write it straight back
+  // (that would bump the revision and ping-pong between devices).
+  const skipWrite = useRef(false);
   const [permission, setPermission] = useState(() => getPermission());
   // Background (closed-app) alerts: "on" | "off" | "unsupported" | "unconfigured" | "denied" | "install" | "error"
   const [pushStatus, setPushStatus] = useState(() => (isPushSupported() ? (getPermission() === "granted" && !alertsTurnedOff() ? "on" : "off") : needsHomeScreenInstall() ? "install" : "unsupported"));
@@ -86,12 +93,49 @@ export function NotificationProvider({ children }) {
 
   useEffect(() => {
     if (!userId || store.owner !== userId) return;
+    if (skipWrite.current) { skipWrite.current = false; return; }
     setUserStorage(HISTORY_KEY, userId, store.items.slice(0, MAX_HISTORY));
   }, [store, userId]);
 
-  const markAllRead = useCallback(() => {
-    setHistory((prev) => prev.map((n) => ({ ...n, read: true })));
+  // Live: the server's list arrived (a coordinator announcement, another device, or a sync conflict).
+  // sync.js already wrote it into storage; take it into the bell and tell the person about NEW unread notices.
+  useEffect(() => {
+    if (!userId) return undefined;
+    const onApplied = (e) => {
+      if (e.detail?.key !== HISTORY_KEY) return;
+      const items = getUserStorage(HISTORY_KEY, userId);
+      const next = Array.isArray(items) ? items : EMPTY;
+      const prev = storeRef.current;
+      if (prev.owner !== userId) return;
+      const seen = new Set(prev.items.map((n) => n.id));
+      const fresh = next.filter((n) => !n.read && !seen.has(n.id));
+      skipWrite.current = true;
+      setStore({ owner: userId, items: next });
+      const ann = fresh.filter((n) => n.type === "announcement");
+      if (ann.length) {
+        showToast({
+          type: "info", key: "new-announcement", duration: 7000,
+          title: ann.length === 1 ? "New announcement" : `${ann.length} new announcements`,
+          message: ann.length === 1 ? ann[0].title : "Open the bell to read them.",
+        });
+      }
+    };
+    window.addEventListener("occ-sync-applied", onApplied);
+    return () => window.removeEventListener("occ-sync-applied", onApplied);
+  }, [userId]);
+
+  // Mark as read only when something actually changes (an unchanged list must not trigger a save).
+  const markWhere = useCallback((pick) => {
+    setStore((prev) => {
+      if (!prev.items.some((n) => !n.read && pick(n))) return prev;
+      return { ...prev, items: prev.items.map((n) => (!n.read && pick(n) ? { ...n, read: true } : n)) };
+    });
   }, []);
+  const markAllRead = useCallback(() => markWhere(() => true), [markWhere]);
+  /** Opening the bell: everyday notices count as seen; announcements stay unread until the person taps them. */
+  const markGeneralRead = useCallback(() => markWhere((n) => n.type !== "announcement"), [markWhere]);
+  const markRead = useCallback((id) => markWhere((n) => n.id === id), [markWhere]);
+  const markAnnouncementsRead = useCallback(() => markWhere((n) => n.type === "announcement"), [markWhere]);
 
   const clearHistory = useCallback(() => setHistory([]), []);
 
@@ -182,6 +226,9 @@ export function NotificationProvider({ children }) {
       permission,
       notify,
       markAllRead,
+      markGeneralRead,
+      markRead,
+      markAnnouncementsRead,
       clearHistory,
       enableSystemNotifications,
       pushStatus,
@@ -192,7 +239,7 @@ export function NotificationProvider({ children }) {
       alertsBusy,
       toggleAlerts,
     }),
-    [history, unreadCount, permission, notify, markAllRead, clearHistory, enableSystemNotifications,
+    [history, unreadCount, permission, notify, markAllRead, markGeneralRead, markRead, markAnnouncementsRead, clearHistory, enableSystemNotifications,
       pushStatus, turnOnBackgroundAlerts, turnOffBackgroundAlerts, testBackgroundAlert, alertsOn, alertsBusy, toggleAlerts]
   );
 

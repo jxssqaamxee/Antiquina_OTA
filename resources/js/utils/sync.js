@@ -8,8 +8,8 @@
 // Events dispatched on window (all optional to listen to):
 //   occ-sync-rejected  {key, message}  the server refused this data (HTTP 422). The refused
 //                                      value is kept in a recovery slot, never thrown away.
-//   occ-sync-applied   {key, conflict?} the server's copy replaced the local copy (conflict or
-//                                      server-authoritative fields). Pages that hold the
+//   occ-sync-applied   {key, conflict?, source?} the server's copy replaced the local copy (conflict,
+//                                      server-authoritative fields, or a live pull: source "pull"). Pages that hold the
 //                                      document in React state should re-read it. On a
 //                                      conflict our version is kept in the recovery slot.
 //
@@ -20,12 +20,15 @@
 // recognised by the server as ours when we resend it on the next visit.
 
 import api from "../config/axiosConfig";
+import { EVENTS } from "../config/constant";
 import { getStorage, setStorage, removeStorage, getUserKey } from "./storage";
 
 const SYNC_KEYS = ["logbook-v2", "milestones-v1", "shift-reminder-v1", "onboarding-seen-v1", "notifications-v1"];
 const DEBOUNCE_MS = 700;
 const RETRY_BASE_MS = 5000;        // first retry after a failure
 const RETRY_MAX_MS = 5 * 60000;    // never wait longer than this between retries
+const PULL_MS = 15000;            // live refresh: how often the open app asks "did anything change on the server?"
+const PULL_MIN_GAP_MS = 3000;     // focus + visibility + online can fire together: one check is enough
 const KEEPALIVE_LIMIT = 60000;     // browsers cap keepalive request bodies at ~64 KB
 
 let timer = null;
@@ -33,6 +36,9 @@ let retryTimer = null;
 let activeUser = null;
 let flushing = null;
 let failures = 0;                  // consecutive failed flushes, drives the backoff
+let pullTimer = null;
+let pulling = null;
+let lastPullAt = 0;
 let paused = false;                // server said "verify your email first" (403 email_unverified) or "waiting for approval" (403 account_pending): stop pushing
 
 const dirtyKey = (userId) => `sync-dirty::u_${userId}`;
@@ -268,7 +274,72 @@ export async function hydrate(userId) {
     }
   } catch { /* offline or server error: continue with the local cache */ }
   flush(userId);
+  startPolling(); // from now on the open app keeps itself current (see pull)
 }
+
+
+/**
+ * Live refresh. Asks the server for the revision numbers only (a few bytes) and downloads the documents
+ * ONLY when one moved: a coordinator reviewed an entry (logbook-v2), an announcement or notice arrived
+ * (notifications-v1), or another device saved. Keys with unsynced local edits are never touched (they are
+ * pushed, and a clash is reported as a normal conflict). Pages hear about changes through "occ-sync-applied".
+ * Resolves true when something was replaced. Never rejects.
+ */
+export function pull(userId = activeUser) {
+  if (!userId || userId !== activeUser || paused) return Promise.resolve(false);
+  if (pulling) return pulling;
+  lastPullAt = Date.now();
+  pulling = (async () => {
+    try {
+      // Screens write any edit still waiting in their debounce timer first, so it is "dirty" (protected) below.
+      try { window.dispatchEvent(new CustomEvent(EVENTS.flush)); } catch { /* ignore */ }
+      const { data: head } = await api.get("/sync/revisions");
+      if (userId !== activeUser) return false;
+      const revs = head?.revisions && typeof head.revisions === "object" ? head.revisions : {};
+      const behind = (base) => !readDirty(userId).includes(base)
+        && (Number.isInteger(revs[base]) ? revs[base] : 0) !== (readRev(userId, base) ?? 0);
+      if (!SYNC_KEYS.some(behind)) return false;
+
+      const { data } = await api.get("/sync");
+      if (userId !== activeUser) return false;
+      const docs = data.documents || {};
+      let changed = false;
+      for (const base of SYNC_KEYS) {
+        if (!behind(base)) continue; // re-checked: an edit made while we were downloading stays untouched
+        const before = getStorage(getUserKey(base, userId));
+        applyRevision(userId, base, data, docs);
+        if (Object.prototype.hasOwnProperty.call(docs, base)) {
+          if (!sameValue(before, docs[base])) {
+            setStorage(getUserKey(base, userId), docs[base]);
+            emit("occ-sync-applied", { key: base, source: "pull" });
+            changed = true;
+          }
+        } else if (before !== undefined && before !== null) {
+          removeStorage(getUserKey(base, userId)); // deleted elsewhere
+          emit("occ-sync-applied", { key: base, source: "pull" });
+          changed = true;
+        }
+      }
+      return changed;
+    } catch (e) {
+      const code = e?.response?.data?.code;
+      if (e?.response?.status === 403 && ["email_unverified", "role_forbidden", "account_pending", "account_rejected"].includes(code)) paused = true;
+      return false; // offline / server hiccup: the next tick tries again, the screen keeps what it has
+    }
+  })().finally(() => { pulling = null; });
+  return pulling;
+}
+
+function startPolling() {
+  clearInterval(pullTimer);
+  pullTimer = setInterval(() => {
+    if (activeUser && !document.hidden && navigator.onLine !== false) pull();
+  }, PULL_MS);
+  pullTimer?.unref?.(); // Node (the unit tests): never keep the process alive for this timer
+}
+const pullSoon = () => {
+  if (activeUser && !document.hidden && navigator.onLine !== false && Date.now() - lastPullAt > PULL_MIN_GAP_MS) pull();
+};
 
 /**
  * Forget the current account: cancel pending/retry pushes. Called when the session dies
@@ -278,8 +349,10 @@ export async function hydrate(userId) {
 export function stopSync() {
   clearTimeout(timer);
   clearTimeout(retryTimer);
+  clearInterval(pullTimer);
   timer = null;
   retryTimer = null;
+  pullTimer = null;
   activeUser = null;
   failures = 0;
   paused = false;
@@ -301,7 +374,7 @@ export async function releaseUser(userId) {
     }
     removeStorage(dirtyKey(userId));
   }
-  if (activeUser === userId) activeUser = null;
+  if (activeUser === userId) { activeUser = null; clearInterval(pullTimer); pullTimer = null; }
 }
 
 /**
@@ -340,10 +413,12 @@ function flushOnUnload(userId) {
 }
 
 if (typeof window !== "undefined") {
-  window.addEventListener("online", () => { failures = 0; if (activeUser) flush(activeUser); });
+  window.addEventListener("online", () => { failures = 0; if (activeUser) { flush(activeUser); pullSoon(); } });
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden" && activeUser) flush(activeUser);
+    else if (document.visibilityState === "visible") pullSoon(); // back to the app: show what changed meanwhile
   });
+  window.addEventListener("focus", pullSoon);
   // pagehide: the page may die before an axios call finishes, so send what is pending with keepalive.
   window.addEventListener("pagehide", () => { if (activeUser) flushOnUnload(activeUser); });
 }

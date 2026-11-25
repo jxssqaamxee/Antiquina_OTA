@@ -2,7 +2,8 @@ import React, { useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { EVENTS } from "../../config/constant";
 
-// Shows "A new version is ready" when the service worker finds an update.
+// A new version was found. pwa.js installs it by itself (saves any pending edit, then reloads), so nobody has to
+// close and reopen the app. This strip only says so, and "Update now" skips the short wait.
 export default function UpdateNotice() {
   const [waiting, setWaiting] = useState(null);
 
@@ -15,9 +16,9 @@ export default function UpdateNotice() {
   if (!waiting) return null;
   return (
     <div className="update-notice" role="status">
-      <span>A new version is ready.</span>
-      <button type="button" onClick={() => { waiting.postMessage({ type: "SKIP_WAITING" }); }}>
-        <RefreshCw size={14} /> Update
+      <span>Updating to the latest version…</span>
+      <button type="button" onClick={() => { try { window.dispatchEvent(new CustomEvent(EVENTS.flush)); } catch { /* ignore */ } waiting.postMessage({ type: "SKIP_WAITING" }); }}>
+        <RefreshCw size={14} /> Update now
       </button>
     </div>
   );
