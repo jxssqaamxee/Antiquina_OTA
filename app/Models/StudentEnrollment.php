@@ -28,6 +28,16 @@ class StudentEnrollment extends Model
         return $q->whereNull('ended_at');
     }
 
+    /**
+     * What a school year "contains": each student's LAST enrollment made in that year, open or already closed
+     * (completed, carried over, transferred). This is what year-scoped screens show, so a finished year stays
+     * readable as history while the new year starts empty.
+     */
+    public function scopeInYear(Builder $q, int $yearId): Builder
+    {
+        return $q->whereIn('student_enrollments.id', static::query()->where('academic_year_id', $yearId)->selectRaw('max(id)')->groupBy('user_id'));
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
@@ -52,6 +62,7 @@ class StudentEnrollment extends Model
     {
         return [
             'id' => $this->id, 'status' => $this->status, 'year_level' => $this->year_level,
+            'academic_year' => $this->relationLoaded('academicYear') ? $this->academicYear?->name : null,
             'course' => $this->course ? ['id' => $this->course->id, 'code' => $this->course->code, 'name' => $this->course->name] : null,
             'section' => $this->section ? ['id' => $this->section->id, 'code' => $this->section->code()] : null,
             'student' => $this->user ? ['id' => $this->user->id, 'student_id' => $this->user->student_id, 'name' => $this->user->fullName()] : null,

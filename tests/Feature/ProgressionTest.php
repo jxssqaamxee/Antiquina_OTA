@@ -61,6 +61,71 @@ class ProgressionTest extends TestCase
         $this->assertSame($before, StudentEnrollment::count());
     }
 
+    public function test_preview_shows_each_students_year_and_hours_so_nobody_is_completed_blindly(): void
+    {
+        $e4 = $this->student('2024-1-00002', $this->section($this->old, 4));
+
+        $row = collect($this->signedIn($this->admin())->getJson("/api/admin/academic-years/{$this->new->id}/progression/prepare")->assertOk()->json('proposals'))->firstWhere('id', $e4->id);
+        $this->assertSame($this->old->name, $row['academic_year']);
+        $this->assertSame(486, $row['required_hours']);
+        $this->assertEquals(0, $row['verified_hours']);
+        $this->assertFalse($row['hours_met']);
+    }
+
+    public function test_a_fourth_year_who_has_not_finished_can_repeat_into_the_new_year_and_keeps_their_hours(): void
+    {
+        $e = $this->student('2024-1-00001', $this->section($this->old, 4));
+        $dest = $this->section($this->new, 4);
+        $admin = $this->admin();
+
+        $this->signedIn($admin)->postJson("/api/admin/academic-years/{$this->new->id}/progression/confirm", ['items' => [
+            ['enrollment_id' => $e->id, 'kind' => 'repeat', 'section_id' => $dest->id],
+        ]])->assertOk()->assertJsonPath('confirmed', 1);
+
+        $now = $e->user->fresh()->currentEnrollment();
+        $this->assertSame($dest->id, $now->section_id);
+        $this->assertSame(4, $now->year_level);
+        $this->assertSame('active', $now->status);
+        $this->assertNotNull($e->fresh()->ended_at); // the old row is kept as history
+        // a repeat into a section of the wrong level is still refused
+        $wrong = $this->section($this->new, 3, 'B');
+        $e2 = $this->student('2024-1-00002', $this->section($this->old, 4, 'B'));
+        $this->signedIn($admin)->postJson("/api/admin/academic-years/{$this->new->id}/progression/confirm", ['items' => [
+            ['enrollment_id' => $e2->id, 'kind' => 'repeat', 'section_id' => $wrong->id],
+        ]])->assertStatus(422);
+    }
+
+    public function test_section_pickers_keep_earlier_year_sections_that_still_hold_students(): void
+    {
+        $oldSec = $this->section($this->old, 4);
+        $this->student('2024-1-00001', $oldSec);
+        $empty = $this->section($this->old, 4, 'B'); // old year, nobody in it
+        $admin = $this->admin();
+        $this->signedIn($admin)->postJson("/api/admin/academic-years/{$this->new->id}/make-current")->assertOk();
+
+        $this->assertCount(0, $this->signedIn($admin)->getJson('/api/admin/sections')->json('sections'));
+        $list = collect($this->signedIn($admin)->getJson('/api/admin/sections?include_open=1')->assertOk()->json('sections'));
+        $this->assertSame([$oldSec->id], $list->pluck('id')->all()); // the empty old section is not offered
+        $this->assertSame('BSIT-4A ('.$this->old->name.')', $list[0]['display']);
+    }
+
+    public function test_years_list_counts_sections_and_students_still_enrolled_in_each_year(): void
+    {
+        $this->student('2024-1-00001', $this->section($this->old, 4));
+        $this->student('2024-1-00002', $this->section($this->old, 4, 'B'));
+        $admin = $this->admin();
+        $this->signedIn($admin)->postJson("/api/admin/academic-years/{$this->new->id}/make-current")->assertOk();
+
+        // the new year is current, yet the students are still enrolled in the OLD year until a progression is confirmed
+        $years = collect($this->signedIn($admin)->getJson('/api/admin/academic-years')->assertOk()->json('academic_years'))->keyBy('id');
+        $this->assertSame(2, $years[$this->old->id]['open_enrollments_count']);
+        $this->assertSame(2, $years[$this->old->id]['sections_count']);
+        $this->assertSame(0, $years[$this->new->id]['open_enrollments_count']);
+        $this->assertTrue($years[$this->new->id]['is_current']);
+        $this->assertCount(0, $this->signedIn($admin)->getJson('/api/admin/sections')->json('sections')); // no sections in the new year yet
+        $this->assertSame(2, $this->signedIn($admin)->getJson('/api/admin/enrollments')->json('total'));
+    }
+
     public function test_confirm_promotes_keeps_history_and_notifies_and_is_idempotent(): void
     {
         $e = $this->student('2024-1-00001', $this->section($this->old, 3));

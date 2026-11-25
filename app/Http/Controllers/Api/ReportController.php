@@ -17,20 +17,25 @@ class ReportController extends Controller
 {
     public function __construct(private CoordinatorAccessService $scope, private ReportService $reports) {}
 
-    /** [sectionId, courseId] the caller may see. A Coordinator is pinned to their section; request filters cannot widen it. */
+    /**
+     * [sectionId, courseId, yearId] the caller may see. A Coordinator is pinned to their own section (a section already
+     * belongs to one year); request filters cannot widen it. The Administrator sees ONE school year: the one asked for,
+     * else the current one, so a new year starts empty and an old year stays readable.
+     */
     private function limits(Request $r): array
     {
         if ($r->user()->isCoordinator()) {
-            return [$this->scope->section($r->user())?->id ?? 0, null];
+            return [$this->scope->section($r->user())?->id ?? 0, null, null];
         }
+        $year = $r->filled('academic_year_id') ? $r->integer('academic_year_id') : \App\Models\AcademicYear::current()?->id;
 
-        return [$r->filled('section_id') ? $r->integer('section_id') : null, $r->filled('course_id') ? $r->integer('course_id') : null];
+        return [$r->filled('section_id') ? $r->integer('section_id') : null, $r->filled('course_id') ? $r->integer('course_id') : null, $year];
     }
 
     public function trainees(Request $request): JsonResponse
     {
-        [$s, $c] = $this->limits($request);
-        $rows = $this->reports->trainees($s, $c);
+        [$s, $c, $y] = $this->limits($request);
+        $rows = $this->reports->trainees($s, $c, $y);
 
         return response()->json(['rows' => $rows->values(), 'totals' => [
             'trainees' => $rows->count(), 'verified' => round($rows->sum('verified'), 2), 'pending' => round($rows->sum('pending'), 2),
@@ -40,8 +45,8 @@ class ReportController extends Controller
 
     public function export(Request $request, ActivityLogService $log): Response
     {
-        [$s, $c] = $this->limits($request);
-        $rows = $this->reports->trainees($s, $c);
+        [$s, $c, $y] = $this->limits($request);
+        $rows = $this->reports->trainees($s, $c, $y);
         $log->record($request->user(), 'report.exported', 'report', null, $s, ['rows' => $rows->count()]);
 
         return response($this->reports->csv($rows), 200, [

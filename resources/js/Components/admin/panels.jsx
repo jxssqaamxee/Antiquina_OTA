@@ -7,9 +7,25 @@ import usePersistedState from "../../hooks/usePersistedState";
 import { usePopup } from "../../context/PopupContext";
 
 /** Hours report (verified = approved only). `filters` = optional extra controls for Admin; `svc` is the role's service. */
-export function ReportsPanel({ svc, sections = [], courses = [], scope = "admin" }) {
+export function ReportsPanel({ svc, sections = [], courses = [], scope = "admin", yearId = null }) {
   const [f, setF] = usePersistedState(`${scope}.reports`, { section_id: "", course_id: "" });
-  const params = Object.fromEntries(Object.entries(f).filter(([, v]) => v));
+  // Course and Section are linked: a chosen course narrows the section list to ITS sections only.
+  const sectionsOf = (courseId) => (courseId ? sections.filter((s) => String(s.course_id) === String(courseId)) : sections);
+  const courseSections = sectionsOf(f.course_id);
+  // A remembered section that is not in the list any more (another course, an old academic year) is ignored, not sent.
+  const sectionId = courseSections.some((s) => String(s.id) === String(f.section_id)) ? f.section_id : "";
+  const params = Object.fromEntries(Object.entries({ course_id: f.course_id, section_id: sectionId, academic_year_id: yearId }).filter(([, v]) => v)); // the school year chosen in the header (Admin)
+  const pickCourse = (e) => {
+    const course_id = e.target.value;
+    // keep the section only if it belongs to the newly chosen course
+    setF({ course_id, section_id: sectionsOf(course_id).some((s) => String(s.id) === String(f.section_id)) ? f.section_id : "" });
+  };
+  const pickSection = (e) => {
+    const section_id = e.target.value;
+    const s = sections.find((x) => String(x.id) === section_id);
+    setF({ section_id, course_id: s ? String(s.course_id) : f.course_id }); // choosing a section also fills in its course
+  };
+  const courseCode = courses.find((c) => String(c.id) === String(f.course_id))?.code;
   const key = JSON.stringify(params);
   const [data, reload, error, m] = useLoad(() => svc.report(params), { interval: 60000, deps: [key] });
   const t = data?.totals;
@@ -21,10 +37,15 @@ export function ReportsPanel({ svc, sections = [], courses = [], scope = "admin"
         <Btn onClick={() => window.print()}>Print / Save as PDF</Btn>
       </>}>
         {error && <p role="alert" className="st-error">{m.stale ? "Couldn’t refresh just now. Showing the last data we loaded." : error}</p>}
-        {sections.length > 0 && (
+        {(sections.length > 0 || courses.length > 0) && (
           <Row>
-            <Field label="Course"><Select value={f.course_id} onChange={(e) => setF({ ...f, course_id: e.target.value })}><option value="">All</option>{courses.map((c) => <option key={c.id} value={c.id}>{c.code}</option>)}</Select></Field>
-            <Field label="Section"><Select value={f.section_id} onChange={(e) => setF({ ...f, section_id: e.target.value })}><option value="">All</option>{sections.map((s) => <option key={s.id} value={s.id}>{s.code}</option>)}</Select></Field>
+            <Field label="Course"><Select value={f.course_id} onChange={pickCourse}><option value="">All courses</option>{courses.map((c) => <option key={c.id} value={c.id}>{c.code}</option>)}</Select></Field>
+            <Field label="Section">
+              <Select value={sectionId} onChange={pickSection} disabled={courseSections.length === 0}>
+                <option value="">{courseSections.length === 0 ? `No ${courseCode || ""} sections yet`.replace("  ", " ") : courseCode ? `All ${courseCode} sections` : "All sections"}</option>
+                {courseSections.map((s) => <option key={s.id} value={s.id}>{s.display || s.code}</option>)}
+              </Select>
+            </Field>
           </Row>
         )}
         <div className="st-stat-grid">

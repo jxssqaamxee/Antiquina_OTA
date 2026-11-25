@@ -1,16 +1,19 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Radio, LayoutDashboard, UserCog, Layers, ClipboardList, Users as UsersIcon, TrendingUp, Target, FileBarChart, Megaphone, ShieldCheck, UserCheck } from "lucide-react";
 import AdminShell, { StatCard } from "../../Components/admin/AdminShell";
 import { Btn, Card, Chip, Field, Input, Notice, RefreshButton, Row, Select, Table, statusTone, useAction } from "../../Components/admin/ui";
 import { OverviewDashboard, OverviewSkeleton } from "../../Components/admin/Dashboard";
 import { LiveDutyPanel } from "../../Components/admin/LiveDuty";
 import RegistrationsPanel from "../../Components/admin/RegistrationsPanel";
+import UserDetails from "../../Components/admin/UserDetails";
 import { AnnouncementsPanel, AuditPanel, ReportsPanel } from "../../Components/admin/panels";
 import { adminService as svc } from "../../services/adminService";
 import useLoad from "../../hooks/useLoad";
 import usePersistedTab from "../../hooks/usePersistedTab";
 import usePersistedState from "../../hooks/usePersistedState";
 import { filterNameInput } from "../../utils/validators";
+import { usePopup } from "../../context/PopupContext";
+import { yearLabel } from "../../utils/academicYear";
 
 const LIVE = 30000; // how often an open screen quietly refetches (paused while the tab is hidden)
 const refreshBtn = (reload, m) => <RefreshButton onRefresh={reload} loading={m.loading && !m.updatedAt} updatedAt={m.updatedAt} />;
@@ -23,6 +26,8 @@ function Users() {
   const [dq, setDq] = useState(q);
   useEffect(() => { const t = setTimeout(() => setDq(q), 250); return () => clearTimeout(t); }, [q]); // wait for the typing to pause
   const [edit, setEdit] = useState(null);
+  const [view, setView] = useState(null); // full details of the account the Admin opened with "View"
+  const topRef = useRef(null);
   const { busy, msg, run } = useAction();
   const [data, load, error, m] = useLoad(() => svc.users({ q: dq || undefined, role: role || undefined }), { interval: 45000, deps: [dq, role] });
   const rows = data ? data.users : null;
@@ -31,10 +36,19 @@ function Users() {
     const r = await run(() => svc.updateUser(edit.id, { first_name: edit.first_name, middle_name: edit.middle_name || null, last_name: edit.last_name, email: edit.email }), "User updated.");
     if (r) { setEdit(null); load(); }
   };
+  const open = async (u) => {
+    const r = await run(() => svc.user(u.id));
+    if (r) { setEdit(null); setView(r.user); }
+  };
+  const editFromView = (u) => { setView(null); setEdit({ ...u }); };
+  // bring the details / edit card into view (the list can be long)
+  useEffect(() => { if (view || edit) topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }, [view, edit]);
   const roleName = (r) => (r === "admin" ? "Administrator" : r === "coordinator" ? "Coordinator" : "Trainee");
   return (
     <>
       <Notice msg={msg} />
+      <div ref={topRef} />
+      {view && <UserDetails svc={svc} user={view} onClose={() => setView(null)} onEdit={editFromView} />}
       {edit && (
         <Card title={`Edit ${edit.login_id || "user"}`} actions={<Btn onClick={() => setEdit(null)} disabled={busy}>Cancel</Btn>}>
           <Row>
@@ -57,12 +71,18 @@ function Users() {
             </Select>
           </Field>
         </Row>
+        {data?.truncated && <p className="st-muted st-note" role="status">Showing the first 50 matches. Type a name, ID or email to narrow the list.</p>}
         <Table searchable={false} empty="No users match." rows={rows} cols={[
           { h: "ID", render: (u) => u.login_id || "—" },
           { h: "Name", render: (u) => u.name },
           { h: "Role", render: (u) => <Chip>{roleName(u.role)}</Chip> },
           { h: "Email", render: (u) => u.email },
-          { h: "", render: (u) => <Btn onClick={() => setEdit({ ...u })}>Edit</Btn> },
+          { h: "", render: (u) => (
+            <div className="st-act">
+              <Btn disabled={busy} onClick={() => open(u)}>View</Btn>
+              <Btn onClick={() => { setView(null); setEdit({ ...u }); }}>Edit</Btn>
+            </div>
+          ) },
         ]} />
       </Card>
     </>
@@ -98,9 +118,9 @@ function Coordinators({ sections, year, goTo }) {
       </Card>
       <Card title="Coordinators" actions={refreshBtn(reload, m)}>
         <Stale m={m} />
-        {sections.length === 0 && (
+        {(!year || !sections.some((s) => s.academic_year_id === year.id)) && (
           <p className="st-notice is-bad" role="status">
-            {year ? "There are no sections yet, so there is nothing to choose. Create sections first." : "There is no current academic year yet, so no sections exist. Add an academic year and make it current first."}{" "}
+            {year ? `There are no sections in ${year.name} yet. Create them first, so a coordinator can be given a section of this year.` : "There is no current academic year yet, so no sections exist. Add an academic year and make it current first."}{" "}
             <Btn onClick={() => goTo(year ? "sections" : "progression")}>{year ? "Go to Sections" : "Go to Progression"}</Btn>
           </p>
         )}
@@ -111,14 +131,14 @@ function Coordinators({ sections, year, goTo }) {
           { h: "Status", render: (c) => <Chip tone={c.is_active ? "good" : "bad"}>{c.is_active ? "Active" : "Deactivated"}</Chip> },
           { h: "Section", render: (c) => c.section?.code || "—" },
           { h: "Assign", render: (c) => (
-            <Row>
-              <Select value={pick[c.id] || ""} onChange={(e) => setPick({ ...pick, [c.id]: e.target.value })}>
+            <div className="st-act">
+              <Select value={pick[c.id] || ""} onChange={(e) => setPick({ ...pick, [c.id]: e.target.value })} aria-label={`Section for ${c.name}`}>
                 <option value="">{sections.length ? "Choose section…" : "No sections available"}</option>
-                {sections.map((s) => <option key={s.id} value={s.id}>{s.code}</option>)}
+                {sections.map((s) => <option key={s.id} value={s.id}>{s.display || s.code}</option>)}
               </Select>
               <Btn disabled={busy || !pick[c.id]} onClick={() => assign(c)}>{c.section ? "Reassign" : "Assign"}</Btn>
               {c.section && <Btn kind="danger" disabled={busy} onClick={() => unassign(c)}>End</Btn>}
-            </Row>
+            </div>
           ) },
         ]} />
       </Card>
@@ -126,13 +146,13 @@ function Coordinators({ sections, year, goTo }) {
   );
 }
 
-function Sections({ courses, year, onChanged, goTo }) {
-  const [list, reload, , m] = useLoad(() => svc.sections(), { interval: 45000 });
+function Sections({ courses, year, viewYear, past, onChanged, goTo }) {
+  const [list, reload, , m] = useLoad(() => svc.sections({ academic_year_id: viewYear?.id }), { interval: 45000, deps: [viewYear?.id] });
   const { busy, msg, run } = useAction();
-  const [f, setF] = usePersistedState("admin.sections", { course_id: "", year_level: "1", count: "1" });
+  const [f, setF] = usePersistedState("admin.sections", { course_id: "", count: "1" });
   const [open, setOpen] = useState(null);
   const create = async () => {
-    const r = await run(() => svc.createSections({ course_id: Number(f.course_id), year_level: Number(f.year_level), count: Number(f.count) }), "Sections ready.");
+    const r = await run(() => svc.createSections({ course_id: Number(f.course_id), year_level: 4, count: Number(f.count) }), "Sections ready.");
     if (r) { reload(); onChanged(); }
   };
   const show = async (s) => setOpen(await svc.section(s.id).catch(() => null));
@@ -145,17 +165,18 @@ function Sections({ courses, year, onChanged, goTo }) {
           <Btn onClick={() => goTo("progression")}>Add an academic year</Btn>
         </p>
       )}
-      <Card title={`Create sections${year ? ` for ${year.name}` : ""}`}>
+      {!past && <Card title={`Create sections${year ? ` for ${yearLabel(year.name)}` : ""}`}>
         <Row>
           <Field label="Course"><Select value={f.course_id} onChange={(e) => setF({ ...f, course_id: e.target.value })}>
             <option value="">Choose…</option>{courses.map((c) => <option key={c.id} value={c.id}>{c.code}</option>)}
           </Select></Field>
-          <Field label="Year level"><Select value={f.year_level} onChange={(e) => setF({ ...f, year_level: e.target.value })}>{[1, 2, 3, 4].map((n) => <option key={n}>{n}</option>)}</Select></Field>
+          <Field label="Year level" className="st-field-sm"><Input value="4th year" readOnly aria-readonly="true" title="OCC Duty Log Book is only for 4th-year students" /></Field>
           <Field label="How many (A, B, …)" className="st-field-sm"><Input type="number" min="1" max="12" value={f.count} onChange={(e) => setF({ ...f, count: e.target.value })} /></Field>
           <Btn kind="primary" disabled={busy || !f.course_id} onClick={create}>Create</Btn>
         </Row>
-      </Card>
-      <Card title="Sections" actions={refreshBtn(reload, m)}>
+        <p className="st-muted st-note">OCC Duty Log Book is only for 4th-year college students (on-the-job training), so every section is a 4th-year section, e.g. BSIT-4A.</p>
+      </Card>}
+      <Card title={viewYear ? `Sections · ${yearLabel(viewYear.name)}` : "Sections"} actions={refreshBtn(reload, m)}>
         <Table rows={list?.sections} cols={[
           { h: "Section", render: (s) => s.code }, { h: "Year", render: (s) => s.year_level }, { h: "Students", render: (s) => s.students },
           { h: "", render: (s) => <Btn onClick={() => show(s)}>View roster</Btn> },
@@ -170,9 +191,9 @@ function Sections({ courses, year, onChanged, goTo }) {
   );
 }
 
-function Enrollments({ sections }) {
+function Enrollments({ sections, year, viewYear, past }) {
   const [un, reloadUn, , mu] = useLoad(() => svc.unassigned(), { interval: LIVE });
-  const [all, reloadAll, , ma] = useLoad(() => svc.enrollments(), { interval: 45000 });
+  const [all, reloadAll, , ma] = useLoad(() => svc.enrollments({ academic_year_id: viewYear?.id }), { interval: 45000, deps: [viewYear?.id] });
   const { busy, msg, run } = useAction();
   const [pick, setPick] = useState({});
   const place = async (e, transfer) => {
@@ -180,56 +201,87 @@ function Enrollments({ sections }) {
     const r = await run(() => (transfer ? svc.transfer(e.id, Number(sid), "Admin transfer") : svc.assignSection(e.id, Number(sid))), transfer ? "Trainee transferred." : "Section assigned.");
     if (r) { reloadUn(); reloadAll(); }
   };
-  const options = (e) => sections.filter((s) => !e.course || s.course_id === e.course.id).map((s) => <option key={s.id} value={s.id}>{s.code}</option>);
+  // A student waiting for placement belongs in the current year; a transfer may also stay inside an earlier year.
+  const options = (e, transfer) => sections.filter((s) => (!e.course || s.course_id === e.course.id) && (transfer || !year || s.academic_year_id === year.id)).map((s) => <option key={s.id} value={s.id}>{s.code}</option>);
   const picker = (e, label, transfer) => (
-    <Row>
-      <Select value={pick[e.id] || ""} onChange={(ev) => setPick({ ...pick, [e.id]: ev.target.value })}><option value="">Section…</option>{options(e)}</Select>
+    <div className="st-act">
+      <Select value={pick[e.id] || ""} onChange={(ev) => setPick({ ...pick, [e.id]: ev.target.value })} aria-label={`Section for ${e.student?.name || "student"}`}><option value="">Choose section…</option>{options(e, transfer)}</Select>
       <Btn disabled={busy || !pick[e.id]} onClick={() => place(e, transfer)}>{label}</Btn>
-    </Row>
+    </div>
   );
   return (
     <>
       <Notice msg={msg} />
-      <Card title={`Unassigned students (${un?.total ?? "…"})`} actions={refreshBtn(reloadUn, mu)}>
+      {!past && <Card title={`Unassigned students (${un?.total ?? "…"})`} actions={refreshBtn(reloadUn, mu)}>
+        {year && (un?.total ?? 0) > 0 && !sections.some((s) => s.academic_year_id === year.id) && (
+          <p className="st-notice is-bad" role="status">New registrations wait here until {year.name} has sections. Create them on the Sections tab, then assign each student.</p>
+        )}
         <Table empty="Every student has a section." rows={un?.enrollments} cols={[
           { h: "Student ID", render: (e) => e.student?.student_id }, { h: "Name", render: (e) => e.student?.name },
           { h: "Course", render: (e) => e.course?.code || "—" }, { h: "Assign", render: (e) => picker(e, "Assign", false) },
         ]} />
-      </Card>
-      <Card title="Open enrollments" actions={refreshBtn(reloadAll, ma)}>
+      </Card>}
+      <Card title={viewYear ? `Enrollments · ${yearLabel(viewYear.name)}` : "Enrollments"} actions={refreshBtn(reloadAll, ma)}>
         <Table rows={all?.data} cols={[
           { h: "Student ID", render: (e) => e.student?.student_id }, { h: "Name", render: (e) => e.student?.name },
+          { h: "Academic year", render: (e) => e.academic_year || "—" },
           { h: "Section", render: (e) => e.section?.code || "—" }, { h: "Status", render: (e) => <Chip tone={statusTone(e.status)}>{e.status}</Chip> },
-          { h: "Move to", render: (e) => e.section ? picker(e, "Transfer", true) : "—" },
+          { h: "Move to", render: (e) => (e.section && e.status === "active" && !past ? picker(e, "Transfer", true) : "—") },
         ]} />
       </Card>
     </>
   );
 }
 
-function Progression({ years, sections, onChanged }) {
-  const [yearId, setYearId] = usePersistedState("admin.progression.year", "");
+function Progression({ years, onChanged }) {
+  const [target, setTarget] = useState(null); // the academic year a rollover is being prepared INTO
   const [plan, setPlan] = useState(null);
   const [yearSections, setYearSections] = useState([]);
   const [pick, setPick] = useState({});
   const { busy, msg, run } = useAction();
+  const popup = usePopup();
   const [newYear, setNewYear] = usePersistedState("admin.progression.newYear", "");
+  const current = years.find((y) => y.is_current);
 
-  const prepare = async () => {
-    const r = await run(() => svc.prepareProgression(yearId));
+  const prepare = async (year) => {
+    const r = await run(() => svc.prepareProgression(year.id));
     if (!r) return;
-    setPlan(r.proposals); setPick({});
-    const s = await svc.sections({ academic_year_id: yearId }).catch(() => ({ sections: [] }));
+    setTarget(year); setPlan(r.proposals);
+    // Students who already reached their hours start as "Mark as completed"; everyone else starts on "Leave unchanged".
+    setPick(Object.fromEntries(r.proposals.filter((p) => p.kind === "complete" && p.hours_met).map((p) => [p.id, "complete"])));
+    const s = await svc.sections({ academic_year_id: year.id }).catch(() => ({ sections: [] }));
     setYearSections(s.sections);
   };
+  const chosen = (plan || []).filter((p) => pick[p.id]);
+  // A decision is "complete", "repeat:<section id>" (stay 4th year for another term) or a destination section id.
+  const decode = (p) => {
+    const v = String(pick[p.id]);
+    if (v === "complete") return { enrollment_id: p.id, kind: "complete", section_id: null };
+    if (v.startsWith("repeat:")) return { enrollment_id: p.id, kind: "repeat", section_id: Number(v.slice(7)) };
+    return { enrollment_id: p.id, kind: p.kind, section_id: Number(v) };
+  };
+  const repeatOptions = (p) => yearSections.filter((s) => s.course_id === p.course?.id && s.year_level === p.year_level);
   const confirm = async () => {
-    const items = plan.filter((p) => p.kind === "complete" || pick[p.id]).map((p) => ({ enrollment_id: p.id, kind: p.kind, section_id: p.kind === "complete" ? null : Number(pick[p.id]) }));
-    if (!items.length) return;
-    const r = await run(() => svc.confirmProgression(yearId, items), "Progression applied. Rows left blank were not changed.");
-    if (r) { prepare(); onChanged(); }
+    if (!chosen.length) return;
+    const short = chosen.filter((p) => p.kind === "complete" && !p.hours_met);
+    if (short.length && !(await popup.confirm({
+      title: "Complete students who have not finished their hours?",
+      message: `${short.length} selected student${short.length === 1 ? " has" : "s have"} not reached the required hours yet. They will be marked as completed and leave the active lists. Their records are kept.`,
+      okLabel: "Mark completed anyway", danger: true,
+    }))) return;
+    const items = chosen.map((p) => decode(p));
+    const r = await run(() => svc.confirmProgression(target.id, items), "Progression applied. Rows left on “Leave unchanged” were not changed.");
+    if (r) { prepare(target); onChanged(); }
   };
   const addYear = async () => { if (await run(() => svc.createYear(newYear, false), "Academic year added.")) { setNewYear(""); onChanged(); } };
-  const makeCurrent = async () => { if (await run(() => svc.makeYearCurrent(yearId), "Marked as the current year.")) onChanged(); };
+  const makeCurrent = async (y) => {
+    const ok = await popup.confirm({
+      title: `Make ${yearLabel(y.name)} the current school year?`,
+      message: "New sections, new registrations and the section lists will use this year. Students stay enrolled in the year they are in now until you confirm a progression, and nothing is deleted.",
+      okLabel: "Make current",
+    });
+    if (ok && await run(() => svc.makeYearCurrent(y.id), `${y.name} is now the current year.`)) { setPlan(null); onChanged(); }
+  };
 
   return (
     <>
@@ -238,25 +290,48 @@ function Progression({ years, sections, onChanged }) {
         <Row>
           <Field label="New year (e.g. 2027-2028)"><Input value={newYear} onChange={(e) => setNewYear(e.target.value)} placeholder="YYYY-YYYY" /></Field>
           <Btn disabled={busy || !newYear} onClick={addYear}>Add</Btn>
-          <Field label="Roll over into"><Select value={yearId} onChange={(e) => { setYearId(e.target.value); setPlan(null); }}>
-            <option value="">Choose year…</option>{years.map((y) => <option key={y.id} value={y.id}>{y.name}{y.is_current ? " (current)" : ""}</option>)}
-          </Select></Field>
-          <Btn kind="primary" disabled={busy || !yearId} onClick={prepare}>Preview</Btn>
-          <Btn disabled={busy || !yearId} onClick={makeCurrent}>Make current</Btn>
         </Row>
-        <p className="st-muted">Order: add the new year, mark it current, create its sections (Sections tab), then preview and confirm here. Preview changes nothing; rows left on "Leave unchanged" keep their old enrollment.</p>
+        <Table searchable={false} toggle={false} empty="No academic year yet. Add one above." rows={years} cols={[
+          { h: "School year", render: (y) => yearLabel(y.name) },
+          { h: "Status", render: (y) => <Chip tone={y.is_current ? "good" : undefined}>{y.is_current ? "Current" : "Not current"}</Chip> },
+          { h: "Sections", render: (y) => y.sections_count ?? 0 },
+          { h: "Students still enrolled", render: (y) => y.open_enrollments_count ?? 0 },
+          { h: "", render: (y) => (
+            <div className="st-act">
+              <Btn disabled={busy || y.is_current} onClick={() => makeCurrent(y)}>Make current</Btn>
+              <Btn kind="primary" disabled={busy} onClick={() => prepare(y)}>Preview rollover</Btn>
+            </div>
+          ) },
+        ]} />
+        <div className="st-muted st-note">
+          <p><b>How a new school year works.</b> 1) Add the new year. 2) Make it current. 3) Create its 4th-year sections on the Sections tab. 4) Preview the rollover into it and confirm.</p>
+          <p>The “current” year only decides where new sections and new registrations go. Every student keeps the enrollment they already have, in the year it was made, until you confirm a progression here, so last year’s students still show up after a new year is current. Nothing is ever deleted: old enrollments, hours and entries stay as history. The preview changes nothing, and a row left on “Leave unchanged” keeps its old enrollment.</p>
+          <p><b>Student not finished (for example the host client had holidays)?</b> Choose “carry over to” a section of the new year (create it first). They move into the new year and keep every verified hour, because hours belong to the student, not to the year.</p>
+        </div>
       </Card>
-      {plan && (
-        <Card title={`Proposed changes (${plan.length})`} actions={<Btn kind="primary" disabled={busy} onClick={confirm}>Confirm selected</Btn>}>
+      {plan && target && (
+        <Card title={`Rollover into ${yearLabel(target.name)} (${plan.length})`} actions={<Btn kind="primary" disabled={busy || !chosen.length} onClick={confirm}>{`Confirm selected (${chosen.length})`}</Btn>}>
+          {target.id !== current?.id && <p className="st-notice is-bad" role="status">{target.name} is not the current academic year. You can still prepare it, but make it current first so new registrations land in the same year.</p>}
           <Table empty="No eligible students." rows={plan} cols={[
             { h: "Student", render: (p) => `${p.student?.name} (${p.student?.student_id})` },
-            { h: "From", render: (p) => `${p.course?.code || ""} ${p.year_level} · ${p.section?.code || "no section"}` },
-            { h: "Action", render: (p) => <Chip tone={p.kind === "complete" ? "good" : undefined}>{p.kind}</Chip> },
-            { h: "Destination section", render: (p) => p.kind === "complete" ? "Completes OJT" : (
-              <Select value={pick[p.id] || ""} onChange={(e) => setPick({ ...pick, [p.id]: e.target.value })}>
-                <option value="">Leave unchanged</option>
-                {yearSections.filter((s) => s.course_id === p.course?.id && s.year_level === p.next_year_level).map((s) => <option key={s.id} value={s.id}>{s.code}</option>)}
-              </Select>) },
+            { h: "From", render: (p) => `${p.academic_year ? `${p.academic_year} · ` : ""}${p.course?.code || ""} ${p.year_level} · ${p.section?.code || "no section"}` },
+            { h: "Hours", render: (p) => <>{p.verified_hours} / {p.required_hours} {p.hours_met ? <Chip tone="good">reached</Chip> : <Chip tone="warn">not reached</Chip>}</> },
+            { h: "Action", render: (p) => <Chip tone={p.kind === "complete" ? "good" : undefined}>{p.kind === "repeat" ? "carry over" : p.kind}</Chip> },
+            { h: "Decision", render: (p) => (
+              <div className="st-act">
+                {p.kind === "complete" ? (
+                  <Select value={pick[p.id] || ""} onChange={(e) => setPick({ ...pick, [p.id]: e.target.value })} aria-label={`Decision for ${p.student?.name}`}>
+                    <option value="">Leave unchanged</option><option value="complete">Mark as completed</option>
+                    {repeatOptions(p).length > 0 && <optgroup label="Not finished: carry over to">{repeatOptions(p).map((s) => <option key={s.id} value={`repeat:${s.id}`}>{s.code}</option>)}</optgroup>}
+                  </Select>
+                ) : (
+                  <Select value={pick[p.id] || ""} onChange={(e) => setPick({ ...pick, [p.id]: e.target.value })} aria-label={`Destination section for ${p.student?.name}`}>
+                    <option value="">Leave unchanged</option>
+                    {yearSections.filter((s) => s.course_id === p.course?.id && s.year_level === p.next_year_level).map((s) => <option key={s.id} value={s.id}>{s.code}</option>)}
+                  </Select>
+                )}
+              </div>
+            ) },
           ]} />
         </Card>
       )}
@@ -283,7 +358,7 @@ function Training({ sections }) {
       <Notice msg={msg} />
       <Card title="Training requirement exceptions">
         <Row>
-          <Field label="Section"><Select value={sid} onChange={(e) => pickSection(e.target.value)}><option value="">Choose…</option>{sections.map((s) => <option key={s.id} value={s.id}>{s.code}</option>)}</Select></Field>
+          <Field label="Section"><Select value={sid} onChange={(e) => pickSection(e.target.value)}><option value="">Choose…</option>{sections.map((s) => <option key={s.id} value={s.id}>{s.display || s.code}</option>)}</Select></Field>
           <Field label="Trainee"><Select value={sel?.user_id || ""} onChange={(e) => { const u = roster.find((r) => String(r.user_id) === e.target.value); if (u) pickTrainee(u); }}>
             <option value="">Choose…</option>{roster.map((r) => <option key={r.user_id} value={r.user_id}>{r.name} ({r.student_id})</option>)}
           </Select></Field>
@@ -329,19 +404,40 @@ const NAV = [
 /** Admin area: one desktop page, one sidebar entry per section. Every action is also enforced by Laravel (role:admin). */
 export default function AdminDashboard() {
   const [tab, setTab] = usePersistedTab("admin", NAV.map((n) => n.key), "dashboard");
-  const [ov, reloadOv, ovError, om] = useLoad(() => svc.overview(), { interval: LIVE });
   const [courses] = useLoad(() => svc.courses().then((d) => d.courses));
   const [years, reloadYears] = useLoad(() => svc.years().then((d) => d.academic_years), { interval: 60000 });
-  const [secs, reloadSecs] = useLoad(() => svc.sections().then((d) => d.sections), { interval: 60000 });
+  // Dashboard, Sections, Enrollments and Reports follow ONE school year: the current one unless the Admin picks another (read-only history).
+  const [yearSel, setYearSel] = usePersistedState("admin.viewYear", "");
+  const yearList = years || [];
+  const current = yearList.find((y) => y.is_current);
+  const viewYear = yearList.find((y) => String(y.id) === String(yearSel)) || current;
+  const past = !!viewYear && viewYear.id !== current?.id;
+  const [ov, reloadOv, ovError, om] = useLoad(() => svc.overview({ academic_year_id: viewYear?.id }), { interval: LIVE, deps: [viewYear?.id] });
+  const [yearSecs] = useLoad(() => svc.sections({ academic_year_id: viewYear?.id }).then((d) => d.sections.map((s) => ({ ...s, display: s.code }))), { deps: [viewYear?.id] });
+  const stuck = yearList.filter((y) => !y.is_current && (y.open_enrollments_count || 0) > 0); // students left behind in an earlier year
+  const [secs, reloadSecs] = useLoad(() => svc.sections({ include_open: 1 }).then((d) => d.sections), { interval: 60000 });
   useEffect(() => { document.title = "Admin | OCCDL"; }, []);
-  const year = (years || []).find((y) => y.is_current);
+  const year = current;
   const refresh = () => { reloadYears(); reloadSecs(); };
   const sections = secs || [];
+  const yearTab = ["dashboard", "sections", "enrollments", "reports"].includes(tab);
+  const yearPicker = yearTab && yearList.length > 1 ? (
+    <Select className="st-year-pick" value={viewYear?.id || ""} aria-label="School year" onChange={(e) => setYearSel(e.target.value === String(current?.id) ? "" : e.target.value)}>
+      {yearList.map((y) => <option key={y.id} value={y.id}>{yearLabel(y.name)}{y.is_current ? " · current" : ""}</option>)}
+    </Select>
+  ) : null;
 
   return (
     <AdminShell roleLabel="System Administrator" nav={NAV} phoneTabs={["dashboard", "live", "registrations", "users"]} active={tab} onNavigate={setTab}
-      title={NAV.find((n) => n.key === tab)?.label} subtitle={year ? `Current academic year: ${year.name}` : undefined}
-      actions={tab === "dashboard" ? <div className="st-header-tools">{refreshBtn(reloadOv, om)}</div> : undefined}>
+      title={NAV.find((n) => n.key === tab)?.label} subtitle={year ? `Current school year: ${yearLabel(year.name)}` : undefined}
+      actions={yearTab || tab === "dashboard" ? <div className="st-header-tools">{yearPicker}{tab === "dashboard" && refreshBtn(reloadOv, om)}</div> : undefined}>
+      {tab !== "progression" && stuck.length > 0 && (
+        <p className="st-notice is-bad" role="status">
+          {stuck.reduce((n, y) => n + y.open_enrollments_count, 0)} student(s) are still enrolled in {stuck.map((y) => yearLabel(y.name)).join(", ")} and are not shown in {current ? yearLabel(current.name) : "the current year"}.{" "}
+          <Btn onClick={() => setTab("progression")}>Open Progression</Btn>
+        </p>
+      )}
+      {past && yearTab && <p className="st-notice" role="status">You are viewing {yearLabel(viewYear.name)}, a past school year. It is read-only history.</p>}
       {tab === "dashboard" && ovError && !ov && <p role="alert" className="st-error">{ovError}</p>}
       {tab === "dashboard" && <Stale m={om} />}
       {tab === "dashboard" && (ov ? <OverviewDashboard data={ov} scope="admin" go={setTab} liveFetcher={svc.live} /> : !ovError && <OverviewSkeleton />)}
@@ -349,11 +445,11 @@ export default function AdminDashboard() {
       {tab === "registrations" && <RegistrationsPanel svc={svc} />}
       {tab === "users" && <Users />}
       {tab === "coordinators" && <Coordinators sections={sections} year={year} goTo={setTab} />}
-      {tab === "sections" && <Sections courses={courses || []} year={year} onChanged={refresh} goTo={setTab} />}
-      {tab === "enrollments" && <Enrollments sections={sections} />}
-      {tab === "progression" && <Progression years={years || []} sections={sections} onChanged={refresh} />}
+      {tab === "sections" && <Sections courses={courses || []} year={year} viewYear={viewYear} past={past} onChanged={refresh} goTo={setTab} />}
+      {tab === "enrollments" && <Enrollments sections={sections} year={year} viewYear={viewYear} past={past} />}
+      {tab === "progression" && <Progression years={years || []} onChanged={refresh} />}
       {tab === "training" && <Training sections={sections} />}
-      {tab === "reports" && <ReportsPanel svc={svc} sections={sections} courses={courses || []} scope="admin" />}
+      {tab === "reports" && <ReportsPanel svc={svc} sections={yearSecs || []} courses={courses || []} scope="admin" yearId={viewYear?.id || null} />}
       {tab === "announcements" && <AnnouncementsPanel svc={svc} sections={sections} courses={courses || []} scope="admin" />}
       {tab === "activity" && <AuditPanel svc={svc} />}
     </AdminShell>

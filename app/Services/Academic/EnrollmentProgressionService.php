@@ -15,7 +15,7 @@ class EnrollmentProgressionService
 {
     public const FINAL_YEAR = 4;
 
-    public function __construct(private ActivityLogService $log, private ServerNotifier $notify) {}
+    public function __construct(private ActivityLogService $log, private ServerNotifier $notify, private TrainingHourService $hours) {}
 
     /**
      * Dry run: nothing is written. Lists each student with an open enrollment that belongs to an earlier
@@ -25,13 +25,17 @@ class EnrollmentProgressionService
     {
         $rows = StudentEnrollment::open()->where('academic_year_id', '!=', $target->id)
             ->whereIn('status', [StudentEnrollment::ACTIVE, StudentEnrollment::REPEATING])
-            ->whereNotNull('year_level')->with(['user', 'course', 'section.course'])->orderBy('course_id')->orderBy('year_level')->get();
+            ->whereNotNull('year_level')->with(['user', 'course', 'section.course', 'academicYear'])->orderBy('course_id')->orderBy('year_level')->get();
 
         return $rows->map(function (StudentEnrollment $e) {
             $kind = $e->status === StudentEnrollment::REPEATING ? 'repeat'
                 : ($e->year_level >= self::FINAL_YEAR ? 'complete' : 'promote');
 
+            // Hours are shown so the Admin can see who really finished before marking anyone as completed.
+            $h = $this->hours->summary($e->user);
+
             return $e->toClient() + [
+                'verified_hours' => $h['verified'], 'required_hours' => $h['required'], 'hours_met' => $h['verified'] >= $h['required'],
                 'kind' => $kind,
                 'next_year_level' => $kind === 'promote' ? $e->year_level + 1 : ($kind === 'repeat' ? $e->year_level : null),
             ];

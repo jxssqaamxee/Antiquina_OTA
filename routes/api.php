@@ -146,6 +146,8 @@ Route::middleware(['auth', 'session.fresh', 'active', 'email.verified', 'approve
         Route::post('/trainees/{user}/hour-exception', [AdminTrainingController::class, 'setException'])->whereNumber('user');
         // Account details of every user: only the Administrator can change them (Profile Settings is read-only).
         Route::get('/users', [AdminUserController::class, 'index']);
+        Route::get('/users/{user}', [AdminUserController::class, 'show'])->whereNumber('user');
+        Route::get('/users/{user}/photo', [AdminUserController::class, 'photo'])->whereNumber('user');
         Route::middleware('throttle:20,1')->put('/users/{user}', [AdminUserController::class, 'update'])->whereNumber('user');
         Route::middleware('throttle:30,1')->post('/users/{user}/deactivate', [AdminUserController::class, 'deactivate'])->whereNumber('user');
         Route::middleware('throttle:10,1')->post('/users/{user}/two-factor/reset', [AdminUserController::class, 'resetTwoFactor'])->whereNumber('user');

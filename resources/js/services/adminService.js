@@ -4,7 +4,7 @@ const d = (p) => p.then((r) => r.data);
 
 /** Admin API calls (all closed to other roles by Laravel). */
 export const adminService = {
-  overview: () => d(api.get("/admin/overview")),
+  overview: (params) => d(api.get("/admin/overview", { params })),
   live: () => d(api.get("/admin/live")),
   courses: () => d(api.get("/admin/courses")),
   years: () => d(api.get("/admin/academic-years")),
@@ -20,6 +20,8 @@ export const adminService = {
   prepareProgression: (yearId) => d(api.get(`/admin/academic-years/${yearId}/progression/prepare`)),
   confirmProgression: (yearId, items) => d(api.post(`/admin/academic-years/${yearId}/progression/confirm`, { items })),
   users: (params) => d(api.get("/admin/users", { params })),
+  user: (id) => d(api.get(`/admin/users/${id}`)),
+  userPhotoUrl: (id, v) => `/api/admin/users/${id}/photo${v ? `?v=${encodeURIComponent(v)}` : ""}`, // v = photo version (a new picture is a new address)
   updateUser: (id, body) => d(api.put(`/admin/users/${id}`, body)),
   coordinators: () => d(api.get("/admin/coordinators")),
   createCoordinator: (body) => d(api.post("/admin/coordinators", body)),

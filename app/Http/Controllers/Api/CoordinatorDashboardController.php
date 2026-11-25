@@ -17,7 +17,11 @@ class CoordinatorDashboardController extends Controller
         $section = $this->scope->section($request->user());
 
         return response()->json([
-            'section' => $section ? $section->toClient() : null,
+            'section' => $section ? $section->toClient() + [
+                'academic_year' => $section->academicYear?->name,
+                // false = this section belongs to an earlier school year (the admin has not given the coordinator a new one yet)
+                'is_current_year' => $section->academic_year_id === \App\Models\AcademicYear::current()?->id,
+            ] : null,
             'kpis' => $section ? $kpis->trainees($section->id) : null,
             'trainees' => $section ? $this->scope->traineesQuery($request->user())->count() : 0,
             'message' => $section ? null : 'No section has been assigned to you yet. Please contact an administrator.',

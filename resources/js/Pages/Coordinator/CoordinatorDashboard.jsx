@@ -123,6 +123,9 @@ export default function CoordinatorDashboard() {
       subtitle={tab === "dashboard" ? data?.message : (data?.section ? `Section ${data.section.code}` : undefined)}
       actions={tab === "dashboard" ? <div className="st-header-tools">{refreshBtn(reloadOverview, om)}</div> : undefined}>
       {error && !data && <p role="alert" className="st-error">{error}</p>}
+      {data?.section && data.section.is_current_year === false && (
+        <p className="st-notice is-bad" role="status">Your section {data.section.code} belongs to an earlier school year ({data.section.academic_year}). When the administrator gives you a section of the new year, this screen starts fresh. Until then you can keep reviewing the students you still have.</p>
+      )}
       {tab === "dashboard" && <Stale m={om} />}
       {tab === "dashboard" && (data ? <OverviewDashboard data={data} scope="coordinator" go={setTab} liveFetcher={svc.live} /> : !error && <OverviewSkeleton />)}
       {tab === "live" && <LiveDutyPanel fetcher={svc.live} />}

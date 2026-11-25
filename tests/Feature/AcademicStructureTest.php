@@ -93,10 +93,24 @@ class AcademicStructureTest extends TestCase
     {
         $a = $this->admin();
         $cid = Course::where('code', 'BSIT')->value('id');
-        $this->signedIn($a)->postJson('/api/admin/sections', ['course_id' => $cid, 'year_level' => 2, 'count' => 3])->assertCreated();
-        $this->signedIn($a)->postJson('/api/admin/sections', ['course_id' => $cid, 'year_level' => 2, 'count' => 3])->assertCreated();
+        $this->signedIn($a)->postJson('/api/admin/sections', ['course_id' => $cid, 'year_level' => 4, 'count' => 3])->assertCreated();
+        $this->signedIn($a)->postJson('/api/admin/sections', ['course_id' => $cid, 'year_level' => 4, 'count' => 3])->assertCreated();
         $this->assertSame(3, Section::count());
-        $this->signedIn($a)->getJson('/api/admin/sections')->assertOk()->assertJsonPath('sections.0.code', 'BSIT-2A');
+        $this->signedIn($a)->getJson('/api/admin/sections')->assertOk()->assertJsonPath('sections.0.code', 'BSIT-4A');
+    }
+
+    public function test_sections_can_only_be_created_for_fourth_year(): void
+    {
+        $a = $this->admin();
+        $cid = Course::where('code', 'BSIT')->value('id');
+        foreach ([1, 2, 3, 5, 6] as $level) {
+            $this->signedIn($a)->postJson('/api/admin/sections', ['course_id' => $cid, 'year_level' => $level, 'count' => 1])
+                ->assertStatus(422)->assertJsonValidationErrors('year_level');
+        }
+        $this->assertSame(0, Section::count());
+        // leaving the level out means 4th year
+        $this->signedIn($a)->postJson('/api/admin/sections', ['course_id' => $cid, 'count' => 1])->assertCreated();
+        $this->assertSame(4, Section::first()->year_level);
     }
 
     public function test_assigning_a_pending_student_activates_the_enrollment(): void

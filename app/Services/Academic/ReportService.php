@@ -12,9 +12,10 @@ use Illuminate\Support\Collection;
 class ReportService
 {
     /** @return Collection<int,array<string,mixed>> one row per trainee with an open enrollment in scope */
-    public function trainees(?int $sectionId = null, ?int $courseId = null): Collection
+    public function trainees(?int $sectionId = null, ?int $courseId = null, ?int $yearId = null): Collection
     {
-        $q = StudentEnrollment::open()->with(['user', 'course', 'section.course'])->whereHas('user', fn ($u) => $u->where('role', 'trainee'));
+        // $yearId = a school year (open OR closed enrollments of that year); null = every currently open enrollment.
+        $q = ($yearId ? StudentEnrollment::inYear($yearId) : StudentEnrollment::open())->with(['user', 'course', 'section.course'])->whereHas('user', fn ($u) => $u->where('role', 'trainee'));
         if ($sectionId !== null) {
             $q->where('section_id', $sectionId);
         }

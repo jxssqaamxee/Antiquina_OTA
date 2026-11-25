@@ -2,7 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Models\AcademicYear;
+use App\Models\Course;
+use App\Models\CoordinatorAssignment;
+use App\Models\Section;
+use App\Models\StudentEnrollment;
 use App\Models\User;
+use App\Services\Academic\AcademicSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -49,5 +55,38 @@ class AdminUserTest extends TestCase
         $this->signedIn($coord)->putJson("/api/admin/users/{$trainee->id}", ['first_name' => 'X', 'last_name' => 'Y', 'email' => 'x@example.com'])->assertForbidden();
         $this->signedIn($trainee)->putJson("/api/admin/users/{$coord->id}", ['first_name' => 'X', 'last_name' => 'Y', 'email' => 'x@example.com'])->assertForbidden();
         $this->signedIn($trainee)->putJson('/api/profile', ['first_name' => 'X', 'last_name' => 'Y'])->assertForbidden()->assertJsonPath('code', 'profile_locked');
+    }
+    public function test_admin_can_view_every_detail_of_a_trainee_and_a_coordinator(): void
+    {
+        AcademicSeeder::run();
+        $admin = User::factory()->adminAccess('admin', 'ADMIN-1')->create();
+        $coord = User::factory()->adminAccess('coordinator', 'COOR-1')->create();
+        $trainee = User::factory()->create(['student_id' => '2024-1-00001', 'email_verified_at' => now()]);
+        $sec = Section::create(['course_id' => Course::where('code', 'BSIT')->value('id'), 'academic_year_id' => AcademicYear::current()->id, 'year_level' => 4, 'label' => 'A']);
+        StudentEnrollment::create(['user_id' => $trainee->id, 'course_id' => $sec->course_id, 'academic_year_id' => $sec->academic_year_id,
+            'section_id' => $sec->id, 'year_level' => 4, 'status' => 'active', 'started_at' => now()]);
+        CoordinatorAssignment::create(['coordinator_id' => $coord->id, 'section_id' => $sec->id, 'assigned_by' => $admin->id, 'started_at' => now()]);
+
+        $r = $this->signedIn($admin)->getJson("/api/admin/users/{$trainee->id}")->assertOk()
+            ->assertJsonPath('user.login_id', '2024-1-00001')->assertJsonPath('user.role', 'trainee')
+            ->assertJsonPath('user.enrollment.section', 'BSIT-4A')->assertJsonPath('user.enrollment.academic_year', AcademicYear::current()->name)
+            ->assertJsonPath('user.hours.required', 486)->assertJsonPath('user.email_verified', true);
+        $this->assertCount(1, $r->json('user.enrollments'));
+        foreach (['password', 'remember_token', 'two_factor_secret', 'two_factor_recovery_codes'] as $secret) {
+            $this->assertArrayNotHasKey($secret, $r->json('user'));
+        }
+
+        $this->signedIn($admin)->getJson("/api/admin/users/{$coord->id}")->assertOk()
+            ->assertJsonPath('user.role', 'coordinator')->assertJsonPath('user.assignment.section', 'BSIT-4A')->assertJsonPath('user.two_factor', false);
+        $this->signedIn($admin)->getJson('/api/admin/users/999999')->assertNotFound();
+    }
+
+    public function test_only_the_administrator_can_open_user_details(): void
+    {
+        $coord = User::factory()->adminAccess('coordinator', 'COOR-1')->create();
+        $trainee = User::factory()->create();
+        $this->signedIn($coord)->getJson("/api/admin/users/{$trainee->id}")->assertForbidden();
+        $this->signedIn($trainee)->getJson("/api/admin/users/{$trainee->id}")->assertForbidden();
+        $this->signedIn($trainee)->getJson("/api/admin/users/{$trainee->id}/photo")->assertForbidden();
     }
 }

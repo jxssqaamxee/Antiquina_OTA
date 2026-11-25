@@ -856,3 +856,47 @@ textarea.st-inp { min-height: 104px; padding: 12px 14px; resize: vertical; font-
   .st-table th, .st-table td { padding: 7px 0; }
   .st-table td:first-child, .st-table td:last-child { padding-left: 0; padding-right: 0; }
 }
+
+/* =====================================================================
+   Action cells inside tables (select + buttons) and the user details view.
+   A select dropped straight into a shrink-to-fit table cell collapsed to a few
+   pixels ("Choo…", "Sect…"), so it now has a real width of its own.
+   ===================================================================== */
+.st-act { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: nowrap; }
+.st-act .st-inp { width: 220px; flex: 0 0 220px; min-height: 42px; font-size: 14px; }
+.st-act .btn { flex: 0 0 auto; white-space: nowrap; }
+.st-table td:has(.st-act) { white-space: normal; }
+@media (max-width: 1180px) {
+  .st-act { flex-wrap: wrap; width: 250px; max-width: 100%; margin-left: auto; }
+  .st-act .st-inp { flex: 1 1 100%; width: 100%; }
+}
+@media (max-width: 600px) {
+  .st-act { width: 100%; }
+}
+
+.st-det-head { display: flex; align-items: center; gap: 16px; margin-bottom: 6px; }
+.st-det-avatar {
+  width: 84px; height: 84px; flex: 0 0 auto; border-radius: 50%; overflow: hidden; display: grid; place-items: center;
+  background: var(--field); border: 1.5px solid var(--edge);
+}
+.st-det-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.st-det-avatar b { font-size: 26px; color: var(--accent-text); }
+.st-det-who { min-width: 0; }
+.st-det-who h3 { margin: 0; font-size: 20px; overflow-wrap: anywhere; }
+.st-det-who p { margin: 2px 0 8px; overflow-wrap: anywhere; }
+.st-det-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.st-det-h { margin: 22px 0 10px; font-size: 12px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-soft); }
+.st-det-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px 14px; margin: 0; }
+.st-det-item { margin: 0; padding: 10px 14px; min-width: 0; border-radius: 14px; border: 1.5px solid var(--edge); background: var(--field); }
+.st-det-item.is-wide { grid-column: span 2; }
+.st-det-item dt { margin: 0 0 3px; font-size: 11px; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-soft); }
+.st-det-item dd { margin: 0; font-size: 14.5px; font-weight: 600; overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .st-det-grid { grid-template-columns: 1fr 1fr; }
+  .st-det-item.is-wide { grid-column: 1 / -1; }
+  .st-det-avatar { width: 64px; height: 64px; }
+}
+
+/* school-year picker in the header (Dashboard, Sections, Enrollments, Reports) */
+.st-header-tools .st-year-pick { width: 270px; min-height: 42px; }
+@media (max-width: 600px) { .st-header-tools .st-year-pick { width: 100%; } }

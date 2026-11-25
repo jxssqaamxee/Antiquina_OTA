@@ -19,9 +19,9 @@ class KpiService
     public function __construct(private ReportService $reports) {}
 
     /** @param int|null $sectionId null = whole school (Admin only) */
-    public function trainees(?int $sectionId = null): array
+    public function trainees(?int $sectionId = null, ?int $yearId = null): array
     {
-        $rows = $this->reports->trainees($sectionId);
+        $rows = $this->reports->trainees($sectionId, null, $yearId);
         $ids = $rows->pluck('user_id');
         $total = $rows->count();
 
@@ -44,11 +44,11 @@ class KpiService
         ];
     }
 
-    public function admin(): array
+    public function admin(?int $yearId = null): array
     {
-        $enr = StudentEnrollment::open();
+        $enr = $yearId ? StudentEnrollment::inYear($yearId) : StudentEnrollment::open();
 
-        return $this->trainees(null) + [
+        return $this->trainees(null, $yearId) + [
             'unassigned' => (clone $enr)->whereNull('section_id')->count(),
             'coordinators_unassigned' => User::where('role', User::ROLE_COORDINATOR)->where('is_active', true)
                 ->whereNotIn('id', CoordinatorAssignment::open()->select('coordinator_id'))->count(),
