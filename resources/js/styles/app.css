@@ -181,9 +181,14 @@ html { overscroll-behavior-y: none; }
   border: 1.5px solid var(--edge); box-shadow: 0 18px 44px -12px rgba(2, 6, 23, .45); font-size: 14px; font-weight: 700;
 }
 .update-notice button {
-  display: inline-flex; align-items: center; gap: 6px; min-height: 40px; border: 0; border-radius: 14px; padding: 0 14px;
-  background: var(--accent); color: var(--accent-on); font-size: 13px; font-weight: 750;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; border: 0; border-radius: 14px; padding: 0 14px;
+  background: var(--accent); color: var(--accent-on); font-size: 13px; font-weight: 750; white-space: nowrap;
 }
+.update-notice button:disabled { opacity: .7; }
+.update-notice button.is-later { min-height: 30px; background: transparent; color: var(--ink-soft); font-weight: 650; }
+.update-notice-text { display: grid; gap: 2px; min-width: 0; }
+.update-notice-text small { font-size: 12px; font-weight: 600; color: var(--ink-soft); }
+.update-notice-actions { display: grid; gap: 4px; flex: none; }
 
 .ip-wrap {
   position: fixed; z-index: 300; left: 0; right: 0; top: max(8px, env(safe-area-inset-top));
