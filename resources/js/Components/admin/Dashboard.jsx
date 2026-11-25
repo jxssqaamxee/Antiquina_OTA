@@ -11,7 +11,7 @@ export function KpiSkeleton({ count = 4 }) {
     <div className="st-kpi-row" aria-busy="true" aria-label="Loading">
       {Array.from({ length: count }).map((_, i) => (
         <div key={i} className="st-stat st-kpi-card">
-          <Skel w={36} h={36} r={10} style={{ marginBottom: 12 }} /><Skel w="45%" h={24} style={{ marginBottom: 8 }} /><Skel w="70%" h={11} /><Skel w="100%" h={34} style={{ marginTop: 14 }} />
+          <Skel w={30} h={30} r={10} /><Skel w="40%" h={24} /><Skel w="70%" h={11} />
         </div>
       ))}
     </div>

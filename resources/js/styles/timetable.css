@@ -130,7 +130,12 @@
 /* Phone week view: readable columns, scrolls sideways inside the box, hour labels stay visible. */
 @media (max-width: 640px) {
   .tt-cal:not(.is-day) { min-width: 840px; }
-  .tt-cal .fc-timegrid-axis, .tt-cal .fc-timegrid-slot-label { position: sticky; left: 0; z-index: 3; background: var(--surface); }
+  /* Hour labels stay pinned on the left while the week scrolls sideways. The empty axis cell of the columns layer sits ON TOP of the
+     labels, so it must stay transparent (an opaque sticky background there is what hid the times on phones). The scroll wrappers
+     FullCalendar adds must not clip, or "sticky" would pin to them instead of to .tt-scroll. */
+  .tt-cal .fc-scroller-harness, .tt-cal .fc-scroller { overflow: visible !important; }
+  .tt-cal td.fc-timegrid-axis { background: transparent; position: static; }
+  .tt-cal th.fc-timegrid-axis, .tt-cal .fc-timegrid-slot-label { position: sticky; left: 0; z-index: 4; background: var(--surface); }
   .tt-bar, .tt-nav { width: 100%; }
   .tt-nav:first-child { justify-content: space-between; }
   .tt-nav:last-child { justify-content: flex-start; }
@@ -171,3 +176,7 @@
 @media (max-width: 640px) { .tt-cal:not(.is-day) { min-width: calc(840px + var(--tt-extra, 0px)); } }
 .tt.is-full .tt-cal:not(.is-day) { min-width: calc(1000px + var(--tt-extra, 0px)); }
 .tt-dh-x[aria-pressed="true"] { background: rgba(var(--accent-rgb, 37, 99, 235), .12); color: rgb(var(--accent-rgb, 37, 99, 235)); }
+
+/* ---------- v5: the hour labels (the time at the side) must never disappear on phones / installed app ---------- */
+.tt-cal .fc-timegrid-axis, .tt-cal .fc-timegrid-slot-label, .tt-cal .fc-timegrid-axis-frame { visibility: visible; }
+.tt-cal .fc-timegrid-slot-label-cushion { white-space: nowrap; padding: 0 6px; }
