@@ -76,6 +76,10 @@ return [
     // How many minutes before the scheduled time-in / time-out the reminder is sent.
     'reminder_start_minutes' => (int) env('OCC_REMINDER_START_MIN', 20),
     'reminder_end_minutes' => (int) env('OCC_REMINDER_END_MIN', 10),
+    // Minutes before 12:00 (lunch starts) and before 1:00 PM (lunch ends) for the lunch reminders.
+    'reminder_lunch_minutes' => (int) env('OCC_REMINDER_LUNCH_MIN', 10),
+    // The end-of-shift "good work" push is sent within this many minutes after the time out.
+    'reminder_done_window_minutes' => (int) env('OCC_REMINDER_DONE_WINDOW_MIN', 10),
     // A time out logged within this many minutes of the scheduled time out counts as "already clocked
     // out" and silences the clock-out reminder (so leaving 15 minutes early stops it, while a 12:00
     // lunch time out does not). Never smaller than reminder_end_minutes.
