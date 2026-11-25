@@ -177,7 +177,7 @@ export default function ReportsPanel({ entries, clients, now = new Date(), block
       <div className="stats" role="list" style={{ marginTop: 0 }}>
         {stats.map(({ label, value, icon: Icon }) => (
           <div className="stat" role="listitem" key={label}>
-            <span className="stat-ico" aria-hidden="true"><Icon size={72} strokeWidth={1.3} /></span>
+            <span className="stat-ico" aria-hidden="true"><Icon size={92} strokeWidth={1.8} /></span>
             <b>{value}</b>
             <small>{label}</small>
           </div>

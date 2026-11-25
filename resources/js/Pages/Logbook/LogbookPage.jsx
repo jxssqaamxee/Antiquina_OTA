@@ -1320,7 +1320,7 @@ export default function LogbookPage() {
                 { label: "Days logged", value: viewEntries.length, icon: CalendarDays },
               ].map(({ label, value, icon: Icon }) => (
                 <div className="stat" role="listitem" key={label}>
-                  <span className="stat-ico" aria-hidden="true"><Icon size={17} strokeWidth={2.2} /></span>
+                  <span className="stat-ico" aria-hidden="true"><Icon size={92} strokeWidth={1.8} /></span>
                   <b>{value}</b>
                   <small>{label}</small>
                 </div>

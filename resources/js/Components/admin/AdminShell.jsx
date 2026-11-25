@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import { clearPersistedUi } from "../../hooks/usePersistedTab";
 import { createPortal } from "react-dom";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { Boxes, Camera, Check as CheckIcon, ChevronDown, ChevronUp, ClipboardList, IdCard, Lock, LogOut, Mail, ShieldCheck, UserRound, Menu, Palette, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
+import { Boxes, Camera, Check as CheckIcon, ChevronDown, ChevronUp, ClipboardList, Lock, LogOut, ShieldCheck, UserRound, Menu, Palette, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import { usePopup } from "../../context/PopupContext";
@@ -233,16 +233,9 @@ function PasswordPanel({ onDone, inline = false }) {
   );
 }
 
-const Fact = ({ icon: Icon, label, value, wide }) => (
-  <div className={`ds-fact${wide ? " is-wide" : ""}`}>
-    <dt><Icon size={13} aria-hidden="true" /> {label}</dt>
-    <dd>{value || "—"}</dd>
-  </div>
-);
-
 /**
  * Profile Settings (same layout as sclf_APP's Profile Settings page): hero with photo + chips,
- * Account details grid, name editing, and Security (change password).
+ * and Security (change password).
  * The Administrator / Coordinator ID and email were set when the account was created and stay locked.
  */
 function ProfileSettings() {
@@ -292,18 +285,6 @@ function ProfileSettings() {
       </div>
 
       <Notice msg={msg} />
-      <Card title="Account details">
-        <dl className="ds-facts">
-          <Fact wide icon={UserRound} label="Full name" value={user?.name} />
-          <Fact wide icon={Mail} label="Email" value={user?.email} />
-          <Fact icon={IdCard} label={`${roleLabel} ID`} value={user?.admin_id} />
-          <Fact icon={ShieldCheck} label="Role" value={<span className="ds-chip ds-chip-accent">{roleLabel}</span>} />
-        </dl>
-        <p className="st-muted ds-facts-note">
-          <Lock size={12} aria-hidden="true" /> These details can only be changed by an administrator.
-        </p>
-      </Card>
-
       <Card title="Security">
         <p className="ds-card-desc">Keep your sign-in details up to date and your account protected.</p>
         <PasswordPanel inline />
