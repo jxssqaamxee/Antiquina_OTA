@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { lazy, Suspense, useEffect, useState } from "react";
 import { Camera, ChevronDown, GraduationCap, IdCard, Lock, Mail, User } from "lucide-react";
 import api, { errorMessage, fieldErrors } from "../../config/axiosConfig";
 import { useAuth } from "../../context/AuthContext";
@@ -8,7 +8,7 @@ import {
   LedgerBanner, LedgerInput, LedgerPasswordInput, LedgerRow, LedgerRowPair, LedgerSelect,
   PasswordMatchNote, RequirementChecklist, StrengthTicks,
 } from "../../Components/auth/AuthShell";
-import WeekTimetable from "../../Components/shared/WeekTimetable";
+const WeekTimetable = lazy(() => import("../../Components/shared/WeekTimetable"));
 import AvatarPhoto from "../../Components/shared/AvatarPhoto";
 import PhotoUploadModal from "../../Components/shared/PhotoUploadModal";
 import { ConfirmSheet } from "../../Components/shared/Sheet";
@@ -233,7 +233,7 @@ export default function ProfilePage() {
               </button>
               <div className="pf-body" hidden={openSec !== "timetable"}>
                 <p className="pf-muted" style={{ margin: "0 0 10px" }}>Your week at a glance, based on your logbook. Green is on time, yellow is up to 30 minutes late, red is later than that.</p>
-                {openSec === "timetable" && <WeekTimetable fetcher={timetableFetcher} canDownload />}
+                {openSec === "timetable" && <Suspense fallback={<div style={{ padding: 16, opacity: .6 }}>Loading…</div>}><WeekTimetable fetcher={timetableFetcher} canDownload /></Suspense>}
               </div>
             </section>
           )}

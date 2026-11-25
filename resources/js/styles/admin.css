@@ -946,3 +946,39 @@ textarea.st-inp { min-height: 104px; padding: 12px 14px; resize: vertical; font-
 .cn-row-act { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 14px 12px 54px; }
 .ds-nav-badge { margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 99px; background: var(--bad, #dc2626); color: #fff; font-size: 11px; font-weight: 800; line-height: 20px; text-align: center; }
 .ds-sidebar.collapsed .ds-nav-badge { display: none; }
+
+/* ---------- v2: school-year dropdown never overlaps the page title (phones / PWA) ---------- */
+.ds-header-text { flex: 1 1 240px; }
+.ds-actions { min-width: 0; max-width: 100%; }
+.st-header-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; max-width: 100%; }
+.st-header-tools .st-year-pick { max-width: 100%; min-width: 0; text-overflow: ellipsis; }
+@media (max-width: 760px) {
+  .ds-header { flex-direction: column; align-items: stretch; flex-wrap: nowrap; gap: 10px; }
+  .ds-header-text { flex: none; width: 100%; }
+  .ds-actions { width: 100%; }
+  .st-header-tools { width: 100%; flex-wrap: nowrap; }
+  .st-header-tools .st-year-pick { flex: 1 1 auto; width: auto; font-size: 14px; }
+}
+
+/* ---------- v2: profile settings (admin / coordinator) – identity card, no dead space ---------- */
+.ds-me { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: 16px; row-gap: 12px; }
+.ds-me-avatar { width: 72px; height: 72px; font-size: 24px; border-radius: 18px; position: relative; flex: none; }
+.ds-me-text { min-width: 0; }
+.ds-me-name { margin: 0; font-size: 18px; font-weight: 800; line-height: 1.25; letter-spacing: -.01em; overflow-wrap: anywhere; }
+.ds-me-email { margin: 2px 0 0; font-size: 13px; line-height: 1.4; color: var(--ink-soft); overflow-wrap: anywhere; }
+.ds-me .ds-chip-row { margin-top: 8px; }
+.ds-me-btn { white-space: nowrap; }
+@media (max-width: 600px) {
+  .ds-me { grid-template-columns: auto minmax(0, 1fr); align-items: start; }
+  .ds-me-avatar { width: 60px; height: 60px; font-size: 21px; border-radius: 16px; }
+  .ds-me-btn { grid-column: 1 / -1; width: 100%; justify-content: center; }
+}
+.ds-card-desc { margin: -4px 0 14px; opacity: 1; color: var(--ink-soft); line-height: 1.45; }
+.st-card-head + .ds-card-desc { margin-top: 0; }
+.ds-info-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 10px; align-items: stretch; }
+.ds-info-item { align-items: center; }
+.ds-info-text { display: flex; flex-direction: column; gap: 2px; }
+.ds-info-label { margin: 0; opacity: 1; color: var(--ink-soft); line-height: 1.2; }
+.ds-info-value { line-height: 1.3; overflow-wrap: anywhere; word-break: normal; }
+@media (max-width: 600px) { .ds-info-grid { grid-template-columns: 1fr; } }
+.ds-info-grid + .st-muted { display: flex; align-items: center; gap: 6px; margin: 12px 0 0; }

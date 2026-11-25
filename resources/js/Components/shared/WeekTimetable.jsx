@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import FullCalendar from "@fullcalendar/react";
 import timeGridPlugin from "@fullcalendar/timegrid";
-import { CalendarDays, ChevronLeft, ChevronRight, Download, FileImage, FileText, Minus, Plus, RefreshCw, WifiOff, X } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Download, FileImage, FileText, Maximize2, Minimize2, Minus, Plus, RefreshCw, WifiOff, X } from "lucide-react";
 import useLoad from "../../hooks/useLoad";
 import { TYPE, DAY_FULL, DAY_NAME, buildBlocks, hourRange, hhmm, fmt12, dur, daysText, fileBase } from "../../utils/timetableModel";
 import { saveTimetable, loadTimetable } from "../../utils/timetableCache";
@@ -43,6 +44,7 @@ export default function WeekTimetable({ fetcher, resetKey = "", interval = 0, ca
   const [view, setView] = useState(() => (typeof window !== "undefined" && window.innerWidth < 640 ? "day" : "week")); // phones start on one day
   const [dayDate, setDayDate] = useState(null);   // YYYY-MM-DD shown in day view
   const [sel, setSel] = useState(null);           // id of the tapped card (bottom sheet)
+  const [full, setFull] = useState(false);        // whole timetable expanded to the full screen
   const closeRef = useRef(null);
   const boxRef = useRef(null);
 
@@ -93,6 +95,16 @@ export default function WeekTimetable({ fetcher, resetKey = "", interval = 0, ca
     window.addEventListener("keydown", esc);
     return () => window.removeEventListener("keydown", esc);
   }, [sel]);
+  useEffect(() => {
+    if (!full) return undefined;
+    const esc = (e) => e.key === "Escape" && !sel && setFull(false);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", esc);
+    const t = setTimeout(() => cal.current?.getApi().updateSize(), 60);
+    return () => { document.body.style.overflow = prev; window.removeEventListener("keydown", esc); clearTimeout(t); };
+  }, [full, sel]);
+  useEffect(() => { const t = setTimeout(() => cal.current?.getApi().updateSize(), 60); return () => clearTimeout(t); }, [view]);
   // FullCalendar only re-measures on window resize. Collapsing / expanding the sidebar changes this box's width
   // without a window resize, so watch the box itself and tell the calendar to re-fit (once per frame).
   const hasData = !!data;
@@ -121,7 +133,7 @@ export default function WeekTimetable({ fetcher, resetKey = "", interval = 0, ca
   };
 
   return (
-    <div className={`tt${m.loading && data ? " is-loading" : ""}`} style={{ "--tt-hour": `${(BASE_HOUR * ZOOM[zoom]) / 100}px` }}>
+    <div className={`tt${m.loading && data ? " is-loading" : ""}${full ? " is-full" : ""}`} style={{ "--tt-hour": `${(BASE_HOUR * ZOOM[zoom]) / 100}px` }}>
       <div className="tt-bar">
         <div className="tt-nav">
           <button type="button" className="tt-btn" onClick={() => w && setWeek(w.prev)} disabled={!w} aria-label="Previous week"><ChevronLeft size={16} /></button>
@@ -135,6 +147,7 @@ export default function WeekTimetable({ fetcher, resetKey = "", interval = 0, ca
             <span>{ZOOM[zoom]}%</span>
             <button type="button" className="tt-btn" onClick={() => setZoom((z) => Math.min(ZOOM.length - 1, z + 1))} disabled={zoom === ZOOM.length - 1} aria-label="Zoom in"><Plus size={14} /></button>
           </div>
+          <button type="button" className="tt-btn" onClick={() => setFull((v) => !v)} aria-label={full ? "Close expanded timetable" : "Expand timetable"} aria-pressed={full} title={full ? "Close" : "Expand"}>{full ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</button>
           <button type="button" className="tt-btn" onClick={reload} aria-label="Refresh timetable" title="Refresh"><RefreshCw size={15} className={m.loading ? "tt-spin" : ""} /></button>
           {canDownload && <div className="tt-dl">
             <button type="button" className="tt-btn tt-primary" onClick={() => setMenu((v) => !v)} disabled={!data} aria-haspopup="menu" aria-expanded={menu}><Download size={15} /> Download</button>
@@ -213,7 +226,12 @@ export default function WeekTimetable({ fetcher, resetKey = "", interval = 0, ca
                 slotEventOverlap={false}
                 dayHeaderContent={(a) => {
                   const day = data.days.find((d) => d.dow === (a.date.getDay() || 7));
-                  return <div className="tt-dh"><b>{DAY_FULL[a.date.getDay() || 7]}</b><small>{day ? day.day : ""}{day?.is_today ? " · Today" : ""}</small></div>;
+                  return (
+                    <div className="tt-dh">
+                      <div className="tt-dh-t"><b>{DAY_FULL[a.date.getDay() || 7]}</b><small>{day ? day.day : ""}{day?.is_today ? " · Today" : ""}</small></div>
+                      {view === "week" && day && <button type="button" className="tt-dh-x" aria-label={`Open ${DAY_FULL[a.date.getDay() || 7]} in day view`} title="Expand this day" onClick={(e) => { e.stopPropagation(); setDayDate(day.date); setView("day"); }}><Maximize2 size={13} /></button>}
+                    </div>
+                  );
                 }}
                 events={events}
                 eventClick={(i) => setSel(i.event.id)}
@@ -235,8 +253,8 @@ export default function WeekTimetable({ fetcher, resetKey = "", interval = 0, ca
         </>
       )}
 
-      {picked && (
-        <div className="tt-sheet-wrap" onClick={() => setSel(null)}>
+      {picked && typeof document !== "undefined" && createPortal(
+        <div className="tt tt-sheet-wrap" onClick={() => setSel(null)}>
           <div className={`tt-sheet is-${picked.state}`} role="dialog" aria-modal="true" aria-label={`${picked.title}, details`} onClick={(e) => e.stopPropagation()}>
             <div className="tt-sheet-head">
               <span className="tt-chip">{picked.title}</span>
@@ -245,7 +263,8 @@ export default function WeekTimetable({ fetcher, resetKey = "", interval = 0, ca
             <p className="tt-sheet-day">{pickedDay ? `${DAY_FULL[pickedDay.dow]}, ${pickedDay.day}` : picked.date}{pickedDay?.is_today ? " · Today" : ""}</p>
             <ul>{picked.lines.map((l, i) => <li key={i}>{l}</li>)}</ul>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

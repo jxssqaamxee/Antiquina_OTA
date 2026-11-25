@@ -10,7 +10,7 @@ export default function ProgressRing({ percent = 0, complete = false, children }
   const clamped = Math.min(Math.max(percent, 0), 100);
   const offset = CIRC - (clamped / 100) * CIRC;
   return (
-    <div className={`ring${complete ? " is-complete" : ""}`} role="img" aria-label={`${Math.round(clamped)} percent of required hours logged`}>
+    <div className={`ring${complete ? " is-complete" : ""}`} role="img" aria-label={`${Math.round(clamped * 10) / 10} percent of required hours logged`}>
       <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
         <circle className="ring-track" cx={SIZE / 2} cy={SIZE / 2} r={R} strokeWidth={STROKE} fill="none" />
         <circle

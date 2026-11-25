@@ -276,19 +276,19 @@ function ProfileSettings() {
 
   return (
     <>
-      <div className="st-card" style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
-        <Tooltip label={"Change profile photo"}><button type="button" className="ds-avatar" style={{ width: 64, height: 64, fontSize: 22, borderRadius: 16, position: "relative" }} onClick={() => setPhotoOpen(true)} aria-label="Change profile photo">
+      <div className="st-card ds-me">
+        <Tooltip label={"Change profile photo"}><button type="button" className="ds-avatar ds-me-avatar" onClick={() => setPhotoOpen(true)} aria-label="Change profile photo">
           <AvatarPhoto user={user} />
         </button></Tooltip>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 18, fontWeight: 800 }}>{user?.name || "Account"}</div>
-          <div style={{ fontSize: 13, opacity: 0.6 }}>{user?.email || ""}</div>
+        <div className="ds-me-text">
+          <h2 className="ds-me-name">{user?.name || "Account"}</h2>
+          {user?.email && <p className="ds-me-email">{user.email}</p>}
           <div className="ds-chip-row">
             <span className="ds-chip ds-chip-accent">{roleLabel}</span>
             {user?.admin_id && <span className="ds-chip">{roleLabel} ID: {user.admin_id}</span>}
           </div>
         </div>
-        <Btn onClick={() => setPhotoOpen(true)}><Camera size={15} /> {user?.has_profile_photo ? "Change photo" : "Add photo"}</Btn>
+        <Btn className="ds-me-btn" onClick={() => setPhotoOpen(true)}><Camera size={15} /> {user?.has_profile_photo ? "Change photo" : "Add photo"}</Btn>
       </div>
 
       <Notice msg={msg} />

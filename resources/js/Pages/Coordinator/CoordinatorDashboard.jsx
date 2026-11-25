@@ -1,14 +1,17 @@
-import React, { useEffect, useState } from "react";
+import React, { lazy, Suspense, useEffect, useState } from "react";
 import { Radio, LayoutDashboard, Users, ClipboardCheck, FileBarChart, Megaphone, ShieldCheck, Upload, UserCheck, Bell } from "lucide-react";
 import AdminShell, { StatCard } from "../../Components/admin/AdminShell";
 import { Btn, Card, Check, Chip, Field, Input, Notice, RefreshButton, Row, Select, Table, statusTone, useAction } from "../../Components/admin/ui";
 import { OverviewDashboard, OverviewSkeleton } from "../../Components/admin/Dashboard";
 import { LiveDutyPanel } from "../../Components/admin/LiveDuty";
-import WeekTimetable from "../../Components/shared/WeekTimetable";
+const WeekTimetable = lazy(() => import("../../Components/shared/WeekTimetable"));
 import NotificationsPanel from "../../Components/admin/NotificationsPanel";
 import RegistrationsPanel from "../../Components/admin/RegistrationsPanel";
 import { ApprovalsPanel, PendingEntries, times } from "../../Components/admin/ApprovalsPanel";
-import { AnnouncementsPanel, AuditPanel, ReportsPanel, RosterPanel } from "../../Components/admin/panels";
+const AnnouncementsPanel = lazy(() => import("../../Components/admin/panels").then((m) => ({ default: m.AnnouncementsPanel })));
+const AuditPanel = lazy(() => import("../../Components/admin/panels").then((m) => ({ default: m.AuditPanel })));
+const ReportsPanel = lazy(() => import("../../Components/admin/panels").then((m) => ({ default: m.ReportsPanel })));
+const RosterPanel = lazy(() => import("../../Components/admin/panels").then((m) => ({ default: m.RosterPanel })));
 import { coordinatorService as svc } from "../../services/coordinatorService";
 import useLoad from "../../hooks/useLoad";
 import usePersistedTab from "../../hooks/usePersistedTab";
@@ -75,7 +78,7 @@ function TraineeDetail({ trainee, onClose }) {
         {waiting.length > 0 && <PendingEntries entries={waiting} svc={svc} name={trainee.name} onChanged={reload} />}
       </Card>
       <Card title="Weekly duty timetable">
-        <WeekTimetable fetcher={(w) => svc.timetable(trainee.id, w)} resetKey={trainee.id} interval={60000} />
+        <Suspense fallback={<div style={{ padding: 16, opacity: .6 }}>Loading…</div>}><WeekTimetable fetcher={(w) => svc.timetable(trainee.id, w)} resetKey={trainee.id} interval={60000} /></Suspense>
       </Card>
       <Card title="All entries">
         <Table empty="No duty entries yet." rows={data?.entries} cols={[
@@ -139,12 +142,12 @@ export default function CoordinatorDashboard() {
       {tab === "live" && <LiveDutyPanel fetcher={svc.live} />}
       {tab === "trainees" && <Trainees />}
       {tab === "registrations" && <RegistrationsPanel svc={svc} />}
-      {tab === "roster" && <RosterPanel svc={svc} scope="coord" />}
+      {tab === "roster" && <Suspense fallback={<div style={{ padding: 16, opacity: .6 }}>Loading…</div>}><RosterPanel svc={svc} scope="coord" /></Suspense>}
       {tab === "approvals" && <ApprovalsPanel svc={svc} />}
-      {tab === "reports" && <ReportsPanel svc={svc} scope="coord" />}
-      {tab === "announcements" && <AnnouncementsPanel svc={svc} fixedSection={data?.section || null} scope="coord" />}
+      {tab === "reports" && <Suspense fallback={<div style={{ padding: 16, opacity: .6 }}>Loading…</div>}><ReportsPanel svc={svc} scope="coord" /></Suspense>}
+      {tab === "announcements" && <Suspense fallback={<div style={{ padding: 16, opacity: .6 }}>Loading…</div>}><AnnouncementsPanel svc={svc} fixedSection={data?.section || null} scope="coord" /></Suspense>}
       {tab === "notifications" && <NotificationsPanel tabs={NAV.map((n) => n.key)} go={setTab} highlight={hl} />}
-      {tab === "activity" && <AuditPanel svc={svc} title="Audit log (my section)" />}
+      {tab === "activity" && <Suspense fallback={<div style={{ padding: 16, opacity: .6 }}>Loading…</div>}><AuditPanel svc={svc} title="Audit log (my section)" /></Suspense>}
     </AdminShell>
   );
 }

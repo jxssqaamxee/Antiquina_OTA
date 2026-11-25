@@ -1,8 +1,8 @@
-import React from "react";
+import React, { lazy, Suspense } from "react";
 import { Btn, Card, Chip, Table, statusTone } from "./ui";
 import { StatCard } from "./AdminShell";
 import CachedImage from "../shared/CachedImage";
-import WeekTimetable from "../shared/WeekTimetable";
+const WeekTimetable = lazy(() => import("../shared/WeekTimetable"));
 import { initialsOf } from "../shared/AvatarPhoto";
 
 const ROLE = { admin: "Administrator", coordinator: "Coordinator", trainee: "Trainee" };
@@ -95,7 +95,7 @@ export default function UserDetails({ svc, user: u, onClose, onEdit }) {
           ) : <p className="st-empty">Not placed in a host establishment.</p>}
 
           <h4 className="st-det-h">Weekly duty timetable</h4>
-          <WeekTimetable fetcher={(w) => svc.traineeTimetable(u.id, w)} resetKey={u.id} />
+          <Suspense fallback={<div style={{ padding: 16, opacity: .6 }}>Loading…</div>}><WeekTimetable fetcher={(w) => svc.traineeTimetable(u.id, w)} resetKey={u.id} /></Suspense>
 
           <h4 className="st-det-h">Enrollment history</h4>
           <Table searchable={false} toggle={false} empty="No enrollments yet." rows={u.enrollments} cols={[

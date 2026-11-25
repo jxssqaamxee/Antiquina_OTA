@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import React, { lazy, Suspense, useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { Plus, Trash2, FileDown, Sun, Sunset, Moon, Pencil, Settings2, Info, Clock3, Hourglass, Zap, CalendarDays, Building2, ChevronRight, AlertTriangle, Lock } from "lucide-react";
 import MobileTabBar from "../../Components/shared/MobileTabBar";
@@ -14,8 +14,8 @@ import { usePopup } from "../../context/PopupContext";
 import { OnboardingGuide } from "../../Components/shared/HelpGuide";
 import ProgressRing from "../../Components/logbook/ProgressRing";
 import TimeInput12 from "../../Components/logbook/TimeInput12";
-import ReportsPanel from "./ReportsPanel";
-import EntryHistoryPanel from "./EntryHistoryPanel";
+const ReportsPanel = lazy(() => import("./ReportsPanel"));
+const EntryHistoryPanel = lazy(() => import("./EntryHistoryPanel"));
 import Footer from "../../Components/shared/Footer";
 import { getUserStorage, setUserStorage, isStorageAvailable, getStorage, removeStorage } from "../../utils/storage";
 import api from "../../config/axiosConfig";
@@ -501,6 +501,10 @@ export default function LogbookPage() {
   const remaining = Math.max(targetHours - totalHours, 0);
   const percent = targetHours > 0 ? Math.min((totalHours / targetHours) * 100, 100) : 0;
   const complete = percent >= 100;
+  // Same formula and rounding as the coordinator's report (ReportService::trainees): verified (approved) hours only, one decimal.
+  // The ring above counts every logged hour, so it can read higher until entries are approved.
+  const verifiedPercent = targetHours > 0 ? Math.round(Math.min((verifiedHours / targetHours) * 100, 100) * 10) / 10 : 0;
+  const pct1 = (n) => Math.round(n * 10) / 10;
 
   const overtimeHours = useMemo(
     () => entries.filter((e) => e.category === "overtime").reduce((s, e) => s + e.hours, 0),
@@ -1275,7 +1279,7 @@ export default function LogbookPage() {
               </div>
               <div className="hero-body">
                 <ProgressRing percent={scoped ? viewPercent : percent} complete={scoped ? viewPercent >= 100 : complete}>
-                  <b>{Math.round(scoped ? viewPercent : percent)}%</b>
+                  <b>{pct1(scoped ? viewPercent : percent)}%</b>
                   <span>{(scoped ? viewPercent >= 100 : complete) ? "Target met" : "done"}</span>
                 </ProgressRing>
                 <div className="hero-info">
@@ -1290,6 +1294,7 @@ export default function LogbookPage() {
                     {scoped
                       ? <span className="hero-chip">{viewShare}% of all your hours</span>
                       : <span className="hero-chip">{formatHours(remaining)} to go</span>}
+                    {!scoped && <span className="hero-chip" title="Approved hours only: the figure your coordinator sees">{verifiedPercent}% verified</span>}
                     {(scoped ? viewOvertime : overtimeHours) > 0 && <span className="hero-chip">{formatHours(scoped ? viewOvertime : overtimeHours)} overtime</span>}
                   </div>
                 </div>
@@ -1451,8 +1456,8 @@ export default function LogbookPage() {
           </>
         )}
 
-        {tab === "history" && <EntryHistoryPanel entries={viewEntries} clients={clients} now={nowDate} scopedName={scoped ? viewClientName : null} onSubmit={submitEntryForReview} onSubmitAll={submitManyForReview} />}
-        {tab === "reports" && <ReportsPanel entries={viewEntries} clients={clients} now={nowDate} blockingExport={blockingExport} scopedName={scoped ? viewClientName : null} />}
+        {tab === "history" && <Suspense fallback={<div style={{ padding: 16, opacity: .6 }}>Loading…</div>}><EntryHistoryPanel entries={viewEntries} clients={clients} now={nowDate} scopedName={scoped ? viewClientName : null} onSubmit={submitEntryForReview} onSubmitAll={submitManyForReview} /></Suspense>}
+        {tab === "reports" && <Suspense fallback={<div style={{ padding: 16, opacity: .6 }}>Loading…</div>}><ReportsPanel entries={viewEntries} clients={clients} now={nowDate} blockingExport={blockingExport} scopedName={scoped ? viewClientName : null} /></Suspense>}
 
         <Footer />
       </main>

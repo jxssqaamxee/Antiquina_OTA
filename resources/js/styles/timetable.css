@@ -109,3 +109,43 @@
   .tt-days button { flex: 1 1 0; min-width: 0; min-height: 44px; padding: 4px 2px; }
   .tt-days button.on { padding: 3px 1px; }
 }
+
+/* ---------- v2 fixes: phones / PWA ---------- */
+/* Nothing in the timetable may widen the page: the week scrolls inside its own box only. */
+.tt { min-width: 0; max-width: 100%; }
+.tt-scroll { max-width: 100%; overscroll-behavior-x: contain; touch-action: pan-x pan-y; }
+.pf-body, .st-card, .app-main > * { min-width: 0; }
+.tt-nav { min-width: 0; max-width: 100%; }
+.tt-bar { gap: 8px; }
+.tt-nav strong { flex: 1 1 auto; overflow-wrap: anywhere; }
+
+/* Day header with the small expand arrow (week view). */
+.tt-dh { position: relative; flex-direction: row; align-items: center; justify-content: space-between; gap: 4px; padding: 7px 6px 7px 8px; }
+.tt-dh-t { display: flex; flex-direction: column; min-width: 0; text-align: left; }
+.tt-dh-x { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--ink-soft); cursor: pointer; }
+.tt-dh-x:hover { background: var(--hover); color: var(--ink); }
+.tt-dh-x:focus-visible { outline: 2px solid rgb(var(--accent-rgb, 37, 99, 235)); outline-offset: 1px; }
+.tt-cal.is-day .tt-dh { justify-content: center; }
+
+/* Phone week view: readable columns, scrolls sideways inside the box, hour labels stay visible. */
+@media (max-width: 640px) {
+  .tt-cal:not(.is-day) { min-width: 840px; }
+  .tt-cal .fc-timegrid-axis, .tt-cal .fc-timegrid-slot-label { position: sticky; left: 0; z-index: 3; background: var(--surface); }
+  .tt-bar, .tt-nav { width: 100%; }
+  .tt-nav:first-child { justify-content: space-between; }
+  .tt-nav:last-child { justify-content: flex-start; }
+  .tt-nav .tt-btn { min-width: 40px; height: 40px; }
+  .tt-dl .tt-menu { right: auto; left: 0; }
+}
+
+/* Expanded: the whole timetable fills the screen so the text reads comfortably. */
+.tt.is-full { position: fixed; inset: 0; z-index: 250; overflow: auto; background: var(--surface); padding: calc(12px + env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px)); -webkit-overflow-scrolling: touch; }
+.tt.is-full .tt-cal:not(.is-day) { min-width: 1000px; }
+.tt.is-full .tt-ev-in { font-size: 13px; padding: 6px 8px; }
+.tt.is-full .tt-ev-in b { font-size: 13.5px; }
+.tt.is-full .tt-cal .fc { font-size: 13.5px; }
+
+/* Detail popup: above the bottom tab bar (z 60), centred on its own, never hidden behind it. */
+.tt-sheet-wrap { z-index: 400; align-items: flex-end; padding: env(safe-area-inset-top, 0px) 0 0; }
+.tt-sheet { max-height: 80vh; max-height: 80dvh; padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px)); box-shadow: 0 -12px 40px rgba(0,0,0,.28); }
+@media (min-width: 641px) { .tt-sheet-wrap { align-items: center; padding: 16px; } }

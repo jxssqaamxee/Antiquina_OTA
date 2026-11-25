@@ -1,12 +1,14 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Radio, LayoutDashboard, UserCog, Layers, ClipboardList, Users as UsersIcon, TrendingUp, Target, FileBarChart, Megaphone, ShieldCheck, UserCheck } from "lucide-react";
 import AdminShell, { StatCard } from "../../Components/admin/AdminShell";
 import { Btn, Card, Chip, Field, Input, Notice, RefreshButton, Row, Select, Table, statusTone, useAction } from "../../Components/admin/ui";
 import { OverviewDashboard, OverviewSkeleton } from "../../Components/admin/Dashboard";
 import { LiveDutyPanel } from "../../Components/admin/LiveDuty";
 import RegistrationsPanel from "../../Components/admin/RegistrationsPanel";
-import UserDetails from "../../Components/admin/UserDetails";
-import { AnnouncementsPanel, AuditPanel, ReportsPanel } from "../../Components/admin/panels";
+const UserDetails = lazy(() => import("../../Components/admin/UserDetails"));
+const AnnouncementsPanel = lazy(() => import("../../Components/admin/panels").then((m) => ({ default: m.AnnouncementsPanel })));
+const AuditPanel = lazy(() => import("../../Components/admin/panels").then((m) => ({ default: m.AuditPanel })));
+const ReportsPanel = lazy(() => import("../../Components/admin/panels").then((m) => ({ default: m.ReportsPanel })));
 import { adminService as svc } from "../../services/adminService";
 import useLoad from "../../hooks/useLoad";
 import usePersistedTab from "../../hooks/usePersistedTab";
@@ -48,7 +50,7 @@ function Users() {
     <>
       <Notice msg={msg} />
       <div ref={topRef} />
-      {view && <UserDetails svc={svc} user={view} onClose={() => setView(null)} onEdit={editFromView} />}
+      {view && <Suspense fallback={<div style={{ padding: 16, opacity: .6 }}>Loading…</div>}><UserDetails svc={svc} user={view} onClose={() => setView(null)} onEdit={editFromView} /></Suspense>}
       {edit && (
         <Card title={`Edit ${edit.login_id || "user"}`} actions={<Btn onClick={() => setEdit(null)} disabled={busy}>Cancel</Btn>}>
           <Row>
@@ -449,9 +451,9 @@ export default function AdminDashboard() {
       {tab === "enrollments" && <Enrollments sections={sections} year={year} viewYear={viewYear} past={past} />}
       {tab === "progression" && <Progression years={years || []} onChanged={refresh} />}
       {tab === "training" && <Training sections={sections} />}
-      {tab === "reports" && <ReportsPanel svc={svc} sections={yearSecs || []} courses={courses || []} scope="admin" yearId={viewYear?.id || null} />}
-      {tab === "announcements" && <AnnouncementsPanel svc={svc} sections={sections} courses={courses || []} scope="admin" />}
-      {tab === "activity" && <AuditPanel svc={svc} />}
+      {tab === "reports" && <Suspense fallback={<div style={{ padding: 16, opacity: .6 }}>Loading…</div>}><ReportsPanel svc={svc} sections={yearSecs || []} courses={courses || []} scope="admin" yearId={viewYear?.id || null} /></Suspense>}
+      {tab === "announcements" && <Suspense fallback={<div style={{ padding: 16, opacity: .6 }}>Loading…</div>}><AnnouncementsPanel svc={svc} sections={sections} courses={courses || []} scope="admin" /></Suspense>}
+      {tab === "activity" && <Suspense fallback={<div style={{ padding: 16, opacity: .6 }}>Loading…</div>}><AuditPanel svc={svc} /></Suspense>}
     </AdminShell>
   );
 }
