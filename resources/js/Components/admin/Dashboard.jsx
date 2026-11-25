@@ -54,7 +54,7 @@ export function OverviewSkeleton() {
 export function KpiCard({ icon: Icon, label, value, suffix = "", decimals = 0, hint, series, tone }) {
   return (
     <div className={`st-stat st-kpi-card ch-kpi ${tone ? `is-${tone}` : ""}`}>
-      <div className="st-kpi-icon">{Icon && <Icon size={19} strokeWidth={2.2} />}</div>
+      <div className="st-kpi-icon">{Icon && <Icon size={92} strokeWidth={1.8} />}</div>
       <div className="st-kpi-value"><AnimatedNumber value={value} decimals={decimals} suffix={suffix} /></div>
       <div className="st-kpi-label">{label}</div>
       {hint && <div className="st-kpi-hint">{hint}</div>}

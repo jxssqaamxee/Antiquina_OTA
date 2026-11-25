@@ -503,12 +503,3 @@ html { overscroll-behavior-y: none; }
 .pf-form .pf-toggle[aria-expanded="true"] .pf-chev { transform: rotate(180deg); }
 .pf-form .pf-body { padding-top: 8px; }
 .pf-form .pf-body[hidden] { display: none; }
-
-/* ---------- seal: the school logo sits faintly behind/over the page content, like a stamp (all roles, light + dark) ---------- */
-body::after {
-  content: ""; position: fixed; inset: 0; z-index: 5; pointer-events: none;
-  background: url("../assets/images/site-logo.png") center / min(70vw, 460px) auto no-repeat;
-  opacity: .06;
-}
-:root[data-theme="black"] body::after, :root[data-theme^="dark-"] body::after { opacity: .08; }
-@media print { body::after { display: none; } }
