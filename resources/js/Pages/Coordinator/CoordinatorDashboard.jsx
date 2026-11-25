@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { Radio, LayoutDashboard, Users, ClipboardCheck, FileBarChart, Megaphone, ShieldCheck, Upload, UserCheck } from "lucide-react";
+import { Radio, LayoutDashboard, Users, ClipboardCheck, FileBarChart, Megaphone, ShieldCheck, Upload, UserCheck, Bell } from "lucide-react";
 import AdminShell, { StatCard } from "../../Components/admin/AdminShell";
 import { Btn, Card, Check, Chip, Field, Input, Notice, RefreshButton, Row, Select, Table, statusTone, useAction } from "../../Components/admin/ui";
 import { OverviewDashboard, OverviewSkeleton } from "../../Components/admin/Dashboard";
 import { LiveDutyPanel } from "../../Components/admin/LiveDuty";
 import WeekTimetable from "../../Components/shared/WeekTimetable";
+import NotificationsPanel from "../../Components/admin/NotificationsPanel";
 import RegistrationsPanel from "../../Components/admin/RegistrationsPanel";
 import { ApprovalsPanel, PendingEntries, times } from "../../Components/admin/ApprovalsPanel";
 import { AnnouncementsPanel, AuditPanel, ReportsPanel, RosterPanel } from "../../Components/admin/panels";
@@ -113,12 +114,15 @@ const NAV = [
   { key: "approvals", label: "Logbook approvals", short: "Approvals", icon: ClipboardCheck },
   { key: "reports", label: "Reports", icon: FileBarChart },
   { key: "announcements", label: "Announcements", icon: Megaphone },
+  { key: "notifications", label: "Notifications", icon: Bell },
   { key: "activity", label: "Audit log", icon: ShieldCheck },
 ];
 
 /** Coordinator area: dashboard, trainees (with entries + placement), approvals, activity. Scope is enforced by Laravel. */
 export default function CoordinatorDashboard() {
-  const [tab, setTab] = usePersistedTab("coordinator", NAV.map((n) => n.key), "dashboard");
+  const [tab, setTabRaw] = usePersistedTab("coordinator", NAV.map((n) => n.key), "dashboard");
+  const [hl, setHl] = useState(null); // notice the bell sent us to (highlighted on the Notifications page)
+  const setTab = (key, state) => { setHl(state?.highlight || null); setTabRaw(key); };
   const [data, reloadOverview, error, om] = useLoad(() => svc.overview(), { interval: LIVE });
   useEffect(() => { document.title = "Coordinator | OCCDL"; }, []);
   return (
@@ -139,6 +143,7 @@ export default function CoordinatorDashboard() {
       {tab === "approvals" && <ApprovalsPanel svc={svc} />}
       {tab === "reports" && <ReportsPanel svc={svc} scope="coord" />}
       {tab === "announcements" && <AnnouncementsPanel svc={svc} fixedSection={data?.section || null} scope="coord" />}
+      {tab === "notifications" && <NotificationsPanel tabs={NAV.map((n) => n.key)} go={setTab} highlight={hl} />}
       {tab === "activity" && <AuditPanel svc={svc} title="Audit log (my section)" />}
     </AdminShell>
   );

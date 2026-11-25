@@ -18,6 +18,7 @@ import logo from "../../assets/images/site-logo.png";
 import { Btn, Card, Field, Input, Notice, Row } from "./ui";
 import TwoFactorPanel from "./TwoFactorPanel";
 import CoordinatorBell from "./CoordinatorBell";
+import { CoordinatorNotificationsProvider, useCoordinatorNotifications } from "../../context/CoordinatorNotificationsContext";
 import "../shared/AccountMenu.css";
 import "../../styles/admin.css";
 
@@ -353,8 +354,18 @@ function StaffTabBar({ tabs, active, hidden, menuOpen, onGo, onMenu }) {
  *   active      key of the open section
  *   onNavigate  (key) => void
  */
-export default function AdminShell({ roleLabel, nav = [], phoneTabs, active, onNavigate, title, subtitle, actions, children }) {
+export default function AdminShell(props) {
+  const { user } = useAuth();
+  const body = <AdminShellInner {...props} />;
+  // Coordinators get the shared notification state (bell, sidebar badge, Notifications page); key = account id.
+  return user?.role === "coordinator" && user?.id != null
+    ? <CoordinatorNotificationsProvider key={user.id} userId={user.id}>{body}</CoordinatorNotificationsProvider>
+    : body;
+}
+
+function AdminShellInner({ roleLabel, nav = [], phoneTabs, active, onNavigate, title, subtitle, actions, children }) {
   const { user, logout } = useAuth();
+  const notif = useCoordinatorNotifications();
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const { tab: routeTab } = useParams();
@@ -402,7 +413,7 @@ export default function AdminShell({ roleLabel, nav = [], phoneTabs, active, onN
     setSidebarOpen(false);
     navigate(`/${pathname.split("/")[1]}/profile`);
   };
-  const go = (key) => { onNavigate?.(key); setSidebarOpen(false); };
+  const go = (key, state) => { onNavigate?.(key, state); setSidebarOpen(false); };
   const activeItem = nav.find((n) => n.key === active);
   const tabs = (phoneTabs ? phoneTabs.map((k) => nav.find((n) => n.key === k)).filter(Boolean) : nav).slice(0, 4);
   const menuProps = { signingOut: busy, onSignOut: signOut, onEditProfile: openProfile };
@@ -435,6 +446,7 @@ export default function AdminShell({ roleLabel, nav = [], phoneTabs, active, onN
  onClick={() => go(key)}>
                     <span className="ds-nav-icon">{Icon && <Icon size={18} strokeWidth={2} />}</span>
                     <span className="ds-nav-text">{label}</span>
+                    {key === "notifications" && notif?.unread > 0 && <span className="ds-nav-badge" aria-label={`${notif.unread} unread`}>{notif.unread > 99 ? "99+" : notif.unread}</span>}
                   </button></Tooltip>
                 </li>
               );
@@ -470,7 +482,7 @@ export default function AdminShell({ roleLabel, nav = [], phoneTabs, active, onN
           </div>
           <div className="ds-topbar-actions">
             {/* Coordinator bell only. key = account id, so a different sign-in on this browser always starts from an empty bell. */}
-            {user?.role === "coordinator" && user?.id != null && <CoordinatorBell key={user.id} userId={user.id} tabs={nav.map((n) => n.key)} onOpenTab={go} />}
+            {user?.role === "coordinator" && user?.id != null && <CoordinatorBell key={user.id} tabs={nav.map((n) => n.key)} onOpenTab={go} />}
             <AdminAccountMenu variant="top" {...menuProps} />
           </div>
         </header>

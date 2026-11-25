@@ -44,6 +44,7 @@ export default function WeekTimetable({ fetcher, resetKey = "", interval = 0, ca
   const [dayDate, setDayDate] = useState(null);   // YYYY-MM-DD shown in day view
   const [sel, setSel] = useState(null);           // id of the tapped card (bottom sheet)
   const closeRef = useRef(null);
+  const boxRef = useRef(null);
 
   const [live, reload, error, m] = useLoad(() => fetcher(week || undefined), { deps: [week, resetKey], interval });
   const [copy, setCopy] = useState(null);
@@ -92,6 +93,20 @@ export default function WeekTimetable({ fetcher, resetKey = "", interval = 0, ca
     window.addEventListener("keydown", esc);
     return () => window.removeEventListener("keydown", esc);
   }, [sel]);
+  // FullCalendar only re-measures on window resize. Collapsing / expanding the sidebar changes this box's width
+  // without a window resize, so watch the box itself and tell the calendar to re-fit (once per frame).
+  const hasData = !!data;
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el || !hasData || typeof ResizeObserver === "undefined") return undefined;
+    let raf = 0;
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => cal.current?.getApi().updateSize());
+    });
+    ro.observe(el);
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+  }, [hasData]);
   const picked = sel ? blocks.find((b) => b.id === sel) : null;
   const pickedDay = picked ? data?.days?.find((d) => d.date === picked.date) : null;
 
@@ -174,7 +189,7 @@ export default function WeekTimetable({ fetcher, resetKey = "", interval = 0, ca
             )}
           </div>
 
-          <div className="tt-scroll">
+          <div className="tt-scroll" ref={boxRef}>
             <div className={`tt-cal${view === "day" ? " is-day" : ""}`} aria-label={`Duty timetable, ${w.label}`}>
               <FullCalendar
                 ref={cal}
