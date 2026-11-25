@@ -10,7 +10,7 @@ use Illuminate\Validation\ValidationException;
 /** Approve or reject a pending self-registration. The user row is locked and re-checked, so only one decision can win. */
 class RegistrationApprovalService
 {
-    public function __construct(private ActivityLogService $log, private CoordinatorAccessService $scope) {}
+    public function __construct(private ActivityLogService $log, private CoordinatorAccessService $scope, private CoordinatorNotifier $coordNotify) {}
 
     public function approve(User $actor, User $target): User
     {
@@ -35,6 +35,9 @@ class RegistrationApprovalService
 
             return $u;
         });
+
+        // Decided by this coordinator or the administrator: the "waiting for approval" notice is done for everyone.
+        $this->coordNotify->registrationResolved($done);
 
         // Enrolment (and so visibility in a section) follows approval, but only for a verified email.
         if ($status === User::APPROVAL_APPROVED && $done->hasVerifiedEmail()) {

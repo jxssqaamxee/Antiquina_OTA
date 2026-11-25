@@ -17,6 +17,7 @@ import DeveloperCredit from "../shared/DeveloperCredit";
 import logo from "../../assets/images/site-logo.png";
 import { Btn, Card, Field, Input, Notice, Row } from "./ui";
 import TwoFactorPanel from "./TwoFactorPanel";
+import CoordinatorBell from "./CoordinatorBell";
 import "../shared/AccountMenu.css";
 import "../../styles/admin.css";
 
@@ -468,6 +469,8 @@ export default function AdminShell({ roleLabel, nav = [], phoneTabs, active, onN
             </div>
           </div>
           <div className="ds-topbar-actions">
+            {/* Coordinator bell only. key = account id, so a different sign-in on this browser always starts from an empty bell. */}
+            {user?.role === "coordinator" && user?.id != null && <CoordinatorBell key={user.id} userId={user.id} tabs={nav.map((n) => n.key)} onOpenTab={go} />}
             <AdminAccountMenu variant="top" {...menuProps} />
           </div>
         </header>

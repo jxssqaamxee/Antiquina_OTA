@@ -21,6 +21,7 @@ export const adminService = {
   confirmProgression: (yearId, items) => d(api.post(`/admin/academic-years/${yearId}/progression/confirm`, { items })),
   users: (params) => d(api.get("/admin/users", { params })),
   user: (id) => d(api.get(`/admin/users/${id}`)),
+  traineeTimetable: (id, week) => d(api.get(`/admin/trainees/${id}/timetable`, { params: week ? { week } : {} })),
   userPhotoUrl: (id, v) => `/api/admin/users/${id}/photo${v ? `?v=${encodeURIComponent(v)}` : ""}`, // v = photo version (a new picture is a new address)
   updateUser: (id, body) => d(api.put(`/admin/users/${id}`, body)),
   coordinators: () => d(api.get("/admin/coordinators")),

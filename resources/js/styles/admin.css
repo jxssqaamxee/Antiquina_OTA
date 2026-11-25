@@ -900,3 +900,17 @@ textarea.st-inp { min-height: 104px; padding: 12px 14px; resize: vertical; font-
 /* school-year picker in the header (Dashboard, Sections, Enrollments, Reports) */
 .st-header-tools .st-year-pick { width: 270px; min-height: 42px; }
 @media (max-width: 600px) { .st-header-tools .st-year-pick { width: 100%; } }
+
+/* ---------- coordinator bell ---------- */
+.cn-bell { position: relative; }
+.cn-badge {
+  position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 99px;
+  background: var(--bad, #dc2626); color: #fff; font-size: 10px; font-weight: 800; line-height: 18px; text-align: center;
+  box-shadow: 0 0 0 2px var(--bar-bg, var(--bg, #fff));
+}
+.cn-item { display: block; width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.cn-item:hover { border-color: var(--accent-text); }
+.cn-item:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
+.cn-item.is-unread { border-color: var(--accent-text); }
+.cn-item-icon { margin-right: 6px; vertical-align: -2px; opacity: .8; }
+.cn-dot { display: inline-block; width: 8px; height: 8px; border-radius: 99px; margin-left: 8px; background: var(--accent-text, #4f46e5); }

@@ -17,6 +17,10 @@ class ServerNotifier
             'title' => mb_substr($title, 0, 160), 'message' => mb_substr($message, 0, 500),
             'is_read' => false, 'notified_at' => now(), 'position' => 0, 'source' => 'server',
         ]);
+        // Staff (coordinator / admin) have no synced notification document, so they need no settings bookkeeping.
+        if (! $user->isTrainee()) {
+            return;
+        }
         // A stale device holding the old list now gets a 409 and reloads instead of overwriting.
         UserSetting::firstOrCreate(['user_id' => $user->id]);
         // The notifications document only exists for sync once it has been "saved" at least once. A trainee who never

@@ -57,6 +57,9 @@ class AuthController extends Controller
 
         ProfilePhotoStorage::save($user, $request->file('profile_photo'), 'profile_photo');
 
+        // Bell notice for the coordinator of the roster section this student belongs to (only that one).
+        app(\App\Services\Academic\CoordinatorNotifier::class)->registrationReceived($user->fresh());
+
         // Sends the 6-digit code + link. Never fails registration if the mail server is down:
         // the verify screen has a "Resend email" button.
         EmailVerificationController::send($user);

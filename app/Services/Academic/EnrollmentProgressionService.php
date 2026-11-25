@@ -15,7 +15,7 @@ class EnrollmentProgressionService
 {
     public const FINAL_YEAR = 4;
 
-    public function __construct(private ActivityLogService $log, private ServerNotifier $notify, private TrainingHourService $hours) {}
+    public function __construct(private ActivityLogService $log, private ServerNotifier $notify, private TrainingHourService $hours, private CoordinatorNotifier $coordNotify) {}
 
     /**
      * Dry run: nothing is written. Lists each student with an open enrollment that belongs to an earlier
@@ -151,9 +151,9 @@ class EnrollmentProgressionService
             default => "You are now enrolled in {$code}.",
         };
         $this->notify->notify($student, $kind === 'transfer' ? 'Section transfer' : 'Enrollment update', $msg);
-        if ($new?->section_id) {
-            $coord = CoordinatorAssignment::open()->where('section_id', $new->section_id)->with('coordinator')->first()?->coordinator;
-            $coord && $this->notify->notify($coord, 'New trainee in your section', "{$student->fullName()} joined {$code}.");
-        }
+        // The coordinator of the NEW section (and only that one) gets the bell notice.
+        $this->coordNotify->traineeJoined($student, $new);
+        // Entries already waiting for review now belong to the new coordinator; the old one's notice is removed.
+        $this->coordNotify->entriesChanged($student, true);
     }
 }

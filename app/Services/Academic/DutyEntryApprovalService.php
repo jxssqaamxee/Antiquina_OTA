@@ -13,11 +13,11 @@ use Illuminate\Validation\ValidationException;
 /** Submit / approve / reject. Each change locks the trainee's settings row (same lock sync uses) and bumps logbook_revision. */
 class DutyEntryApprovalService
 {
-    public function __construct(private ActivityLogService $log, private ServerNotifier $notify) {}
+    public function __construct(private ActivityLogService $log, private ServerNotifier $notify, private CoordinatorNotifier $coordNotify) {}
 
     public function submit(User $trainee, string $entryUid): DutyEntry
     {
-        return $this->change($trainee, fn () => DutyEntry::where(['user_id' => $trainee->id, 'entry_uid' => $entryUid])->lockForUpdate()->first(),
+        $entry = $this->change($trainee, fn () => DutyEntry::where(['user_id' => $trainee->id, 'entry_uid' => $entryUid])->lockForUpdate()->first(),
             function (DutyEntry $e) use ($trainee) {
                 if (! in_array($e->status, [DutyEntry::DRAFT, DutyEntry::REJECTED], true)) {
                     throw ValidationException::withMessages(['entry' => 'This entry is already submitted or approved.']);
@@ -25,6 +25,10 @@ class DutyEntryApprovalService
                 $e->update(['status' => DutyEntry::SUBMITTED, 'submitted_at' => now(), 'review_reason' => null, 'reviewed_by' => null, 'reviewed_at' => null]);
                 DutyEntryReview::create(['duty_entry_id' => $e->id, 'actor_id' => $trainee->id, 'action' => 'submitted', 'created_at' => now()]);
             });
+        // After the commit: the coordinator who owns this trainee's section gets the bell notice (and nobody else).
+        $this->coordNotify->entriesChanged($trainee, true);
+
+        return $entry;
     }
 
     public function approve(User $coordinator, DutyEntry $entry, ?float $verifiedHours): DutyEntry
@@ -57,6 +61,7 @@ class DutyEntryApprovalService
             }
         }
         foreach ($done as $traineeId => $list) {
+            $this->coordNotify->entriesChanged(User::findOrFail($traineeId), false);
             $n = count($list);
             $what = $n === 1 ? '1 entry was' : "{$n} entries were";
             $this->notify->notify(User::findOrFail($traineeId),
@@ -71,7 +76,7 @@ class DutyEntryApprovalService
     {
         $trainee = User::findOrFail($entry->user_id);
 
-        return $this->change($trainee, fn () => DutyEntry::whereKey($entry->id)->lockForUpdate()->first(),
+        $reviewed = $this->change($trainee, fn () => DutyEntry::whereKey($entry->id)->lockForUpdate()->first(),
             function (DutyEntry $e) use ($reviewer, $trainee, $outcome, $reason, $verified, $notify) {
                 if ($e->status !== DutyEntry::SUBMITTED) {
                     throw ValidationException::withMessages(['entry' => 'Only a submitted entry can be reviewed.']);
@@ -91,6 +96,11 @@ class DutyEntryApprovalService
                 $this->notify->notify($trainee, $outcome === DutyEntry::APPROVED ? 'Entry approved' : 'Entry needs changes',
                     $outcome === DutyEntry::APPROVED ? "Your {$date} entry was approved." : "Your {$date} entry was returned: {$reason}");
             });
+        if ($notify) { // a batch refreshes once per trainee in reviewMany() instead
+            $this->coordNotify->entriesChanged($trainee, false);
+        }
+
+        return $reviewed;
     }
 
     /**

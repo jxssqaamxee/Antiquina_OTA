@@ -1,0 +1,839 @@
+diff -ruN -x vendor -x node_modules -x .env -x '*.log' -x .phpunit.result.cache -x build -x storage orig/app/Http/Controllers/Api/TimetableController.php occ/app/Http/Controllers/Api/TimetableController.php
+--- orig/app/Http/Controllers/Api/TimetableController.php	1970-01-01 00:00:00.000000000 +0000
++++ occ/app/Http/Controllers/Api/TimetableController.php	2026-11-25 12:33:09.762058178 +0000
+@@ -0,0 +1,46 @@
++<?php
++
++namespace App\Http\Controllers\Api;
++
++use App\Http\Controllers\Controller;
++use App\Models\User;
++use App\Services\Academic\CoordinatorAccessService;
++use App\Services\Academic\TimetableService;
++use Illuminate\Http\JsonResponse;
++use Illuminate\Http\Request;
++
++/**
++ * Weekly duty timetable. Three doors, one builder:
++ *  - trainee: only ever their own account (no id is accepted),
++ *  - coordinator: own section only (404 otherwise, like every coordinator route),
++ *  - admin: any trainee account (404 for staff accounts).
++ * Read-only. ?week=YYYY-MM-DD is any date inside the week wanted (default: this week).
++ */
++class TimetableController extends Controller
++{
++    public function __construct(private TimetableService $timetable, private CoordinatorAccessService $scope) {}
++
++    private function week(Request $request): ?string
++    {
++        return $request->validate(['week' => ['nullable', 'date_format:Y-m-d']])['week'] ?? null;
++    }
++
++    public function mine(Request $request): JsonResponse
++    {
++        return response()->json($this->timetable->week($request->user(), $this->week($request)));
++    }
++
++    public function coordinator(Request $request, string $id): JsonResponse
++    {
++        $trainee = $this->scope->findTraineeOrFail($request->user(), $id);
++
++        return response()->json($this->timetable->week($trainee, $this->week($request)));
++    }
++
++    public function admin(Request $request, User $user): JsonResponse
++    {
++        abort_unless($user->isTrainee(), 404);
++
++        return response()->json($this->timetable->week($user, $this->week($request)));
++    }
++}
+diff -ruN -x vendor -x node_modules -x .env -x '*.log' -x .phpunit.result.cache -x build -x storage orig/app/Services/Academic/TimetableService.php occ/app/Services/Academic/TimetableService.php
+--- orig/app/Services/Academic/TimetableService.php	1970-01-01 00:00:00.000000000 +0000
++++ occ/app/Services/Academic/TimetableService.php	2026-11-25 12:33:09.760604749 +0000
+@@ -0,0 +1,193 @@
++<?php
++
++namespace App\Services\Academic;
++
++use App\Models\DutyEntry;
++use App\Models\HostClient;
++use App\Models\TraineePlacement;
++use App\Models\User;
++use Carbon\CarbonImmutable;
++
++/**
++ * Weekly duty timetable of ONE trainee (Monday to Sunday, Philippine date).
++ *
++ * Expected hours come from the host client's schedule: time_in to 12:00 is the morning block and 13:00 to
++ * time_out the afternoon block (the logbook fixes lunch at 12:00-13:00). Each logged segment is compared with the
++ * start of its expected block:
++ *   on time (<= 0 min late)  -> ontime      green
++ *   1-30 min late            -> late        yellow
++ *   more than 30 min late    -> very_late   red
++ *   evening / overtime entry -> overtime    blue (outside the host schedule)
++ *   no expected block known  -> logged      neutral
++ * A scheduled day in the past with no entry is "absent"; today without an entry is "not_logged".
++ *
++ * "Late" is derived from the times the trainee typed (the app has no clock-in), so it is only as honest as the
++ * logbook; the coordinator's approval is the check on that.
++ *
++ * The caller decides WHO may see the trainee (coordinator scope / admin / own account); this class only builds data.
++ */
++class TimetableService
++{
++    public const LATE_MAX = 30;      // minutes: 1..30 late is yellow, above is red
++    private const LUNCH_OUT = 720;   // 12:00
++    private const LUNCH_IN = 780;    // 13:00
++    private const DOW = [1 => 'Mon', 2 => 'Tue', 3 => 'Wed', 4 => 'Thu', 5 => 'Fri', 6 => 'Sat', 7 => 'Sun'];
++
++    public function week(User $trainee, ?string $date = null): array
++    {
++        $tz = config('occ.timezone', 'Asia/Manila');
++        $today = CarbonImmutable::now($tz)->startOfDay();
++        $start = ($date ? CarbonImmutable::createFromFormat('Y-m-d', $date, $tz) : $today)->startOfWeek(CarbonImmutable::MONDAY)->startOfDay();
++        $end = $start->addDays(6);
++
++        $entries = DutyEntry::with('hostClient')->where('user_id', $trainee->id)
++            ->whereBetween('duty_date', [$start->toDateString(), $end->toDateString()])
++            ->orderBy('am_in')->orderBy('pm_in')->orderBy('id')->get();
++        $placement = TraineePlacement::with('establishment')->where('user_id', $trainee->id)->whereNull('ended_at')->latest('id')->first();
++        $hosts = $this->scheduleHosts($trainee, $entries, $placement);
++
++        $scheduledDays = $hosts->flatMap(fn (array $h) => $h['days'])->unique()->values()->all();
++        $entryDays = $entries->map(fn (DutyEntry $e) => (int) $e->duty_date->isoWeekday())->unique()->values()->all();
++        $shown = array_values(array_unique(array_merge($scheduledDays ?: [1, 2, 3, 4, 5], $entryDays)));
++        sort($shown);
++
++        $days = [];
++        $counts = ['ontime' => 0, 'late' => 0, 'very_late' => 0, 'absent' => 0];
++        $tot = ['logged' => 0.0, 'verified' => 0.0, 'pending' => 0.0, 'draft' => 0.0, 'rejected' => 0.0];
++
++        foreach ($shown as $dow) {
++            $day = $start->addDays($dow - 1);
++            $ymd = $day->toDateString();
++            $expected = $hosts->filter(fn (array $h) => in_array($dow, $h['days'], true))
++                ->map(fn (array $h) => ['host' => $h['name'], 'type' => $h['type']] + $this->expected($h))->values()->all();
++
++            $cards = [];
++            $rows = [];
++            $hours = 0.0;
++            foreach ($entries->filter(fn (DutyEntry $e) => $e->duty_date->toDateString() === $ymd) as $e) {
++                $h = $e->hostClient ? $this->hostRow($e->hostClient) : $this->placementHost($placement);
++                $exp = $this->expected($h);
++                $overtime = $e->category !== 'regular';
++                $segs = ['am' => [$e->am_in, $e->am_out], 'pm' => [$e->pm_in, $e->pm_out], 'ev' => [$e->ev_in, $e->ev_out]];
++                foreach ($segs as $slot => [$in, $out]) {
++                    if (! $in || ! $out) {
++                        continue;
++                    }
++                    [$state, $late] = $overtime || $slot === 'ev' ? ['overtime', 0] : $this->state($in, $exp[$slot]);
++                    $cards[] = [
++                        'entry_id' => $e->id, 'slot' => $slot, 'in' => $in, 'out' => $out, 'hours' => round($this->span($in, $out), 2),
++                        'state' => $state, 'late_minutes' => $late, 'expected_in' => $exp[$slot][0] ?? null,
++                        'host' => $h['name'] ?? null, 'type' => $h['type'] ?? null, 'status' => $e->status,
++                    ];
++                    if ($e->status !== DutyEntry::REJECTED && isset($counts[$state])) {
++                        $counts[$state]++;
++                    }
++                }
++                $rows[] = ['id' => $e->id, 'host' => $h['name'] ?? null, 'type' => $h['type'] ?? null, 'status' => $e->status, 'category' => $e->category, 'hours' => (float) $e->hours, 'review_reason' => $e->review_reason];
++                $this->addTotals($tot, $e);
++                if ($e->status !== DutyEntry::REJECTED) {
++                    $hours += (float) $e->hours;
++                }
++            }
++
++            $scheduled = in_array($dow, $scheduledDays, true);
++            $status = $rows ? 'logged' : ($scheduled ? ($day->lt($today) ? 'absent' : ($day->equalTo($today) ? 'not_logged' : 'upcoming')) : 'rest');
++            if ($status === 'absent') {
++                $counts['absent']++;
++            }
++            $days[] = [
++                'date' => $ymd, 'dow' => $dow, 'label' => self::DOW[$dow], 'day' => $day->format('M j'),
++                'is_today' => $day->equalTo($today), 'scheduled' => $scheduled, 'status' => $status,
++                'expected' => $expected, 'cards' => $cards, 'entries' => $rows, 'hours' => round($hours, 2),
++            ];
++        }
++
++        return [
++            'trainee' => ['id' => $trainee->id, 'name' => $trainee->fullName(), 'student_id' => $trainee->student_id],
++            'week' => [
++                'start' => $start->toDateString(), 'end' => $end->toDateString(), 'is_current' => $start->equalTo($today->startOfWeek(CarbonImmutable::MONDAY)),
++                'prev' => $start->subWeek()->toDateString(), 'next' => $start->addWeek()->toDateString(),
++                'label' => $start->format('M j').' – '.$end->format($start->month === $end->month ? 'j, Y' : 'M j, Y'),
++            ],
++            'hosts' => $hosts->map(fn (array $h) => ['name' => $h['name'], 'type' => $h['type'], 'days' => $h['days'], 'time_in' => $h['time_in'], 'time_out' => $h['time_out']])->values()->all(),
++            'has_schedule' => $hosts->isNotEmpty(),
++            'late_after_minutes' => self::LATE_MAX,
++            'days' => $days,
++            'totals' => array_map(fn ($v) => round($v, 2), $tot) + ['counts' => $counts],
++        ];
++    }
++
++    /** Hosts that define the expected schedule: the coordinator-managed ones if any, else all; plus any host used this week. */
++    private function scheduleHosts(User $trainee, $entries, ?TraineePlacement $placement)
++    {
++        $all = HostClient::where('user_id', $trainee->id)->orderBy('position')->orderBy('id')->get();
++        $managed = $all->whereNotNull('placement_id');
++        $usedIds = $entries->pluck('host_client_id')->filter()->all();
++        $picked = ($managed->isNotEmpty() ? $managed : $all)->merge($all->whereIn('id', $usedIds))->unique('id');
++        $hosts = $picked->map(fn (HostClient $h) => $this->hostRow($h))->values();
++
++        if ($hosts->isEmpty() && ($p = $this->placementHost($placement))) {
++            $hosts = collect([$p]);
++        }
++
++        return $hosts;
++    }
++
++    private function hostRow(HostClient $h): array
++    {
++        return ['name' => $h->name, 'type' => $h->type, 'days' => array_values(array_map('intval', $h->days ?? [])), 'time_in' => $h->time_in, 'time_out' => $h->time_out];
++    }
++
++    private function placementHost(?TraineePlacement $p): ?array
++    {
++        return $p ? ['name' => $p->establishment?->name, 'type' => $p->establishment?->type ?? 'custom', 'days' => array_values(array_map('intval', $p->days ?? [])), 'time_in' => $p->time_in, 'time_out' => $p->time_out] : null;
++    }
++
++    /** Expected [in, out] of the morning and afternoon block of a host (null when the host has no such block). */
++    private function expected(?array $h): array
++    {
++        if (! $h || ! $h['time_in'] || ! $h['time_out']) {
++            return ['am' => null, 'pm' => null];
++        }
++        $in = $this->min($h['time_in']);
++        $out = $this->min($h['time_out']);
++
++        return [
++            'am' => $in < self::LUNCH_OUT ? [$h['time_in'], $out < self::LUNCH_OUT ? $h['time_out'] : '12:00'] : null,
++            'pm' => $out > self::LUNCH_IN ? [$in > self::LUNCH_IN ? $h['time_in'] : '13:00', $h['time_out']] : null,
++        ];
++    }
++
++    private function state(string $in, ?array $exp): array
++    {
++        if (! $exp) {
++            return ['logged', 0];
++        }
++        $late = $this->min($in) - $this->min($exp[0]);
++
++        return $late <= 0 ? ['ontime', 0] : ($late <= self::LATE_MAX ? ['late', $late] : ['very_late', $late]);
++    }
++
++    private function addTotals(array &$t, DutyEntry $e): void
++    {
++        $h = (float) $e->hours;
++        match ($e->status) {
++            DutyEntry::APPROVED => [$t['logged'] += $h, $t['verified'] += (float) ($e->verified_hours ?? $h)],
++            DutyEntry::SUBMITTED => [$t['logged'] += $h, $t['pending'] += $h],
++            DutyEntry::REJECTED => $t['rejected'] += $h,
++            default => [$t['logged'] += $h, $t['draft'] += $h],
++        };
++    }
++
++    private function min(string $hhmm): int
++    {
++        [$h, $m] = array_map('intval', explode(':', $hhmm)) + [0, 0];
++
++        return $h * 60 + $m;
++    }
++
++    private function span(string $in, string $out): float
++    {
++        return max(0, $this->min($out) - $this->min($in)) / 60;
++    }
++}
+diff -ruN -x vendor -x node_modules -x .env -x '*.log' -x .phpunit.result.cache -x build -x storage orig/resources/js/Components/admin/UserDetails.jsx occ/resources/js/Components/admin/UserDetails.jsx
+--- orig/resources/js/Components/admin/UserDetails.jsx	2026-11-25 12:24:21.270120811 +0000
++++ occ/resources/js/Components/admin/UserDetails.jsx	2026-11-25 12:36:05.656651890 +0000
+@@ -2,6 +2,7 @@
+ import { Btn, Card, Chip, Table, statusTone } from "./ui";
+ import { StatCard } from "./AdminShell";
+ import CachedImage from "../shared/CachedImage";
++import WeekTimetable from "../shared/WeekTimetable";
+ import { initialsOf } from "../shared/AvatarPhoto";
+ 
+ const ROLE = { admin: "Administrator", coordinator: "Coordinator", trainee: "Trainee" };
+@@ -93,6 +94,9 @@
+             </dl>
+           ) : <p className="st-empty">Not placed in a host establishment.</p>}
+ 
++          <h4 className="st-det-h">Weekly duty timetable</h4>
++          <WeekTimetable fetcher={(w) => svc.traineeTimetable(u.id, w)} resetKey={u.id} />
++
+           <h4 className="st-det-h">Enrollment history</h4>
+           <Table searchable={false} toggle={false} empty="No enrollments yet." rows={u.enrollments} cols={[
+             { h: "Academic year", render: (e) => e.academic_year || "—" },
+diff -ruN -x vendor -x node_modules -x .env -x '*.log' -x .phpunit.result.cache -x build -x storage orig/resources/js/Components/shared/WeekTimetable.jsx occ/resources/js/Components/shared/WeekTimetable.jsx
+--- orig/resources/js/Components/shared/WeekTimetable.jsx	1970-01-01 00:00:00.000000000 +0000
++++ occ/resources/js/Components/shared/WeekTimetable.jsx	2026-11-25 12:36:05.653680861 +0000
+@@ -0,0 +1,167 @@
++import React, { useState } from "react";
++import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
++import useLoad from "../../hooks/useLoad";
++import "../../styles/timetable.css";
++
++/**
++ * Weekly duty timetable of one trainee, used by the coordinator, the administrator and the trainee's own profile.
++ * `fetcher(week)` answers the JSON of TimetableController (week = "YYYY-MM-DD" or undefined for this week).
++ * Colours always come with words (On time / 12 min late / Absent), so nothing depends on colour alone.
++ */
++
++const SLOTS = [["am", "Morning"], ["pm", "Afternoon"], ["ev", "Evening / overtime"]];
++const TYPE = { public: "Public", private: "Private", custom: "Custom" };
++const STATUS = { draft: "Draft", submitted: "Waiting for review", approved: "Approved", rejected: "Returned" };
++const DAY_NAME = { 1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri", 6: "Sat", 7: "Sun" };
++const RANK = { very_late: 4, late: 3, ontime: 2, overtime: 1, logged: 0 };
++
++export const fmt12 = (t) => {
++  if (!t) return "";
++  const [h, m] = t.split(":").map(Number);
++  return `${((h + 11) % 12) + 1}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
++};
++export const dur = (hours) => {
++  const min = Math.round((hours || 0) * 60);
++  const h = Math.floor(min / 60), m = min % 60;
++  return h && m ? `${h} h ${m} m` : h ? `${h} h` : m ? `${m} m` : "0 h";
++};
++const minText = (min) => (min < 60 ? `${min} min` : `${Math.floor(min / 60)} h${min % 60 ? ` ${min % 60} min` : ""}`);
++const daysText = (days) => (days || []).map((d) => DAY_NAME[d]).join(", ");
++
++function pillText(c) {
++  if (c.state === "ontime") return "On time";
++  if (c.state === "late") return `${minText(c.late_minutes)} late`;
++  if (c.state === "very_late") return `Very late · ${minText(c.late_minutes)}`;
++  if (c.state === "overtime") return "Overtime";
++  return "Logged";
++}
++
++function Card({ c, slotLabel }) {
++  const label = (c.state === "late" || c.state === "very_late") && c.expected_in ? `should start ${fmt12(c.expected_in)}` : null;
++  return (
++    <div className={`tt-card is-${c.state}${c.status === "rejected" ? " is-rejected" : ""}`} title={label || undefined}>
++      <span className="tt-slot-label">{slotLabel}</span>
++      <div className="tt-card-time"><span>{fmt12(c.in)} – {fmt12(c.out)}</span><b>{dur(c.hours)}</b></div>
++      <div className="tt-card-meta">{c.host || "No host client"}{c.type ? ` · ${TYPE[c.type] || c.type}` : ""}</div>
++      <div className="tt-card-tags">
++        <span className="tt-pill">{pillText(c)}</span>
++        {label && <span className="tt-note">{label}</span>}
++        {c.status !== "approved" && <span className="tt-status">{STATUS[c.status] || c.status}</span>}
++      </div>
++    </div>
++  );
++}
++
++function Ghost({ slotLabel, exp, tone }) {
++  return exp.map((e, i) => (
++    <div key={i} className={`tt-ghost${tone ? ` is-${tone}` : ""}`}>
++      <span className="tt-slot-label">{slotLabel}</span>
++      {tone === "off" ? "Not logged" : `Expected ${fmt12(e[0])} – ${fmt12(e[1])}`}
++    </div>
++  ));
++}
++
++function DayRow({ d }) {
++  const live = d.cards.filter((c) => c.status !== "rejected");
++  const worst = live.reduce((w, c) => (RANK[c.state] > RANK[w] ? c.state : w), "logged");
++  const waiting = d.status === "upcoming" || d.status === "not_logged" || d.is_today;
++  const expText = d.expected.map((e) => [e.am && `${fmt12(e.am[0])} – ${fmt12(e.am[1])}`, e.pm && `${fmt12(e.pm[0])} – ${fmt12(e.pm[1])}`].filter(Boolean).join("  ·  ")).filter(Boolean)[0];
++
++  return (
++    <div role="row" className={`tt-row is-${d.status}${d.is_today ? " is-today" : ""}`}>
++      <div role="rowheader" className="tt-day"><b>{d.label}</b><span>{d.day}</span>{d.is_today && <em>Today</em>}</div>
++      {d.status === "absent" ? (
++        <div role="cell" className="tt-span"><div className="tt-ghost is-absent"><b>Absent</b> No duty logged{expText ? ` · expected ${expText}` : ""}</div></div>
++      ) : SLOTS.map(([k, label]) => {
++        const cards = d.cards.filter((c) => c.slot === k);
++        const exp = k === "ev" ? [] : d.expected.map((e) => e[k]).filter(Boolean);
++        return (
++          <div role="cell" key={k} className={`tt-cell tt-slot-${k}`}>
++            {cards.map((c) => <Card key={`${c.entry_id}${k}`} c={c} slotLabel={label} />)}
++            {!cards.length && exp.length > 0 && <Ghost slotLabel={label} exp={exp} tone={waiting ? "" : "off"} />}
++          </div>
++        );
++      })}
++      <div role="cell" className={`tt-hours${d.status === "absent" ? " is-absent" : ` is-${worst}`}`}>
++        {d.hours > 0 ? dur(d.hours) : d.status === "absent" ? "0 h" : "—"}
++      </div>
++    </div>
++  );
++}
++
++const Legend = ({ n }) => (
++  <ul className="tt-legend" aria-label="Colour guide">
++    <li className="is-ontime">On time</li>
++    <li className="is-late">Up to {n} min late</li>
++    <li className="is-very_late">Over {n} min late</li>
++    <li className="is-overtime">Evening / overtime</li>
++    <li className="is-absent">Absent</li>
++  </ul>
++);
++
++export default function WeekTimetable({ fetcher, resetKey = "", interval = 0 }) {
++  const [week, setWeek] = useState(null); // null = the current week
++  const [data, reload, error, m] = useLoad(() => fetcher(week || undefined), { deps: [week, resetKey], interval });
++  const w = data?.week;
++  const t = data?.totals;
++
++  return (
++    <div className={`tt${m.loading && data ? " is-loading" : ""}`}>
++      <div className="tt-bar">
++        <div className="tt-nav">
++          <button type="button" className="tt-btn" onClick={() => w && setWeek(w.prev)} disabled={!w} aria-label="Previous week"><ChevronLeft size={16} /></button>
++          <strong aria-live="polite">{w ? w.label : "Loading…"}</strong>
++          <button type="button" className="tt-btn" onClick={() => w && setWeek(w.next)} disabled={!w} aria-label="Next week"><ChevronRight size={16} /></button>
++        </div>
++        <div className="tt-nav">
++          {w && !w.is_current && <button type="button" className="tt-btn tt-text" onClick={() => setWeek(null)}>This week</button>}
++          <button type="button" className="tt-btn" onClick={reload} aria-label="Refresh timetable" title="Refresh"><RefreshCw size={15} className={m.loading ? "tt-spin" : ""} /></button>
++        </div>
++      </div>
++
++      {error && !data && <p role="alert" className="tt-error">{error} <button type="button" className="tt-btn tt-text" onClick={reload}>Try again</button></p>}
++      {m.stale && <p className="tt-stale" role="status">Couldn’t refresh just now. Showing the last timetable we loaded.</p>}
++      {!data && !error && <div className="tt-skeleton" aria-hidden="true"><i /><i /><i /><i /></div>}
++
++      {data && (
++        <>
++          {data.hosts.length > 0 ? (
++            <ul className="tt-hosts" aria-label="Host clients">
++              {data.hosts.map((h, i) => (
++                <li key={i}><b>{h.name}</b><span className={`tt-type is-${h.type}`}>{TYPE[h.type] || h.type}</span><small>{daysText(h.days)} · {fmt12(h.time_in)} – {fmt12(h.time_out)}</small></li>
++              ))}
++            </ul>
++          ) : <p className="tt-hint">No host client schedule is set up yet, so Monday to Friday is shown. Once a host client is added, only its duty days appear here.</p>}
++
++          <Legend n={data.late_after_minutes} />
++
++          <div className="tt-scroll">
++            <div role="table" className="tt-grid" aria-label={`Duty timetable, ${w.label}`}>
++              <div role="row" className="tt-head">
++                <div role="columnheader">Day</div>
++                {SLOTS.map(([k, label]) => <div role="columnheader" key={k}>{label}</div>)}
++                <div role="columnheader">Hours</div>
++              </div>
++              {data.days.map((d) => <DayRow key={d.date} d={d} />)}
++              <div role="row" className="tt-foot">
++                <div role="rowheader" className="tt-foot-label">Week total</div>
++                <div role="cell" className="tt-foot-sum">
++                  <span>On time <b>{t.counts.ontime}</b></span><span>Late <b>{t.counts.late}</b></span><span>Very late <b>{t.counts.very_late}</b></span><span>Absent <b>{t.counts.absent}</b></span>
++                </div>
++                <div role="cell" className="tt-hours is-total">{dur(t.logged)}</div>
++              </div>
++            </div>
++          </div>
++
++          <dl className="tt-totals">
++            <div><dt>Approved</dt><dd>{dur(t.verified)}</dd></div>
++            <div><dt>Waiting for review</dt><dd>{dur(t.pending)}</dd></div>
++            <div><dt>Draft</dt><dd>{dur(t.draft)}</dd></div>
++            {t.rejected > 0 && <div><dt>Returned (not counted)</dt><dd>{dur(t.rejected)}</dd></div>}
++          </dl>
++          <p className="tt-hint">Late is worked out from the times written in the logbook compared with the host client’s start time.</p>
++        </>
++      )}
++    </div>
++  );
++}
+diff -ruN -x vendor -x node_modules -x .env -x '*.log' -x .phpunit.result.cache -x build -x storage orig/resources/js/Pages/Coordinator/CoordinatorDashboard.jsx occ/resources/js/Pages/Coordinator/CoordinatorDashboard.jsx
+--- orig/resources/js/Pages/Coordinator/CoordinatorDashboard.jsx	2026-11-25 12:24:21.270980446 +0000
++++ occ/resources/js/Pages/Coordinator/CoordinatorDashboard.jsx	2026-11-25 12:36:05.656298657 +0000
+@@ -4,6 +4,7 @@
+ import { Btn, Card, Check, Chip, Field, Input, Notice, RefreshButton, Row, Select, Table, statusTone, useAction } from "../../Components/admin/ui";
+ import { OverviewDashboard, OverviewSkeleton } from "../../Components/admin/Dashboard";
+ import { LiveDutyPanel } from "../../Components/admin/LiveDuty";
++import WeekTimetable from "../../Components/shared/WeekTimetable";
+ import RegistrationsPanel from "../../Components/admin/RegistrationsPanel";
+ import { ApprovalsPanel, PendingEntries, times } from "../../Components/admin/ApprovalsPanel";
+ import { AnnouncementsPanel, AuditPanel, ReportsPanel, RosterPanel } from "../../Components/admin/panels";
+@@ -72,6 +73,9 @@
+         )}
+         {waiting.length > 0 && <PendingEntries entries={waiting} svc={svc} name={trainee.name} onChanged={reload} />}
+       </Card>
++      <Card title="Weekly duty timetable">
++        <WeekTimetable fetcher={(w) => svc.timetable(trainee.id, w)} resetKey={trainee.id} interval={60000} />
++      </Card>
+       <Card title="All entries">
+         <Table empty="No duty entries yet." rows={data?.entries} cols={[
+           { h: "Date", render: (e) => e.date }, { h: "Times", render: times }, { h: "Hours", render: (e) => e.hours },
+diff -ruN -x vendor -x node_modules -x .env -x '*.log' -x .phpunit.result.cache -x build -x storage orig/resources/js/Pages/Profile/ProfilePage.jsx occ/resources/js/Pages/Profile/ProfilePage.jsx
+--- orig/resources/js/Pages/Profile/ProfilePage.jsx	2026-11-25 12:24:21.271219387 +0000
++++ occ/resources/js/Pages/Profile/ProfilePage.jsx	2026-11-25 12:36:05.657003527 +0000
+@@ -8,6 +8,7 @@
+   LedgerBanner, LedgerInput, LedgerPasswordInput, LedgerRow, LedgerRowPair, LedgerSelect,
+   PasswordMatchNote, RequirementChecklist, StrengthTicks,
+ } from "../../Components/auth/AuthShell";
++import WeekTimetable from "../../Components/shared/WeekTimetable";
+ import AvatarPhoto from "../../Components/shared/AvatarPhoto";
+ import PhotoUploadModal from "../../Components/shared/PhotoUploadModal";
+ import { ConfirmSheet } from "../../Components/shared/Sheet";
+@@ -140,6 +141,7 @@
+   }
+ 
+   const courses = config?.courses || [];
++  const timetableFetcher = (w) => api.get("/logbook/timetable", { params: w ? { week: w } : {} }).then((r) => r.data);
+ 
+   return (
+     <div className="app">
+@@ -223,6 +225,18 @@
+           </div>
+           </form>
+ 
++          {(!user.role || user.role === "trainee") && (
++            <section className="card pf-form">
++              <button type="button" className="pf-toggle" aria-expanded={openSec === "timetable"} onClick={() => toggleSec("timetable")}>
++                <span className="card-title pf-form-title">My duty timetable</span>
++                <ChevronDown size={18} className="pf-chev" />
++              </button>
++              <div className="pf-body" hidden={openSec !== "timetable"}>
++                <p className="pf-muted" style={{ margin: "0 0 10px" }}>Your week at a glance, based on your logbook. Green is on time, yellow is up to 30 minutes late, red is later than that.</p>
++                {openSec === "timetable" && <WeekTimetable fetcher={timetableFetcher} />}
++              </div>
++            </section>
++          )}
+         </div>
+         <Footer />
+       </main>
+diff -ruN -x vendor -x node_modules -x .env -x '*.log' -x .phpunit.result.cache -x build -x storage orig/resources/js/services/adminService.js occ/resources/js/services/adminService.js
+--- orig/resources/js/services/adminService.js	2026-11-25 12:24:21.271319380 +0000
++++ occ/resources/js/services/adminService.js	2026-11-25 12:36:05.655173697 +0000
+@@ -21,6 +21,7 @@
+   confirmProgression: (yearId, items) => d(api.post(`/admin/academic-years/${yearId}/progression/confirm`, { items })),
+   users: (params) => d(api.get("/admin/users", { params })),
+   user: (id) => d(api.get(`/admin/users/${id}`)),
++  traineeTimetable: (id, week) => d(api.get(`/admin/trainees/${id}/timetable`, { params: week ? { week } : {} })),
+   userPhotoUrl: (id, v) => `/api/admin/users/${id}/photo${v ? `?v=${encodeURIComponent(v)}` : ""}`, // v = photo version (a new picture is a new address)
+   updateUser: (id, body) => d(api.put(`/admin/users/${id}`, body)),
+   coordinators: () => d(api.get("/admin/coordinators")),
+diff -ruN -x vendor -x node_modules -x .env -x '*.log' -x .phpunit.result.cache -x build -x storage orig/resources/js/services/coordinatorService.js occ/resources/js/services/coordinatorService.js
+--- orig/resources/js/services/coordinatorService.js	2026-11-25 12:24:21.271330262 +0000
++++ occ/resources/js/services/coordinatorService.js	2026-11-25 12:36:05.654818107 +0000
+@@ -22,6 +22,7 @@
+   live: () => d(api.get("/coordinator/live")),
+   trainees: () => d(api.get("/coordinator/trainees")),
+   trainee: (id) => d(api.get(`/coordinator/trainees/${id}`)),
++  timetable: (id, week) => d(api.get(`/coordinator/trainees/${id}/timetable`, { params: week ? { week } : {} })),
+   traineeEntries: (id) => d(api.get(`/coordinator/trainees/${id}/entries`)),
+   approvals: () => d(api.get("/coordinator/approvals")),
+   approvalSummary: () => d(api.get("/coordinator/approvals/summary")),
+diff -ruN -x vendor -x node_modules -x .env -x '*.log' -x .phpunit.result.cache -x build -x storage orig/resources/js/styles/timetable.css occ/resources/js/styles/timetable.css
+--- orig/resources/js/styles/timetable.css	1970-01-01 00:00:00.000000000 +0000
++++ occ/resources/js/styles/timetable.css	2026-11-25 12:35:53.672640670 +0000
+@@ -0,0 +1,86 @@
++/* Weekly duty timetable (components/shared/WeekTimetable.jsx). Colours come from theme.css (--ok / --warn / --bad), light and dark. */
++.tt { --c-ontime: var(--ok-rgb, 22, 163, 74); --c-late: var(--warn-rgb, 217, 119, 6); --c-very_late: var(--bad-rgb, 239, 68, 68); --c-overtime: 59, 130, 246; --c-logged: 120, 130, 150; --c-absent: 120, 130, 150;
++  color: var(--ink); font-size: 14px; transition: opacity .15s; }
++.tt.is-loading { opacity: .6; }
++.tt-bar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
++.tt-nav { display: flex; align-items: center; gap: 8px; }
++.tt-nav strong { min-width: 150px; text-align: center; font-size: 15px; }
++.tt-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 36px; height: 36px; padding: 0 10px; border: 1px solid var(--edge); border-radius: 10px; background: var(--surface); color: var(--ink); font: inherit; cursor: pointer; }
++.tt-btn:hover:not(:disabled) { background: var(--hover); }
++.tt-btn:focus-visible { outline: 2px solid rgb(var(--accent-rgb, 79, 70, 229)); outline-offset: 2px; }
++.tt-btn:disabled { opacity: .5; cursor: default; }
++.tt-btn.tt-text { font-weight: 600; font-size: 13px; }
++.tt-spin { animation: tt-rot .8s linear infinite; }
++@keyframes tt-rot { to { transform: rotate(360deg); } }
++@media (prefers-reduced-motion: reduce) { .tt-spin { animation: none; } .tt { transition: none; } }
++
++.tt-hosts { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
++.tt-hosts li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 7px 11px; border: 1px solid var(--edge); border-radius: 10px; background: var(--field); }
++.tt-hosts small { color: var(--ink-soft); }
++.tt-type { padding: 2px 8px; border-radius: 99px; font-size: 12px; font-weight: 700; background: rgba(var(--accent-rgb, 79, 70, 229), .14); }
++.tt-legend { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; color: var(--ink-soft); }
++.tt-legend li::before { content: ""; display: inline-block; width: 11px; height: 11px; margin-right: 6px; border-radius: 3px; vertical-align: -1px; background: rgba(var(--c), .3); border: 1px solid rgb(var(--c)); }
++.tt-legend .is-ontime, .tt-card.is-ontime, .tt-hours.is-ontime { --c: var(--c-ontime); }
++.tt-legend .is-late, .tt-card.is-late, .tt-hours.is-late { --c: var(--c-late); }
++.tt-legend .is-very_late, .tt-card.is-very_late, .tt-hours.is-very_late { --c: var(--c-very_late); }
++.tt-legend .is-overtime, .tt-card.is-overtime, .tt-hours.is-overtime { --c: var(--c-overtime); }
++.tt-legend .is-absent, .tt-card.is-logged, .tt-hours.is-logged, .tt-hours.is-absent, .tt-ghost.is-absent { --c: var(--c-absent); }
++
++.tt-scroll { overflow-x: auto; }
++.tt-grid { min-width: 0; border: 1px solid var(--edge); border-radius: 12px; overflow: hidden; background: var(--surface); }
++.tt-head, .tt-row, .tt-foot { display: grid; grid-template-columns: 84px minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, .9fr) 104px; gap: 8px; align-items: stretch; padding: 8px 10px; }
++.tt-head { background: var(--field); font-weight: 700; font-size: 12.5px; color: var(--ink-soft); }
++.tt-row { border-top: 1px solid var(--edge); }
++.tt-row.is-today { background: rgba(var(--accent-rgb, 79, 70, 229), .07); box-shadow: inset 3px 0 0 rgb(var(--accent-rgb, 79, 70, 229)); }
++.tt-day { display: flex; flex-direction: column; gap: 1px; justify-content: center; }
++.tt-day b { font-size: 15px; }
++.tt-day span { font-size: 12px; color: var(--ink-soft); }
++.tt-day em { font-style: normal; font-size: 11px; font-weight: 700; color: var(--accent-text, #4f46e5); }
++.tt-span { grid-column: 2 / 5; display: flex; }
++.tt-cell { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
++.tt-slot-label { display: none; font-size: 11.5px; font-weight: 700; color: var(--ink-soft); margin-bottom: 2px; }
++
++.tt-card { padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(var(--c), .38); border-left: 4px solid rgb(var(--c)); background: rgba(var(--c), .14); }
++.tt-card.is-rejected { opacity: .55; }
++.tt-card-time { display: flex; justify-content: space-between; gap: 8px; font-weight: 700; font-variant-numeric: tabular-nums; }
++.tt-card-time b { font-weight: 700; color: var(--ink-soft); white-space: nowrap; }
++.tt-card-meta { font-size: 12.5px; color: var(--ink-soft); margin: 1px 0 5px; overflow-wrap: anywhere; }
++.tt-card-tags { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; font-size: 12px; }
++.tt-pill { padding: 2px 8px; border-radius: 99px; font-weight: 700; background: rgba(var(--c), .26); }
++.tt-note, .tt-status { color: var(--ink-soft); }
++.tt-status { font-style: italic; }
++
++.tt-ghost { padding: 8px 10px; border: 1px dashed var(--edge-strong, var(--edge)); border-radius: 10px; color: var(--ink-soft); font-size: 12.5px; }
++.tt-ghost.is-off { opacity: .7; }
++.tt-ghost.is-absent { flex: 1; border: 1px solid rgba(var(--c), .4); border-left: 4px solid rgb(var(--c)); background: rgba(var(--c), .1); }
++.tt-ghost.is-absent b { color: var(--ink); margin-right: 6px; }
++
++.tt-hours { display: flex; align-items: center; justify-content: center; text-align: center; padding: 6px 8px; border-radius: 10px; font-weight: 800; font-variant-numeric: tabular-nums; background: rgba(var(--c, 120, 130, 150), .16); border: 1px solid rgba(var(--c, 120, 130, 150), .35); }
++.tt-hours.is-total { --c: 79, 70, 229; font-size: 15px; }
++.tt-foot { border-top: 2px solid var(--edge); background: var(--field); align-items: center; }
++.tt-foot-label { font-weight: 800; }
++.tt-foot-sum { grid-column: 2 / 5; display: flex; gap: 6px 16px; flex-wrap: wrap; color: var(--ink-soft); font-size: 12.5px; }
++.tt-foot-sum b { color: var(--ink); }
++
++.tt-totals { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 12px 0 4px; }
++.tt-totals dt { font-size: 12px; color: var(--ink-soft); }
++.tt-totals dd { margin: 0; font-weight: 800; font-size: 15px; font-variant-numeric: tabular-nums; }
++.tt-hint, .tt-stale { margin: 8px 0 0; font-size: 12.5px; color: var(--ink-soft); }
++.tt-error { color: var(--bad); }
++.tt-skeleton { display: grid; gap: 8px; }
++.tt-skeleton i { height: 48px; border-radius: 10px; background: var(--field); }
++
++/* Phones: every day becomes a block (day + hours on top, cards stacked underneath), each card names its part of the day. */
++@media (max-width: 760px) {
++  .tt-head { display: none; }
++  .tt-row, .tt-foot { grid-template-columns: 1fr auto; gap: 8px; padding: 10px; }
++  .tt-day { grid-column: 1; grid-row: 1; flex-direction: row; align-items: baseline; gap: 8px; }
++  .tt-hours { grid-column: 2; grid-row: 1; min-width: 92px; }
++  .tt-hours .tt-slot-label { display: none; }
++  .tt-cell, .tt-span { grid-column: 1 / -1; }
++  .tt-cell:empty { display: none; }
++  .tt-slot-label { display: block; }
++  .tt-foot-label { grid-column: 1; grid-row: 1; }
++  .tt-foot-sum { grid-column: 1 / -1; grid-row: 2; }
++  .tt-nav strong { min-width: 0; }
++}
+diff -ruN -x vendor -x node_modules -x .env -x '*.log' -x .phpunit.result.cache -x build -x storage orig/routes/api.php occ/routes/api.php
+--- orig/routes/api.php	2026-11-25 12:24:21.271735071 +0000
++++ occ/routes/api.php	2026-11-25 12:33:09.776038024 +0000
+@@ -19,6 +19,7 @@
+ use App\Http\Controllers\Api\ReportController;
+ use App\Http\Controllers\Api\RegistrationApprovalController;
+ use App\Http\Controllers\Api\RosterController;
++use App\Http\Controllers\Api\TimetableController;
+ use App\Http\Controllers\Api\TwoFactorController;
+ use App\Http\Controllers\MediaController;
+ use App\Http\Controllers\PushController;
+@@ -102,6 +103,8 @@
+     Route::middleware(['role:trainee', 'throttle:60,1'])->group(function () {
+         Route::post('/logbook/entries/{entryUid}/submit', [LogbookReviewController::class, 'submit']);
+         Route::get('/logbook/hours', [LogbookReviewController::class, 'hours']);
++        // Own weekly duty timetable (read-only; always the signed-in trainee).
++        Route::get('/logbook/timetable', [TimetableController::class, 'mine']);
+         // Announcements delivered to this trainee (from their coordinator / the administrator).
+         Route::get('/announcements/mine', [\App\Http\Controllers\Api\TraineeAnnouncementController::class, 'index']);
+     });
+@@ -144,6 +147,7 @@
+         Route::delete('/placements/{id}', [PlacementController::class, 'end'])->whereNumber('id');
+         // Phase 5: required-hours exceptions.
+         Route::get('/trainees/{user}/hours', [AdminTrainingController::class, 'show'])->whereNumber('user');
++        Route::middleware('throttle:60,1')->get('/trainees/{user}/timetable', [TimetableController::class, 'admin'])->whereNumber('user');
+         Route::post('/trainees/{user}/hour-exception', [AdminTrainingController::class, 'setException'])->whereNumber('user');
+         // Account details of every user: only the Administrator can change them (Profile Settings is read-only).
+         Route::get('/users', [AdminUserController::class, 'index']);
+@@ -189,6 +193,7 @@
+         Route::delete('/roster/{studentId}', [RosterController::class, 'destroy']);
+         Route::get('/trainees', [CoordinatorDashboardController::class, 'trainees']);
+         Route::get('/trainees/{id}', [CoordinatorDashboardController::class, 'trainee'])->whereNumber('id');
++        Route::middleware('throttle:60,1')->get('/trainees/{id}/timetable', [TimetableController::class, 'coordinator'])->whereNumber('id');
+         Route::get('/activity', [CoordinatorDashboardController::class, 'activity']);
+         // Phase 7: reports + announcements.
+         Route::get('/reports/trainees', [ReportController::class, 'trainees']);
+diff -ruN -x vendor -x node_modules -x .env -x '*.log' -x .phpunit.result.cache -x build -x storage orig/tests/Feature/TimetableTest.php occ/tests/Feature/TimetableTest.php
+--- orig/tests/Feature/TimetableTest.php	1970-01-01 00:00:00.000000000 +0000
++++ occ/tests/Feature/TimetableTest.php	2026-11-25 12:33:50.449484598 +0000
+@@ -0,0 +1,189 @@
++<?php
++
++namespace Tests\Feature;
++
++use App\Models\AcademicYear;
++use App\Models\Course;
++use App\Models\DutyEntry;
++use App\Models\HostClient;
++use App\Models\Section;
++use App\Models\User;
++use App\Services\Academic\AcademicSeeder;
++use App\Services\Academic\CoordinatorAssignmentService;
++use Carbon\Carbon;
++use Illuminate\Foundation\Testing\RefreshDatabase;
++use Tests\TestCase;
++
++/** Weekly duty timetable: colours (on time / late / very late / overtime / absent), totals and who may open it. */
++class TimetableTest extends TestCase
++{
++    use RefreshDatabase;
++
++    protected function setUp(): void
++    {
++        parent::setUp();
++        AcademicSeeder::run();
++        Carbon::setTestNow(Carbon::parse('2026-11-25 10:00:00', 'Asia/Manila')); // Wednesday; week = Nov 23 - 29
++    }
++
++    protected function tearDown(): void
++    {
++        Carbon::setTestNow();
++        parent::tearDown();
++    }
++
++    private function staff(string $role, string $id): User
++    {
++        return User::factory()->create(['role' => $role, 'admin_id' => $id, 'student_id' => null, 'course' => null, 'email_verified_at' => now()]);
++    }
++
++    private function section(string $label): Section
++    {
++        return Section::create(['course_id' => Course::where('code', 'BSIT')->value('id'), 'academic_year_id' => AcademicYear::current()->id, 'year_level' => 4, 'label' => $label]);
++    }
++
++    private function student(string $sid, Section $s): User
++    {
++        $u = User::factory()->create(['student_id' => $sid, 'email_verified_at' => now()]);
++        $u->enrollments()->create(['course_id' => Course::where('code', 'BSIT')->value('id'), 'academic_year_id' => AcademicYear::current()->id,
++            'section_id' => $s->id, 'year_level' => 4, 'status' => 'active']);
++
++        return $u;
++    }
++
++    private function host(User $u, array $days, string $in = '07:00', string $out = '18:00', string $name = 'Green Cafe', string $type = 'private'): HostClient
++    {
++        return HostClient::create(['user_id' => $u->id, 'client_uid' => 'c'.$u->id.$name, 'name' => $name, 'name_key' => strtolower($name), 'type' => $type, 'days' => $days, 'time_in' => $in, 'time_out' => $out]);
++    }
++
++    private function entry(User $u, HostClient $h, string $date, array $t, float $hours, array $extra = []): DutyEntry
++    {
++        static $n = 0;
++
++        return DutyEntry::create($extra + ['user_id' => $u->id, 'entry_uid' => 'e'.(++$n), 'duty_date' => $date, 'host_client_id' => $h->id, 'category' => 'regular', 'coverage' => 'full',
++            'am_in' => $t[0] ?? null, 'am_out' => $t[1] ?? null, 'pm_in' => $t[2] ?? null, 'pm_out' => $t[3] ?? null, 'hours' => $hours, 'task' => 'x']);
++    }
++
++    private function cards(array $json, string $date): array
++    {
++        return collect($json['days'])->firstWhere('date', $date)['cards'];
++    }
++
++    public function test_days_follow_the_host_schedule_and_colours_follow_lateness(): void
++    {
++        $jessa = $this->student('2024-1-00001', $this->section('A'));
++        $h = $this->host($jessa, [1, 2, 3, 4, 5]); // Mon-Fri, 7am-6pm
++        $this->entry($jessa, $h, '2026-11-23', ['07:00', '12:00', '13:10', '18:00'], 10.83);  // Mon: on time, then 10 min late
++        $this->entry($jessa, $h, '2026-11-24', ['08:00', '12:00'], 4);                         // Tue: half day, 60 min late
++        $this->entry($jessa, $h, '2026-11-25', ['07:30', '12:00'], 4.5);                       // Wed: exactly 30 min late = still yellow
++
++        $json = $this->signedIn($jessa)->getJson('/api/logbook/timetable')->assertOk()->json();
++
++        $this->assertSame(['Mon', 'Tue', 'Wed', 'Thu', 'Fri'], array_column($json['days'], 'label')); // no Saturday for Jessa
++        $this->assertSame(['ontime', 'late'], array_column($this->cards($json, '2026-11-23'), 'state'));
++        $this->assertSame(10, $this->cards($json, '2026-11-23')[1]['late_minutes']);
++        $this->assertSame(['very_late'], array_column($this->cards($json, '2026-11-24'), 'state'));
++        $this->assertSame(60, $this->cards($json, '2026-11-24')[0]['late_minutes']);
++        $this->assertSame(['late'], array_column($this->cards($json, '2026-11-25'), 'state'));
++        $this->assertSame('Green Cafe', $this->cards($json, '2026-11-23')[0]['host']);
++        $this->assertSame('private', $this->cards($json, '2026-11-23')[0]['type']);
++        $this->assertSame(['upcoming', 'upcoming'], array_column(array_slice($json['days'], 3), 'status'));
++        $this->assertEquals(['ontime' => 1, 'late' => 2, 'very_late' => 1, 'absent' => 0], $json['totals']['counts']);
++        $this->assertEquals(['07:00', '12:00'], $json['days'][0]['expected'][0]['am']);
++        $this->assertEquals(['13:00', '18:00'], $json['days'][0]['expected'][0]['pm']);
++    }
++
++    public function test_a_six_day_host_shows_saturday_and_today_without_entry_is_not_logged_yet(): void
++    {
++        $jm = $this->student('2024-1-00002', $this->section('A'));
++        $this->host($jm, [1, 2, 3, 4, 5, 6]);
++
++        $json = $this->signedIn($jm)->getJson('/api/logbook/timetable')->assertOk()->json();
++
++        $this->assertSame(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], array_column($json['days'], 'label'));
++        $this->assertSame(['absent', 'absent', 'not_logged', 'upcoming', 'upcoming', 'upcoming'], array_column($json['days'], 'status'));
++        $this->assertSame(2, $json['totals']['counts']['absent']);
++        $this->assertTrue($json['days'][2]['is_today']);
++    }
++
++    public function test_evening_and_overtime_are_blue_not_late_and_rejected_hours_are_not_counted(): void
++    {
++        $u = $this->student('2024-1-00003', $this->section('A'));
++        $h = $this->host($u, [1, 2, 3, 4, 5]);
++        $this->entry($u, $h, '2026-11-23', ['07:00', '12:00'], 5, ['status' => 'approved', 'verified_hours' => 4.5]);
++        $this->entry($u, $h, '2026-11-24', [], 3, ['category' => 'evening', 'ev_in' => '19:00', 'ev_out' => '22:00', 'status' => 'submitted']);
++        $this->entry($u, $h, '2026-11-25', ['09:00', '12:00'], 3, ['status' => 'rejected', 'review_reason' => 'wrong time']);
++
++        $json = $this->signedIn($u)->getJson('/api/logbook/timetable')->assertOk()->json();
++
++        $this->assertSame(['overtime'], array_column($this->cards($json, '2026-11-24'), 'state'));
++        $this->assertSame('ev', $this->cards($json, '2026-11-24')[0]['slot']);
++        $this->assertSame('rejected', $this->cards($json, '2026-11-25')[0]['status']);
++        $this->assertEquals(['logged' => 8.0, 'verified' => 4.5, 'pending' => 3.0, 'draft' => 0.0, 'rejected' => 3.0], collect($json['totals'])->except('counts')->all());
++        $this->assertSame(0, $json['totals']['counts']['very_late']); // the rejected 9am card is not counted
++    }
++
++    public function test_week_navigation_and_validation(): void
++    {
++        $u = $this->student('2024-1-00004', $this->section('A'));
++        $this->host($u, [1, 2, 3, 4, 5]);
++        $me = $this->signedIn($u);
++
++        $prev = $me->getJson('/api/logbook/timetable?week=2026-11-18')->assertOk()->json('week');
++        $this->assertSame('2026-11-16', $prev['start']);
++        $this->assertSame('2026-11-22', $prev['end']);
++        $this->assertFalse($prev['is_current']);
++        $this->assertTrue($me->getJson('/api/logbook/timetable')->json('week.is_current'));
++        $me->getJson('/api/logbook/timetable?week=garbage')->assertStatus(422);
++    }
++
++    public function test_coordinator_sees_only_their_own_section_and_other_roles_are_refused(): void
++    {
++        $a = $this->section('A');
++        $b = $this->section('B');
++        $mine = $this->student('2024-1-00005', $a);
++        $theirs = $this->student('2024-1-00006', $b);
++        $this->host($mine, [1, 2, 3]);
++        $this->host($theirs, [1, 2, 3]);
++        $admin = $this->staff('admin', 'ADMIN-001');
++        $coord = $this->staff('coordinator', 'COORD-001');
++        app(CoordinatorAssignmentService::class)->assign($admin, $coord, $a);
++
++        $this->signedIn($coord)->getJson("/api/coordinator/trainees/{$mine->id}/timetable")->assertOk()->assertJsonPath('trainee.id', $mine->id);
++        $this->signedIn($coord)->getJson("/api/coordinator/trainees/{$theirs->id}/timetable")->assertNotFound();
++        $this->signedIn($coord)->getJson("/api/admin/trainees/{$mine->id}/timetable")->assertForbidden();
++        $this->signedIn($mine)->getJson("/api/coordinator/trainees/{$mine->id}/timetable")->assertForbidden();
++        $this->signedIn($mine)->getJson("/api/admin/trainees/{$theirs->id}/timetable")->assertForbidden();
++    }
++
++    public function test_unassigned_coordinator_sees_nothing_and_admin_sees_any_trainee_but_not_staff(): void
++    {
++        $s = $this->section('A');
++        $t = $this->student('2024-1-00007', $s);
++        $admin = $this->staff('admin', 'ADMIN-001');
++        $coord = $this->staff('coordinator', 'COORD-001');
++
++        $this->signedIn($coord)->getJson("/api/coordinator/trainees/{$t->id}/timetable")->assertNotFound();
++        $this->signedIn($admin)->getJson("/api/admin/trainees/{$t->id}/timetable")->assertOk()->assertJsonPath('trainee.student_id', '2024-1-00007');
++        $this->signedIn($admin)->getJson("/api/admin/trainees/{$coord->id}/timetable")->assertNotFound();
++    }
++
++    public function test_trainee_can_only_read_their_own_week(): void
++    {
++        $s = $this->section('A');
++        $one = $this->student('2024-1-00008', $s);
++        $two = $this->student('2024-1-00009', $s);
++        $this->entry($two, $this->host($two, [1, 2, 3, 4, 5]), '2026-11-23', ['07:00', '12:00'], 5);
++
++        $json = $this->signedIn($one)->getJson('/api/logbook/timetable?id='.$two->id)->assertOk()->json();
++        $this->assertSame($one->id, $json['trainee']['id']);
++        $this->assertSame(0.0, (float) $json['totals']['logged']);
++    }
++
++    public function test_guests_are_refused_on_all_three_doors(): void
++    {
++        $this->getJson('/api/logbook/timetable')->assertUnauthorized();
++        $this->getJson('/api/coordinator/trainees/1/timetable')->assertUnauthorized();
++        $this->getJson('/api/admin/trainees/1/timetable')->assertUnauthorized();
++    }
++}

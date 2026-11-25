@@ -12,6 +12,8 @@ use Illuminate\Validation\ValidationException;
 
 class EnrollmentService
 {
+    public function __construct(private CoordinatorNotifier $coordNotify) {}
+
     /**
      * Opens the first enrollment for a newly registered trainee. A roster row that names a section of the
      * same course in the current year gives an `active` enrollment; everything else is `pending_placement`.
@@ -32,18 +34,21 @@ class EnrollmentService
                 ->where('course_id', $course->id)->where('academic_year_id', $year->id)->where('is_active', true)->first();
         }
 
-        return StudentEnrollment::create([
+        $enrollment = StudentEnrollment::create([
             'user_id' => $user->id, 'course_id' => $course->id, 'academic_year_id' => $year->id,
             'section_id' => $section?->id, 'year_level' => $section?->year_level,
             'status' => $section ? StudentEnrollment::ACTIVE : StudentEnrollment::PENDING,
             'started_at' => now(),
         ]);
+        $this->coordNotify->traineeJoined($user, $enrollment); // no-op without a section
+
+        return $enrollment;
     }
 
     /** Admin places a pending student in a section of the same course. Transactional; row is locked. */
     public function assignSection(StudentEnrollment $enrollment, Section $section): StudentEnrollment
     {
-        return DB::transaction(function () use ($enrollment, $section) {
+        $placed = DB::transaction(function () use ($enrollment, $section) {
             $e = StudentEnrollment::whereKey($enrollment->id)->lockForUpdate()->firstOrFail();
             if ($e->ended_at !== null || $e->status !== StudentEnrollment::PENDING) {
                 throw ValidationException::withMessages(['section_id' => 'Only a student waiting for placement can be assigned here.']);
@@ -58,5 +63,8 @@ class EnrollmentService
 
             return $e->fresh(['course', 'section.course', 'user']);
         });
+        $this->coordNotify->traineeJoined($placed->user, $placed);
+
+        return $placed;
     }
 }

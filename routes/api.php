@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\AdminDashboardController;
 use App\Http\Controllers\Api\AdminProgressionController;
 use App\Http\Controllers\Api\AdminTrainingController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\CoordinatorNotificationController;
 use App\Http\Controllers\Api\CoordinatorReviewController;
 use App\Http\Controllers\Api\LogbookReviewController;
 use App\Http\Controllers\Api\CoordinatorDashboardController;
@@ -18,6 +19,7 @@ use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\RegistrationApprovalController;
 use App\Http\Controllers\Api\RosterController;
+use App\Http\Controllers\Api\TimetableController;
 use App\Http\Controllers\Api\TwoFactorController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\PushController;
@@ -101,6 +103,8 @@ Route::middleware(['auth', 'session.fresh', 'active', 'email.verified', 'approve
     Route::middleware(['role:trainee', 'throttle:60,1'])->group(function () {
         Route::post('/logbook/entries/{entryUid}/submit', [LogbookReviewController::class, 'submit']);
         Route::get('/logbook/hours', [LogbookReviewController::class, 'hours']);
+        // Own weekly duty timetable (read-only; always the signed-in trainee).
+        Route::get('/logbook/timetable', [TimetableController::class, 'mine']);
         // Announcements delivered to this trainee (from their coordinator / the administrator).
         Route::get('/announcements/mine', [\App\Http\Controllers\Api\TraineeAnnouncementController::class, 'index']);
     });
@@ -143,6 +147,7 @@ Route::middleware(['auth', 'session.fresh', 'active', 'email.verified', 'approve
         Route::delete('/placements/{id}', [PlacementController::class, 'end'])->whereNumber('id');
         // Phase 5: required-hours exceptions.
         Route::get('/trainees/{user}/hours', [AdminTrainingController::class, 'show'])->whereNumber('user');
+        Route::middleware('throttle:60,1')->get('/trainees/{user}/timetable', [TimetableController::class, 'admin'])->whereNumber('user');
         Route::post('/trainees/{user}/hour-exception', [AdminTrainingController::class, 'setException'])->whereNumber('user');
         // Account details of every user: only the Administrator can change them (Profile Settings is read-only).
         Route::get('/users', [AdminUserController::class, 'index']);
@@ -171,6 +176,13 @@ Route::middleware(['auth', 'session.fresh', 'active', 'email.verified', 'approve
         Route::middleware('throttle:60,1')->post('/registrations/{id}/approve', [RegistrationApprovalController::class, 'approve'])->whereNumber('id');
         Route::middleware('throttle:60,1')->post('/registrations/{id}/reject', [RegistrationApprovalController::class, 'reject'])->whereNumber('id');
         Route::get('/trainees/{id}/photo', [RegistrationApprovalController::class, 'traineePhoto'])->whereNumber('id');
+        // Bell: the signed-in coordinator's own notices (see CoordinatorNotificationController).
+        Route::get('/notifications', [CoordinatorNotificationController::class, 'index']);
+        Route::middleware('throttle:60,1')->group(function () {
+            Route::post('/notifications/read', [CoordinatorNotificationController::class, 'markRead']);
+            Route::delete('/notifications', [CoordinatorNotificationController::class, 'clear']);
+            Route::delete('/notifications/{uid}', [CoordinatorNotificationController::class, 'destroy'])->where('uid', '[A-Za-z0-9]{1,32}');
+        });
         Route::get('/overview', [CoordinatorDashboardController::class, 'show']);
         Route::get('/live', [CoordinatorDashboardController::class, 'live']);
         // Roster: Student ID + course allowed to register, one list per section (see RosterController).
@@ -181,6 +193,7 @@ Route::middleware(['auth', 'session.fresh', 'active', 'email.verified', 'approve
         Route::delete('/roster/{studentId}', [RosterController::class, 'destroy']);
         Route::get('/trainees', [CoordinatorDashboardController::class, 'trainees']);
         Route::get('/trainees/{id}', [CoordinatorDashboardController::class, 'trainee'])->whereNumber('id');
+        Route::middleware('throttle:60,1')->get('/trainees/{id}/timetable', [TimetableController::class, 'coordinator'])->whereNumber('id');
         Route::get('/activity', [CoordinatorDashboardController::class, 'activity']);
         // Phase 7: reports + announcements.
         Route::get('/reports/trainees', [ReportController::class, 'trainees']);

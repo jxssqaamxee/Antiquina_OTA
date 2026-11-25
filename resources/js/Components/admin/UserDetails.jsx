@@ -2,6 +2,7 @@ import React from "react";
 import { Btn, Card, Chip, Table, statusTone } from "./ui";
 import { StatCard } from "./AdminShell";
 import CachedImage from "../shared/CachedImage";
+import WeekTimetable from "../shared/WeekTimetable";
 import { initialsOf } from "../shared/AvatarPhoto";
 
 const ROLE = { admin: "Administrator", coordinator: "Coordinator", trainee: "Trainee" };
@@ -92,6 +93,9 @@ export default function UserDetails({ svc, user: u, onClose, onEdit }) {
               <Item k="Starts on">{date(u.placement.starts_on)}</Item>
             </dl>
           ) : <p className="st-empty">Not placed in a host establishment.</p>}
+
+          <h4 className="st-det-h">Weekly duty timetable</h4>
+          <WeekTimetable fetcher={(w) => svc.traineeTimetable(u.id, w)} resetKey={u.id} />
 
           <h4 className="st-det-h">Enrollment history</h4>
           <Table searchable={false} toggle={false} empty="No enrollments yet." rows={u.enrollments} cols={[

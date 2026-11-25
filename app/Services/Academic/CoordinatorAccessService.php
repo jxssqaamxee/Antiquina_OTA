@@ -64,4 +64,30 @@ class CoordinatorAccessService
     {
         return \App\Models\DutyEntry::whereIn('user_id', $this->traineesQuery($coordinator)->select('users.id'))->whereKey($id)->firstOrFail();
     }
+
+    /**
+     * The ONE coordinator who owns a section right now (open assignment, active coordinator account), or null.
+     * Used to decide who a notice goes to: the recipient is always derived from the section, never from a request value.
+     */
+    public function coordinatorForSection(?int $sectionId): ?User
+    {
+        if (! $sectionId) {
+            return null;
+        }
+        $c = CoordinatorAssignment::open()->where('section_id', $sectionId)->with('coordinator')->first()?->coordinator;
+
+        return $c && $c->isCoordinator() && $c->isActive() ? $c : null;
+    }
+
+    /** The coordinator of the section the trainee is enrolled in today (null when unplaced or the section has no coordinator). */
+    public function coordinatorForTrainee(User $trainee): ?User
+    {
+        return $this->coordinatorForSection(StudentEnrollment::open()->where('user_id', $trainee->id)->value('section_id'));
+    }
+
+    /** The coordinator who would review this pending registration (the roster row's section), or null. */
+    public function coordinatorForRegistration(User $registrant): ?User
+    {
+        return $this->coordinatorForSection($this->rosterSectionId($registrant));
+    }
 }

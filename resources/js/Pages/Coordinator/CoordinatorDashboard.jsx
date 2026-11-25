@@ -4,6 +4,7 @@ import AdminShell, { StatCard } from "../../Components/admin/AdminShell";
 import { Btn, Card, Check, Chip, Field, Input, Notice, RefreshButton, Row, Select, Table, statusTone, useAction } from "../../Components/admin/ui";
 import { OverviewDashboard, OverviewSkeleton } from "../../Components/admin/Dashboard";
 import { LiveDutyPanel } from "../../Components/admin/LiveDuty";
+import WeekTimetable from "../../Components/shared/WeekTimetable";
 import RegistrationsPanel from "../../Components/admin/RegistrationsPanel";
 import { ApprovalsPanel, PendingEntries, times } from "../../Components/admin/ApprovalsPanel";
 import { AnnouncementsPanel, AuditPanel, ReportsPanel, RosterPanel } from "../../Components/admin/panels";
@@ -71,6 +72,9 @@ function TraineeDetail({ trainee, onClose }) {
           </div>
         )}
         {waiting.length > 0 && <PendingEntries entries={waiting} svc={svc} name={trainee.name} onChanged={reload} />}
+      </Card>
+      <Card title="Weekly duty timetable">
+        <WeekTimetable fetcher={(w) => svc.timetable(trainee.id, w)} resetKey={trainee.id} interval={60000} />
       </Card>
       <Card title="All entries">
         <Table empty="No duty entries yet." rows={data?.entries} cols={[

@@ -8,6 +8,7 @@
 # ---------------------------------------------------------------------
 # Secrets & environment  (.env holds APP_KEY, DB + mail passwords)
 # ---------------------------------------------------------------------
+.timetable.patch
 .envpro.txt
 .env
 .env.*

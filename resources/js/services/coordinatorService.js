@@ -13,10 +13,16 @@ const rosterForm = (file, { dryRun, assumeCourse, sectionId }) => {
 
 /** Coordinator API calls. The server limits every one of them to the Coordinator's own section. */
 export const coordinatorService = {
+  // Bell. The server only ever answers with the signed-in coordinator's own notices (no user id is sent).
+  notifications: () => d(api.get("/coordinator/notifications")),
+  markNotificationsRead: (ids) => d(api.post("/coordinator/notifications/read", ids ? { ids } : { all: true })),
+  deleteNotification: (id) => d(api.delete(`/coordinator/notifications/${encodeURIComponent(id)}`)),
+  clearNotifications: () => d(api.delete("/coordinator/notifications")),
   overview: () => d(api.get("/coordinator/overview")),
   live: () => d(api.get("/coordinator/live")),
   trainees: () => d(api.get("/coordinator/trainees")),
   trainee: (id) => d(api.get(`/coordinator/trainees/${id}`)),
+  timetable: (id, week) => d(api.get(`/coordinator/trainees/${id}/timetable`, { params: week ? { week } : {} })),
   traineeEntries: (id) => d(api.get(`/coordinator/trainees/${id}/entries`)),
   approvals: () => d(api.get("/coordinator/approvals")),
   approvalSummary: () => d(api.get("/coordinator/approvals/summary")),

@@ -8,6 +8,7 @@ import {
   LedgerBanner, LedgerInput, LedgerPasswordInput, LedgerRow, LedgerRowPair, LedgerSelect,
   PasswordMatchNote, RequirementChecklist, StrengthTicks,
 } from "../../Components/auth/AuthShell";
+import WeekTimetable from "../../Components/shared/WeekTimetable";
 import AvatarPhoto from "../../Components/shared/AvatarPhoto";
 import PhotoUploadModal from "../../Components/shared/PhotoUploadModal";
 import { ConfirmSheet } from "../../Components/shared/Sheet";
@@ -140,6 +141,7 @@ export default function ProfilePage() {
   }
 
   const courses = config?.courses || [];
+  const timetableFetcher = (w) => api.get("/logbook/timetable", { params: w ? { week: w } : {} }).then((r) => r.data);
 
   return (
     <div className="app">
@@ -223,6 +225,18 @@ export default function ProfilePage() {
           </div>
           </form>
 
+          {(!user.role || user.role === "trainee") && (
+            <section className="card pf-form">
+              <button type="button" className="pf-toggle" aria-expanded={openSec === "timetable"} onClick={() => toggleSec("timetable")}>
+                <span className="card-title pf-form-title">My duty timetable</span>
+                <ChevronDown size={18} className="pf-chev" />
+              </button>
+              <div className="pf-body" hidden={openSec !== "timetable"}>
+                <p className="pf-muted" style={{ margin: "0 0 10px" }}>Your week at a glance, based on your logbook. Green is on time, yellow is up to 30 minutes late, red is later than that.</p>
+                {openSec === "timetable" && <WeekTimetable fetcher={timetableFetcher} />}
+              </div>
+            </section>
+          )}
         </div>
         <Footer />
       </main>
