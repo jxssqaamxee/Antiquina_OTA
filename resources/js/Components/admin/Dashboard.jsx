@@ -1,6 +1,5 @@
 import React from "react";
 import { Users, Clock, Gauge, ClipboardCheck, AlertTriangle, Building2, UserX, Layers, UserCog, ChevronRight, Activity, PieChart, BarChart3 } from "lucide-react";
-import { LiveDutyCard } from "./LiveDuty";
 import { AnimatedNumber, AreaChart, DonutChart, RankedBars, Sparkline } from "../charts";
 
 /* ---------- skeletons (same boxes as the real thing, so nothing jumps when data arrives) ---------- */
@@ -103,13 +102,11 @@ export function OverviewDashboard({ data, scope = "admin", go, liveFetcher }) {
   return (
     <>
       <div className="st-kpi-row">
-        <KpiCard icon={Users} label="Trainees" value={k.trainees} hint={`${k.completed} completed their OJT`} />
+        <KpiCard icon={Users} label={scope === "admin" ? "Trainees" : "Student trainees"} value={k.trainees} hint={`${k.completed} completed their OJT`} />
         <KpiCard icon={Clock} label="Verified hours" value={k.verified_hours} decimals={1} hint={`of ${Number(k.required_hours).toLocaleString()} required`} series={weeklyVerified} />
         <KpiCard icon={Gauge} label="Average completion" value={k.avg_percent} decimals={1} suffix="%" hint="across all trainees" />
         <KpiCard icon={ClipboardCheck} label="Awaiting review" value={k.awaiting_review} hint="submitted entries" tone={k.awaiting_review ? "warn" : ""} />
       </div>
-
-      {liveFetcher && <LiveDutyCard fetcher={liveFetcher} onOpen={() => go?.("live")} />}
 
       <div className="st-chart-row st-2-1">
         <ChartCard icon={Activity} title="Hours per week" subtitle="Last 8 weeks: verified by coordinators vs everything logged">

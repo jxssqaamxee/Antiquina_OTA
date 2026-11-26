@@ -97,9 +97,9 @@ function Trainees() {
   const [open, setOpen] = useState(null);
   if (open) return <TraineeDetail trainee={open} onClose={() => setOpen(null)} />;
   return (
-    <Card title="My trainees" actions={refreshBtn(reload, m)}>
+    <Card title="My student trainees" actions={refreshBtn(reload, m)}>
       {error && !data && <p role="alert" className="st-error">{error}</p>}<Stale m={m} />
-      <Table empty="No trainees in your section yet." rows={data?.trainees && [...data.trainees].sort((a, b) => (b.pending > 0) - (a.pending > 0))} cols={[
+      <Table empty="No student trainees in your section yet." rows={data?.trainees && [...data.trainees].sort((a, b) => (b.pending > 0) - (a.pending > 0))} cols={[
         { h: "Student ID", render: (t) => t.student_id }, { h: "Name", render: (t) => t.name }, { h: "Email", render: (t) => t.email },
         { h: "Pending", render: (t) => t.pending ? <Chip tone="warn">{t.pending} to review</Chip> : "—" },
         { h: "", render: (t) => <Btn onClick={() => setOpen(t)}>Open</Btn> },
@@ -111,7 +111,7 @@ function Trainees() {
 const NAV = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "live", label: "Live duty", icon: Radio },
-  { key: "trainees", label: "Trainees", icon: Users },
+  { key: "trainees", label: "Student trainees", short: "Students", icon: Users },
   { key: "registrations", label: "Registrations", short: "Sign-ups", icon: UserCheck },
   { key: "roster", label: "Import roster", icon: Upload },
   { key: "approvals", label: "Logbook approvals", short: "Approvals", icon: ClipboardCheck },

@@ -1406,7 +1406,6 @@ export default function LogbookPage() {
                   editing={e.id === editingId}
                   onEdit={startEdit}
                   onDelete={requestDeleteEntry}
-                  onSubmit={submitEntryForReview}
                 />
               ))}
             </div>

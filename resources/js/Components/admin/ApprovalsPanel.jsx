@@ -93,14 +93,21 @@ export function PendingEntries({ entries, svc, name, onChanged }) {
           <li key={e.id} className={`st-list-item rv-item${sel.includes(e.id) ? " is-picked" : ""}`}>
             <input type="checkbox" className="rv-pick" checked={sel.includes(e.id)} onChange={() => toggle(e.id)} aria-label={`Select ${day(e.date)}`} />
             <div className="st-list-main">
-              <p className="st-list-title">{day(e.date)} <span className="rv-hrs">{hrs(e.hours)} h</span></p>
-              <div className="st-list-meta"><span><i>Time</i>{times(e) || "—"}</span><span><i>Task</i>{e.task || "—"}</span></div>
+              <p className="st-list-title">{day(e.date)} <span className="rv-hrs">{hrs(e.hours)} h logged</span></p>
+              <dl className="rv-meta">
+                <div><dt>Time</dt><dd>{times(e) || "—"}</dd></div>
+                <div><dt>Task</dt><dd>{e.task || "—"}</dd></div>
+              </dl>
             </div>
-            <div className="st-list-side rv-side">
-              <Input className="st-w-xs" type="number" step="0.25" min="0" max={e.hours} placeholder={`hrs (${hrs(e.hours)})`} aria-label={`Verified hours for ${day(e.date)}`}
-                value={hours[e.id] ?? ""} onChange={(ev) => setHours({ ...hours, [e.id]: ev.target.value })} />
-              <Btn kind="primary" disabled={busy} onClick={() => approveOne(e)}>Approve</Btn>
-              <Btn kind="danger" disabled={busy} onClick={() => rejectOne(e)}>Return</Btn>
+            <div className="rv-side">
+              <label className="rv-verify"><span>Verified hrs</span>
+                <Input className="st-w-xs" type="number" step="0.25" min="0" max={e.hours} placeholder={hrs(e.hours)} aria-label={`Verified hours for ${day(e.date)}`}
+                  value={hours[e.id] ?? ""} onChange={(ev) => setHours({ ...hours, [e.id]: ev.target.value })} />
+              </label>
+              <div className="rv-btns">
+                <Btn kind="primary" disabled={busy} onClick={() => approveOne(e)}><CheckCheck size={14} /> Approve</Btn>
+                <Btn kind="danger" disabled={busy} onClick={() => rejectOne(e)}><Undo2 size={14} /> Return</Btn>
+              </div>
             </div>
           </li>
         ))}
@@ -115,7 +122,7 @@ function TraineeQueue({ trainee, svc, onBack }) {
   const pending = data?.entries?.filter((e) => e.status === "submitted");
   const h = data?.hours;
   return (
-    <Card title={`${trainee.name} · ${trainee.student_id}`} actions={<><RefreshButton onRefresh={reload} loading={m.loading && !m.updatedAt} updatedAt={m.updatedAt} /><Btn onClick={onBack}>Back to all trainees</Btn></>}>
+    <Card title={`${trainee.name} · ${trainee.student_id}`} actions={<><RefreshButton onRefresh={reload} loading={m.loading && !m.updatedAt} updatedAt={m.updatedAt} /><Btn onClick={onBack}>Back to all student trainees</Btn></>}>
       {error && !data && <p role="alert" className="st-error">{error}</p>}
       {h && (
         <div className="st-stat-grid">
@@ -125,7 +132,7 @@ function TraineeQueue({ trainee, svc, onBack }) {
       )}
       {!pending ? <TableSkeleton cols={3} /> : pending.length
         ? <PendingEntries entries={pending} svc={svc} name={trainee.name} onChanged={reload} />
-        : <p className="st-empty">{trainee.name} has nothing waiting. <button type="button" className="st-linkbtn" onClick={onBack}>Back to all trainees</button></p>}
+        : <p className="st-empty">{trainee.name} has nothing waiting. <button type="button" className="st-linkbtn" onClick={onBack}>Back to all student trainees</button></p>}
     </Card>
   );
 }
@@ -135,13 +142,13 @@ export function ApprovalsPanel({ svc }) {
   const [data, reload, error, m] = useLoad(() => svc.approvalSummary(), { interval: 20000 });
   const [open, setOpen] = useState(null);
   if (open) return <TraineeQueue trainee={open} svc={svc} onBack={() => { setOpen(null); reload(); }} />;
-  const title = data ? `Waiting for review (${data.total_entries} from ${plural(data.trainees.length, "trainee", "trainees")})` : "Waiting for review";
+  const title = data ? `Waiting for review (${data.total_entries} from ${plural(data.trainees.length, "student trainee", "student trainees")})` : "Waiting for review";
   return (
     <Card title={title} actions={<RefreshButton onRefresh={reload} loading={m.loading && !m.updatedAt} updatedAt={m.updatedAt} />}>
       {error && !data && <p role="alert" className="st-error">{error}</p>}
       {m.stale && <p className="st-stale" role="status">Couldn’t refresh just now. Showing the last data we loaded.</p>}
       <Table empty="Nothing is waiting for review." rows={data?.trainees} cols={[
-        { h: "Trainee", render: (t) => <><b>{t.name}</b> <span className="st-muted">{t.student_id}</span></> },
+        { h: "Student trainee", render: (t) => <><b>{t.name}</b> <span className="st-muted">{t.student_id}</span></> },
         { h: "Entries", render: (t) => <Chip tone="warn">{t.pending}</Chip> },
         { h: "Hours", render: (t) => hrs(t.pending_hours) },
         { h: "Waiting since", render: (t) => shortDay(t.oldest) },

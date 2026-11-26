@@ -275,7 +275,9 @@ export default function WeekTimetable({ fetcher, resetKey = "", interval = 0, ca
               <button type="button" ref={closeRef} className="tt-btn" onClick={() => setSel(null)} aria-label="Close details"><X size={16} /></button>
             </div>
             <p className="tt-sheet-day">{pickedDay ? `${DAY_FULL[pickedDay.dow]}, ${pickedDay.day}` : picked.date}{pickedDay?.is_today ? " · Today" : ""}</p>
-            <ul>{picked.lines.map((l, i) => <li key={i}>{l}</li>)}</ul>
+            <dl className="tt-sheet-list">
+              {picked.lines.map((l, i) => <div key={i}><dt>{["Time", "Host", "Note"][Math.min(i, 2)]}</dt><dd>{l}</dd></div>)}
+            </dl>
           </div>
         </div>,
         document.body
