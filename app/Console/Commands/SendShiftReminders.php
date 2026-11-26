@@ -67,7 +67,7 @@ class SendShiftReminders extends Command
                 ->where('host_client_id', $client->id)->get();
 
             // Shift start: skipped once hours for this client are already logged today.
-            if ($in !== null && $nowMin >= $in - $startLead && $nowMin < $in && $entries->isEmpty()) {
+            if ($in !== null && $nowMin >= $in - $startLead && $nowMin < $in && ! $this->alreadyStarted($entries, $nowMin)) {
                 $left = $in - $nowMin;
                 $sent += $this->send($push, $user, $client, 'shift-start', $date, [
                     'title' => 'Your OJT shift starts soon',
@@ -79,7 +79,7 @@ class SendShiftReminders extends Command
             // Clock-out: skipped when a time out close to the end of the shift (within
             // OCC_CLOCK_OUT_WINDOW_MIN of it) is already logged, e.g. they left a few minutes early.
             if ($out !== null && ($in === null || $out > $in) && $nowMin >= $out - $endLead && $nowMin < $out
-                && ! $this->alreadyClockedOut($entries, $out - $clockedOutFrom)) {
+                && ! $this->alreadyClockedOut($entries, $out - $clockedOutFrom, $nowMin)) {
                 $left = $out - $nowMin;
                 $sent += $this->send($push, $user, $client, 'shift-end', $date, [
                     'title' => 'Time to clock out soon',
@@ -93,7 +93,7 @@ class SendShiftReminders extends Command
             if ($crossesLunch) {
                 // 10 min before 12:00: lunch is coming, hours pause. Skipped once the morning time out is logged.
                 if ($nowMin >= self::LUNCH_OUT - $lunchLead && $nowMin < self::LUNCH_OUT
-                    && ! $entries->contains(fn ($e) => filled($e->am_out))) {
+                    && ! $this->hasPassed($entries, ['am_out'], $nowMin)) {
                     $left = self::LUNCH_OUT - $nowMin;
                     $sent += $this->send($push, $user, $client, 'lunch-out', $date, [
                         'title' => 'Your lunch break is coming',
@@ -104,7 +104,7 @@ class SendShiftReminders extends Command
 
                 // 10 min before 13:00: lunch is ending, hours resume. Skipped once the afternoon time in is logged.
                 if ($nowMin >= self::LUNCH_IN - $lunchLead && $nowMin < self::LUNCH_IN
-                    && ! $entries->contains(fn ($e) => filled($e->pm_in))) {
+                    && ! $this->hasPassed($entries, ['pm_in'], $nowMin)) {
                     $left = self::LUNCH_IN - $nowMin;
                     $sent += $this->send($push, $user, $client, 'lunch-in', $date, [
                         'title' => 'Your lunch break is ending',
@@ -180,18 +180,32 @@ class SendShiftReminders extends Command
         return 1;
     }
 
-    private function alreadyClockedOut($entries, int $fromMinute): bool
+    /**
+     * The app lets a trainee log the whole day in advance, so a saved time out can be the PLAN for later, not
+     * something that already happened. Only a time that is at or before "now" counts as really clocked.
+     */
+    private function hasPassed($entries, array $fields, int $nowMin, int $fromMinute = 0): bool
     {
         foreach ($entries as $e) {
-            foreach ([$e->am_out, $e->pm_out, $e->ev_out] as $t) {
-                $m = self::minutes($t);
-                if ($m !== null && $m >= $fromMinute) {
+            foreach ($fields as $f) {
+                $m = self::minutes($e->{$f});
+                if ($m !== null && $m >= $fromMinute && $m <= $nowMin) {
                     return true;
                 }
             }
         }
 
         return false;
+    }
+
+    private function alreadyClockedOut($entries, int $fromMinute, int $nowMin): bool
+    {
+        return $this->hasPassed($entries, ['am_out', 'pm_out', 'ev_out'], $nowMin, $fromMinute);
+    }
+
+    private function alreadyStarted($entries, int $nowMin): bool
+    {
+        return $this->hasPassed($entries, ['am_in', 'pm_in', 'ev_in'], $nowMin);
     }
 
     public static function minutes(?string $hhmm): ?int
